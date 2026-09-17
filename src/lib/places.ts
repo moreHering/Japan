@@ -16,6 +16,9 @@ export type Place = {
   placeId: string | null;
   descriptionHtml: string;
   isFriendTip: boolean;
+  /** Erlebnis-Nummer aus "Japan erleben", wenn der Ort daher stammt. */
+  book?: string;
+  bookTitle?: string;
   needsBooking: boolean;
   closedDay: string | null;
   cashOnly: boolean;

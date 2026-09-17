@@ -47,6 +47,11 @@
       {#if place.isFriendTip}
         <span class="tip" title="Freundestipp">★</span>
       {/if}
+      {#if place.book}
+        <span class="book" title={`Aus dem Reiseführer — Erlebnis ${place.book}: ${place.bookTitle}`}>
+          📖
+        </span>
+      {/if}
     </h3>
 
     <div class="meta">
@@ -142,6 +147,11 @@
   .tip {
     color: var(--kin);
     font-size: 0.85em;
+  }
+
+  .book {
+    font-size: 0.8em;
+    opacity: 0.85;
   }
 
   .meta {

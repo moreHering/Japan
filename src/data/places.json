@@ -13,7 +13,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "30",
+    "bookTitle": "Osaka-jo"
   },
   {
     "nr": 2,
@@ -77,7 +79,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "31",
+    "bookTitle": "Dotonbori und Kuromon"
   },
   {
     "nr": 6,
@@ -109,7 +113,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "31",
+    "bookTitle": "Dotonbori und Kuromon"
   },
   {
     "nr": 8,
@@ -301,7 +307,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "32",
+    "bookTitle": "Koyasan"
   },
   {
     "nr": 20,
@@ -317,7 +325,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "35",
+    "bookTitle": "Himeji-jo"
   },
   {
     "nr": 21,
@@ -365,7 +375,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "32",
+    "bookTitle": "Koyasan"
   },
   {
     "nr": 24,
@@ -381,7 +393,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "32",
+    "bookTitle": "Koyasan"
   },
   {
     "nr": 25,
@@ -397,7 +411,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "32",
+    "bookTitle": "Koyasan"
   },
   {
     "nr": 26,
@@ -461,7 +477,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "33",
+    "bookTitle": "Akame"
   },
   {
     "nr": 30,
@@ -477,7 +495,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "33",
+    "bookTitle": "Akame"
   },
   {
     "nr": 31,
@@ -509,7 +529,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "34",
+    "bookTitle": "Kobe Nunobiki"
   },
   {
     "nr": 33,
@@ -637,7 +659,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "23",
+    "bookTitle": "Fushimi Inari"
   },
   {
     "nr": 41,
@@ -653,7 +677,9 @@
     "isFriendTip": false,
     "needsBooking": true,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "25",
+    "bookTitle": "Gion und Kiyomizu-dera"
   },
   {
     "nr": 42,
@@ -669,7 +695,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "24",
+    "bookTitle": "Kinkaku-ji und Ryoan-ji"
   },
   {
     "nr": 43,
@@ -685,7 +713,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "25",
+    "bookTitle": "Gion und Kiyomizu-dera"
   },
   {
     "nr": 44,
@@ -717,7 +747,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "24",
+    "bookTitle": "Kinkaku-ji und Ryoan-ji"
   },
   {
     "nr": 46,
@@ -733,7 +765,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "26",
+    "bookTitle": "Arashiyama"
   },
   {
     "nr": 47,
@@ -749,7 +783,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "26",
+    "bookTitle": "Arashiyama"
   },
   {
     "nr": 48,
@@ -861,7 +897,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "26",
+    "bookTitle": "Arashiyama"
   },
   {
     "nr": 55,
@@ -877,7 +915,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "26",
+    "bookTitle": "Arashiyama"
   },
   {
     "nr": 56,
@@ -925,7 +965,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "28",
+    "bookTitle": "Uji"
   },
   {
     "nr": 59,
@@ -941,7 +983,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "29",
+    "bookTitle": "Nara"
   },
   {
     "nr": 60,
@@ -973,7 +1017,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "29",
+    "bookTitle": "Nara"
   },
   {
     "nr": 62,
@@ -989,7 +1035,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "28",
+    "bookTitle": "Uji"
   },
   {
     "nr": 63,
@@ -1021,7 +1069,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "28",
+    "bookTitle": "Uji"
   },
   {
     "nr": 65,
@@ -1037,7 +1087,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "28",
+    "bookTitle": "Uji"
   },
   {
     "nr": 66,
@@ -1053,7 +1105,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "29",
+    "bookTitle": "Nara"
   },
   {
     "nr": 67,
@@ -1165,7 +1219,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "18",
+    "bookTitle": "Kanazawa Samurai-Viertel"
   },
   {
     "nr": 74,
@@ -1181,7 +1237,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "18",
+    "bookTitle": "Kanazawa Samurai-Viertel"
   },
   {
     "nr": 75,
@@ -1261,7 +1319,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "20",
+    "bookTitle": "Takayama Altstadt"
   },
   {
     "nr": 80,
@@ -1437,7 +1497,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "19",
+    "bookTitle": "Shirakawa-go"
   },
   {
     "nr": 91,
@@ -1485,7 +1547,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "15",
+    "bookTitle": "Hakone"
   },
   {
     "nr": 94,
@@ -1555,7 +1619,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "15",
+    "bookTitle": "Hakone"
   },
   {
     "nr": 98,
@@ -1715,7 +1781,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "08",
+    "bookTitle": "Gotokuji und Soba"
   },
   {
     "nr": 108,
@@ -1731,7 +1799,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "05",
+    "bookTitle": "Meiji-Jingu und Shinjuku Gyoen"
   },
   {
     "nr": 109,
@@ -1795,7 +1865,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "02",
+    "bookTitle": "Senso-ji und Nakamise"
   },
   {
     "nr": 113,
@@ -1811,7 +1883,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "07",
+    "bookTitle": "teamLab"
   },
   {
     "nr": 114,
@@ -1827,7 +1901,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "07",
+    "bookTitle": "teamLab"
   },
   {
     "nr": 115,
@@ -1843,7 +1919,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "09",
+    "bookTitle": "Themen-Cafés"
   },
   {
     "nr": 116,
@@ -1859,7 +1937,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "09",
+    "bookTitle": "Themen-Cafés"
   },
   {
     "nr": 117,
@@ -1875,7 +1955,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "09",
+    "bookTitle": "Themen-Cafés"
   },
   {
     "nr": 118,
@@ -1891,7 +1973,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": "Mo",
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "08",
+    "bookTitle": "Gotokuji und Soba"
   },
   {
     "nr": 119,
@@ -1907,7 +1991,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "02",
+    "bookTitle": "Senso-ji und Nakamise"
   },
   {
     "nr": 120,
@@ -1987,7 +2073,9 @@
     "isFriendTip": false,
     "needsBooking": true,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "09",
+    "bookTitle": "Themen-Cafés"
   },
   {
     "nr": 125,
@@ -2003,7 +2091,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "09",
+    "bookTitle": "Themen-Cafés"
   },
   {
     "nr": 126,
@@ -2019,7 +2109,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": "Mo",
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "09",
+    "bookTitle": "Themen-Cafés"
   },
   {
     "nr": 127,
@@ -2051,7 +2143,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "09",
+    "bookTitle": "Themen-Cafés"
   },
   {
     "nr": 129,
@@ -2083,7 +2177,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "06",
+    "bookTitle": "Harajuku"
   },
   {
     "nr": 131,
@@ -2195,7 +2291,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "10",
+    "bookTitle": "Street Kart"
   },
   {
     "nr": 138,
@@ -2211,7 +2309,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "03",
+    "bookTitle": "Akihabara"
   },
   {
     "nr": 139,
@@ -2227,7 +2327,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "06",
+    "bookTitle": "Harajuku"
   },
   {
     "nr": 140,
@@ -2243,7 +2345,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "01",
+    "bookTitle": "Shibuya"
   },
   {
     "nr": 141,
@@ -2259,7 +2363,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": "Mo",
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "04",
+    "bookTitle": "Aussicht über Tokio"
   },
   {
     "nr": 142,
@@ -2275,7 +2381,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "01",
+    "bookTitle": "Shibuya"
   },
   {
     "nr": 143,
@@ -2291,7 +2399,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "01",
+    "bookTitle": "Shibuya"
   },
   {
     "nr": 144,
@@ -2307,7 +2417,9 @@
     "isFriendTip": false,
     "needsBooking": true,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "01",
+    "bookTitle": "Shibuya"
   },
   {
     "nr": 145,
@@ -2323,7 +2435,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": "Mo",
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "05",
+    "bookTitle": "Meiji-Jingu und Shinjuku Gyoen"
   },
   {
     "nr": 146,
@@ -2339,7 +2453,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "04",
+    "bookTitle": "Aussicht über Tokio"
   },
   {
     "nr": 147,
@@ -2403,7 +2519,9 @@
     "isFriendTip": false,
     "needsBooking": true,
     "closedDay": "Di",
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "12",
+    "bookTitle": "Yokohama"
   },
   {
     "nr": 151,
@@ -2435,7 +2553,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "13",
+    "bookTitle": "Kamakura"
   },
   {
     "nr": 153,
@@ -2451,7 +2571,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "13",
+    "bookTitle": "Kamakura"
   },
   {
     "nr": 154,
@@ -2467,7 +2589,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "13",
+    "bookTitle": "Kamakura"
   },
   {
     "nr": 155,
@@ -2483,7 +2607,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "14",
+    "bookTitle": "Nikko"
   },
   {
     "nr": 156,
@@ -2499,7 +2625,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "14",
+    "bookTitle": "Nikko"
   },
   {
     "nr": 157,
@@ -2515,7 +2643,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "14",
+    "bookTitle": "Nikko"
   },
   {
     "nr": 158,
@@ -2531,7 +2661,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "11",
+    "bookTitle": "Berg Takao"
   },
   {
     "nr": 159,
@@ -2547,7 +2679,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "12",
+    "bookTitle": "Yokohama"
   },
   {
     "nr": 160,
@@ -2563,7 +2697,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "09",
+    "bookTitle": "Themen-Cafés"
   },
   {
     "nr": 161,
@@ -2579,7 +2715,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "12",
+    "bookTitle": "Yokohama"
   },
   {
     "nr": 162,
@@ -2595,7 +2733,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "11",
+    "bookTitle": "Berg Takao"
   },
   {
     "nr": 163,
@@ -2611,7 +2751,9 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "14",
+    "bookTitle": "Nikko"
   },
   {
     "nr": 164,
@@ -2627,6 +2769,8 @@
     "isFriendTip": false,
     "needsBooking": false,
     "closedDay": null,
-    "cashOnly": false
+    "cashOnly": false,
+    "book": "11",
+    "bookTitle": "Berg Takao"
   }
 ]

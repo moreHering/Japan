@@ -37,6 +37,11 @@
 
   /* Maße */
   --nav-h: 56px;
+  --nav-h-mobile: 48px;
+  --tabbar-h: 52px;
+  /* Nutzbare Höhe unterhalb der Kopfleiste. dvh statt vh, weil iOS die
+     Adressleiste ein- und ausfährt — mit vh springt dann das ganze Layout. */
+  --app-h: calc(100dvh - var(--nav-h));
   --radius: 12px;
   --radius-sm: 8px;
   --shadow: 0 1px 2px rgba(22, 35, 60, 0.06), 0 8px 24px rgba(22, 35, 60, 0.07);
@@ -276,5 +281,71 @@ textarea {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------- Handy */
+
+/*
+ * Safari zoomt automatisch in die Seite hinein, sobald ein Eingabefeld eine
+ * Schrift kleiner als 16px hat. Das sieht aus wie ein Fehler und lässt sich
+ * nur so verhindern — deshalb gilt das Maß für alle Felder, unabhängig davon,
+ * wie klein die umgebende Oberfläche gestaltet ist.
+ */
+@media (max-width: 767px) {
+  :root {
+    --app-h: calc(100dvh - var(--nav-h-mobile));
+  }
+
+  /* !important ist hier bewusst: Das komponenteneigene CSS von Svelte hat
+     höhere Spezifität als eine globale Elementregel, und die Vorgabe muss
+     überall gelten — sie verhindert den Autozoom von iOS, ist also eine
+     Korrektur am Browserverhalten und keine gestalterische Entscheidung. */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Alles, was angetippt wird, braucht eine ausreichend große Fläche. */
+  .btn,
+  button,
+  select,
+  [role='button'] {
+    min-height: 40px;
+  }
+
+  .btn.small {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 0.78rem;
+  }
+
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Karten dürfen auf schmalen Schirmen bis an den Rand laufen. */
+  .card {
+    border-radius: var(--radius-sm);
+  }
+
+  body {
+    font-size: 16px;
+  }
+}
+
+/* Auf Touchgeräten gibt es kein Hover — Zustände nur dort zeigen, wo ein
+   echter Zeiger vorhanden ist, sonst bleiben sie nach dem Tippen kleben. */
+@media (hover: none) {
+  .btn:hover {
+    background: var(--card);
+    border-color: var(--line);
+  }
+  .btn.primary:hover {
+    background: var(--shu);
+    border-color: var(--shu);
   }
 }

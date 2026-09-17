@@ -28,6 +28,7 @@
   let station = $state<string>(initialStation);
   let cats = $state<Set<Category>>(new Set(CATEGORIES.map((c) => c.key)));
   let onlyTips = $state(false);
+  let onlyBook = $state(false);
   let onlyOpen = $state(false);
   let hideDone = $state(false);
   let selected = $state<number | null>(null);
@@ -41,6 +42,7 @@
       if (!cats.has(p.category)) return false;
       if (station !== 'alle' && p.station !== station) return false;
       if (onlyTips && !p.isFriendTip) return false;
+      if (onlyBook && !p.book) return false;
       if (onlyOpen && p.closedDay) return false;
       if (hideDone && isDone(p.nr)) return false;
       if (!q) return true;
@@ -133,6 +135,9 @@
 
     <button class="chip plain" class:on={onlyTips} onclick={() => (onlyTips = !onlyTips)} aria-pressed={onlyTips}>
       ★ Freundestipps
+    </button>
+    <button class="chip plain" class:on={onlyBook} onclick={() => (onlyBook = !onlyBook)} aria-pressed={onlyBook}>
+      📖 Reiseführer
     </button>
     <button class="chip plain" class:on={hideDone} onclick={() => (hideDone = !hideDone)} aria-pressed={hideDone}>
       offen
@@ -324,7 +329,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: calc(100vh - var(--nav-h) - 150px);
+    max-height: calc(var(--app-h) - 150px);
     overflow-y: auto;
     padding-right: 4px;
   }
@@ -357,7 +362,7 @@
 
   .mapwrap {
     position: relative;
-    height: calc(100vh - var(--nav-h) - 150px);
+    height: calc(var(--app-h) - 150px);
     border: 1px solid var(--line);
     border-radius: var(--radius);
     overflow: hidden;
@@ -392,7 +397,7 @@
       position: static;
     }
     .mapwrap {
-      height: 70vh;
+      height: calc(var(--app-h) - 210px);
     }
   }
 </style>

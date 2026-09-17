@@ -59,6 +59,7 @@
       {visible}
       {route}
       {selected}
+      fullscreen
       onselect={(nr) => (selected = nr)}
     />
   </div>
@@ -135,8 +136,12 @@
 <style>
   .page {
     position: relative;
-    height: calc(100vh - var(--nav-h));
+    height: var(--app-h);
     display: flex;
+    /* Das Filterblatt liegt auf dem Handy per translateX(100%) außerhalb des
+       Bildes. Ohne diese Zeile spannt es den Scrollbereich auf und die Seite
+       lässt sich seitlich wegschieben. */
+    overflow: hidden;
   }
 
   .mapholder {
@@ -305,13 +310,15 @@
       height: 100%;
       width: min(86vw, 290px);
       transform: translateX(100%);
-      transition: transform 0.2s ease;
+      transition: transform 0.2s ease, visibility 0.2s;
+      visibility: hidden;
       z-index: 25;
       box-shadow: -8px 0 24px rgba(13, 22, 38, 0.18);
       padding-top: 56px;
     }
     .panel.open {
       transform: translateX(0);
+      visibility: visible;
     }
   }
 </style>

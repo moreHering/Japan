@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const KML = resolve(root, 'data/source/Japan-Karte-2026.kml');
 const HTML = resolve(root, 'data/source/Japan-Reisefuehrer-2026.html');
+const BOOK = resolve(root, 'data/source/buch-erlebnisse.json');
 const OUT = resolve(root, 'src/data/places.json');
 
 /** Erwartungswerte, gegen die das Ergebnis geprüft wird. */
@@ -212,6 +213,64 @@ function needsBooking(text) {
 
 const cashOnly = (text) => /nur bargeld|kein tax-free/i.test(text);
 
+// --------------------------------------------------------- Orte aus dem Buch
+
+/**
+ * Ordnet den Orten das Erlebnis aus "Japan erleben" zu, aus dem sie stammen.
+ *
+ * Der Abgleich läuft über feste Namensbestandteile aus buch-erlebnisse.json,
+ * nicht über Ähnlichkeit: Ein falsch gesetztes Buchsymbol behauptet etwas über
+ * die Quelle eines Ortes und ist schlimmer als ein fehlendes. Treffer werden
+ * am Ende aufgelistet, damit die Zuordnung prüfbar bleibt.
+ */
+function assignBook(places) {
+  const { erlebnisse } = JSON.parse(readFileSync(BOOK, 'utf8'));
+  const norm = (x) => stripTags(x).toLowerCase().replace(/\s+/g, ' ').trim();
+  const report = [];
+  const unmatched = [];
+
+  /*
+   * Der Suchbegriff muss als eigenes Wort vorkommen, nicht als Silbe: "Uji"
+   * steckt sonst in "Tenjinbashi-suji" und "Doguyasuji" und würde zwei
+   * Osakaer Einkaufsstraßen dem Erlebnis über die Teestadt bei Kyoto
+   * zuschlagen. Geprüft wird deshalb, dass links und rechts des Treffers
+   * kein Buchstabe steht.
+   */
+  const matches = (name, key) => {
+    let from = 0;
+    for (;;) {
+      const i = name.indexOf(key, from);
+      if (i === -1) return false;
+      const before = name[i - 1];
+      const after = name[i + key.length];
+      const isLetter = (c) => c !== undefined && /[\p{L}\p{N}]/u.test(c);
+      if (!isLetter(before) && !isLetter(after)) return true;
+      from = i + 1;
+    }
+  };
+
+  for (const e of erlebnisse) {
+    for (const suchbegriff of e.orte) {
+      const key = norm(suchbegriff);
+      const hits = places.filter((p) => matches(norm(p.name), key));
+
+      if (!hits.length) {
+        unmatched.push(`${e.nr} · ${suchbegriff}`);
+        continue;
+      }
+      for (const p of hits) {
+        // Ein Ort kann zu mehreren Erlebnissen passen — das erste gewinnt,
+        // damit die Zuordnung stabil bleibt.
+        if (p.book) continue;
+        p.book = e.nr;
+        p.bookTitle = e.titel;
+        report.push(`${e.nr} ${e.titel} → Nr. ${p.nr} ${p.name}`);
+      }
+    }
+  }
+  return { report, unmatched };
+}
+
 // ----------------------------------------------------------------------- Merge
 
 const texts = readHtml();
@@ -256,6 +315,8 @@ for (const nr of [...geo.keys()].sort((a, b) => a - b)) {
     cashOnly: cashOnly(haystack),
   });
 }
+
+const book = assignBook(places);
 
 // Orte auf identischer Position gegenseitig markieren, damit die Karte deren
 // Marker leicht versetzt zeichnen kann statt sie übereinanderzulegen.
@@ -563,6 +624,10 @@ console.log(`  Freundestipps ${tips}`);
 console.log(`  Schließtage   ${places.filter((p) => p.closedDay).length}`);
 console.log(`  Reservierung  ${places.filter((p) => p.needsBooking).length}`);
 console.log(`  Nur Bargeld   ${places.filter((p) => p.cashOnly).length}`);
+console.log(`  Aus dem Buch  ${places.filter((p) => p.book).length} Orte aus ${new Set(places.filter((p) => p.book).map((p) => p.book)).size} Erlebnissen`);
+if (book.unmatched.length) {
+  console.log(`  Ohne Treffer  ${book.unmatched.length}: ${book.unmatched.join(' · ')}`);
+}
 console.log(`  Stationen     ${Object.entries(byStation).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
 console.log(`  Reiseband     public/reiseband.html`);
 console.log(`    · ${guide.added} Kapitelanker ergänzt`);

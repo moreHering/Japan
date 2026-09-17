@@ -1,0 +1,253 @@
+{
+  "_hinweis": "Die 55 Erlebnisse aus 'Japan erleben' (Finke/Scheidegger), soweit sie die Reiseroute berühren. Die Suchbegriffe sind bewusst eindeutig gewählt: sie müssen im Namen eines Ortes aus places.json vorkommen. Lieber ein Ort ohne Buchsymbol als ein falsch markierter.",
+  "erlebnisse": [
+    {
+      "nr": "01",
+      "titel": "Shibuya",
+      "orte": [
+        "Shibuya Crossing",
+        "Shibuya Sky",
+        "MAGNET by Shibuya109",
+        "Shibuya Hikarie Sky Lobby"
+      ]
+    },
+    {
+      "nr": "02",
+      "titel": "Senso-ji und Nakamise",
+      "orte": [
+        "Senso-ji",
+        "Nakamise-dori"
+      ]
+    },
+    {
+      "nr": "03",
+      "titel": "Akihabara",
+      "orte": [
+        "TAITO Station Akihabara"
+      ]
+    },
+    {
+      "nr": "04",
+      "titel": "Aussicht über Tokio",
+      "orte": [
+        "Rathaus Shinjuku",
+        "Tokyo Skytree"
+      ]
+    },
+    {
+      "nr": "05",
+      "titel": "Meiji-Jingu und Shinjuku Gyoen",
+      "orte": [
+        "Meiji-Jingu",
+        "Shinjuku Gyoen"
+      ]
+    },
+    {
+      "nr": "06",
+      "titel": "Harajuku",
+      "orte": [
+        "Takeshita-Straße",
+        "Cat Street"
+      ]
+    },
+    {
+      "nr": "07",
+      "titel": "teamLab",
+      "orte": [
+        "teamLab Borderless",
+        "teamLab Planets"
+      ]
+    },
+    {
+      "nr": "08",
+      "titel": "Gotokuji und Soba",
+      "orte": [
+        "Gotoku-ji",
+        "Fukumuro-an"
+      ]
+    },
+    {
+      "nr": "09",
+      "titel": "Themen-Cafés",
+      "orte": [
+        "at-home cafe",
+        "Pokémon Café",
+        "Straw Hat Café",
+        "2D Café",
+        "Samurai Restaurant",
+        "First Airlines",
+        "DAWN Avatar Robot",
+        "Yadorigi Café"
+      ]
+    },
+    {
+      "nr": "10",
+      "titel": "Street Kart",
+      "orte": [
+        "Street Kart"
+      ]
+    },
+    {
+      "nr": "11",
+      "titel": "Berg Takao",
+      "orte": [
+        "Mt. Takao",
+        "Takao: Onsen Gokurakuyu",
+        "Takao 599"
+      ]
+    },
+    {
+      "nr": "12",
+      "titel": "Yokohama",
+      "orte": [
+        "Cup Noodles Museum",
+        "Yokohama"
+      ]
+    },
+    {
+      "nr": "13",
+      "titel": "Kamakura",
+      "orte": [
+        "Kamakura: Hase-dera",
+        "Kamakura: Tsurugaoka",
+        "Kotoku-in"
+      ]
+    },
+    {
+      "nr": "14",
+      "titel": "Nikko",
+      "orte": [
+        "Nikko Tosho-gu",
+        "Nikko: Futarasan",
+        "Nikko: Shinkyo",
+        "Nikko: Kegon"
+      ]
+    },
+    {
+      "nr": "15",
+      "titel": "Hakone",
+      "orte": [
+        "Ashi-See",
+        "Hakone-Schrein"
+      ]
+    },
+    {
+      "nr": "18",
+      "titel": "Kanazawa Samurai-Viertel",
+      "orte": [
+        "Nagamachi",
+        "Nomura"
+      ]
+    },
+    {
+      "nr": "19",
+      "titel": "Shirakawa-go",
+      "orte": [
+        "Shirakawa-go"
+      ]
+    },
+    {
+      "nr": "20",
+      "titel": "Takayama Altstadt",
+      "orte": [
+        "Sanmachi"
+      ]
+    },
+    {
+      "nr": "23",
+      "titel": "Fushimi Inari",
+      "orte": [
+        "Fushimi Inari"
+      ]
+    },
+    {
+      "nr": "24",
+      "titel": "Kinkaku-ji und Ryoan-ji",
+      "orte": [
+        "Kinkaku-ji",
+        "Ryoan-ji"
+      ]
+    },
+    {
+      "nr": "25",
+      "titel": "Gion und Kiyomizu-dera",
+      "orte": [
+        "Gion Corner",
+        "Kiyomizu-dera"
+      ]
+    },
+    {
+      "nr": "26",
+      "titel": "Arashiyama",
+      "orte": [
+        "Arashiyama Bambushain",
+        "Tenryu-ji",
+        "Iwatayama-Affenpark",
+        "To-ji"
+      ]
+    },
+    {
+      "nr": "28",
+      "titel": "Uji",
+      "orte": [
+        "Uji",
+        "Byodo-in"
+      ]
+    },
+    {
+      "nr": "29",
+      "titel": "Nara",
+      "orte": [
+        "Todai-ji",
+        "Nara-Park",
+        "Heijo-Palast"
+      ]
+    },
+    {
+      "nr": "30",
+      "titel": "Osaka-jo",
+      "orte": [
+        "Osaka-jo"
+      ]
+    },
+    {
+      "nr": "31",
+      "titel": "Dotonbori und Kuromon",
+      "orte": [
+        "Glico Running Man",
+        "Kuromon-Markt"
+      ]
+    },
+    {
+      "nr": "32",
+      "titel": "Koyasan",
+      "orte": [
+        "Danjo Garan",
+        "Kongobu-ji",
+        "Okunoin",
+        "Nyonin-do"
+      ]
+    },
+    {
+      "nr": "33",
+      "titel": "Akame",
+      "orte": [
+        "Akame"
+      ]
+    },
+    {
+      "nr": "34",
+      "titel": "Kobe Nunobiki",
+      "orte": [
+        "Nunobiki"
+      ]
+    },
+    {
+      "nr": "35",
+      "titel": "Himeji-jo",
+      "orte": [
+        "Himeji-jo"
+      ]
+    }
+  ]
+}

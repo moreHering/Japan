@@ -30,6 +30,8 @@
     zoom?: number;
     /** Nummern, die eine Reihenfolge haben (Tagesplan) — verbindet sie mit einer Linie. */
     route?: number[];
+    /** Vollbildkarte: reagiert sofort auf einen Finger, statt erst nach Antippen. */
+    fullscreen?: boolean;
     onselect?: (nr: number) => void;
   };
 
@@ -40,6 +42,7 @@
     center = [36.2, 137.5],
     zoom = 6,
     route = [],
+    fullscreen = false,
     onselect,
   }: Props = $props();
 
@@ -81,6 +84,7 @@
     const cat = CATEGORIES.find((c) => c.key === place.category)!;
     const flags = [
       place.isFriendTip ? '★ Freundestipp' : '',
+      place.book ? `📖 Reiseführer ${place.book} · ${place.bookTitle}` : '',
       place.closedDay ? `${place.closedDay}. geschlossen` : '',
       place.needsBooking ? 'Reservierung' : '',
       place.cashOnly ? 'nur Bargeld' : '',
@@ -110,11 +114,11 @@
       map = L.map(host, {
         center,
         zoom,
-        zoomControl: true,
-        // Auf dem Handy soll eine Wischbewegung die Seite scrollen, nicht die
-        // Karte verschieben — Zoom und Pan gehen dort über zwei Finger.
-        dragging: !L.Browser.mobile,
+        dragging: true,
         tap: false,
+        // Auf dem Handy wird mit zwei Fingern gezoomt; die Knöpfe verdecken
+        // dort nur Karte.
+        zoomControl: !L.Browser.mobile,
       });
 
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -122,9 +126,22 @@
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       }).addTo(map);
 
-      if (L.Browser.mobile) {
-        // Ein Tipp auf die Karte gibt ihr die Kontrolle zurück.
-        host.addEventListener('click', () => map.dragging.enable(), { once: true });
+      /*
+       * Eingebettete Karten (Tagesplan, Ortsbrowser) dürfen den Seitenscroll
+       * nicht schlucken: Dort bleibt der erste Finger für die Seite, bis die
+       * Karte einmal angetippt wurde. Eine Vollbildkarte braucht das nicht.
+       */
+      if (L.Browser.mobile && !fullscreen) {
+        map.dragging.disable();
+        const enable = () => {
+          map.dragging.enable();
+          host.classList.remove('locked');
+        };
+        host.classList.add('locked');
+        host.addEventListener('click', enable, { once: true });
+        host.addEventListener('touchstart', (e) => {
+          if (e.touches.length > 1) enable();   // zwei Finger = bewusste Geste
+        }, { passive: true });
       }
 
       for (const place of places) {
@@ -253,6 +270,28 @@
     font-size: 0.8rem;
     color: var(--ai-40);
     pointer-events: none;
+  }
+
+  /*
+   * Eine eingebettete Karte nimmt den Finger erst nach dem Antippen. Ohne
+   * Hinweis wirkt sie in diesem Zustand kaputt — deshalb sagt sie es.
+   */
+  .map.locked::after {
+    content: 'Zum Bewegen antippen';
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    z-index: 400;
+    background: rgba(22, 35, 60, 0.86);
+    color: var(--washi);
+    font-family: var(--util);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    padding: 7px 14px;
+    border-radius: 999px;
+    pointer-events: none;
+    white-space: nowrap;
   }
 
   /* Leaflet erzeugt sein Markup selbst — deshalb global. */

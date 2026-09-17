@@ -231,6 +231,7 @@
                 <span class="pin {place.category}">{place.nr}</span>
                 <b>{place.name}</b>
                 {#if place.isFriendTip}<span class="tip">★</span>{/if}
+                {#if place.book}<span class="book" title={`Reiseführer ${place.book}`}>📖</span>{/if}
                 {#if isDone(place.nr)}<span class="ok">✓</span>{/if}
               </div>
               <div class="stopmeta">
@@ -603,6 +604,11 @@
     color: var(--kin);
   }
 
+  .book {
+    font-size: 0.85em;
+    opacity: 0.85;
+  }
+
   .ok {
     color: var(--matcha);
     font-weight: 700;
@@ -698,7 +704,7 @@
     top: calc(var(--nav-h) + 12px);
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - var(--nav-h) - 40px);
+    max-height: calc(var(--app-h) - 40px);
     background: var(--washi-2);
     border: 1px solid var(--line);
     border-radius: var(--radius);
@@ -807,10 +813,94 @@
       max-height: none;
     }
     .poollist {
-      max-height: 60vh;
+      max-height: 60dvh;
     }
     .stop {
       cursor: default;
+    }
+  }
+
+  /* --------------------------------------------------------------- Handy */
+
+  @media (max-width: 767px) {
+    /*
+     * Nebeneinander reicht die Breite nicht: Die vier Bedienelemente drängen
+     * den Ortsnamen in den Umbruch und die Zeile wird doppelt so hoch. Deshalb
+     * steht der Name hier oben über die volle Breite und die Steuerung darunter.
+     */
+    .stop {
+      flex-wrap: wrap;
+      gap: 8px 10px;
+      padding: 11px 12px;
+    }
+
+    .stopbody {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .stopctl {
+      flex: 1 0 100%;
+      justify-content: flex-end;
+      gap: 6px;
+      padding-top: 2px;
+      border-top: 1px solid var(--line-soft);
+      margin-top: 2px;
+    }
+
+    .ctl {
+      width: 40px;
+      height: 38px;
+      font-size: 1rem;
+    }
+
+    .ctl.move {
+      flex: 1;
+      max-width: 140px;
+    }
+
+    .stoptitle b {
+      font-size: 1rem;
+    }
+
+    /* Der Tagesstreifen wird zum Wischband mit fangenden Positionen. */
+    .daybar {
+      scroll-snap-type: x proximity;
+      gap: 7px;
+      padding-bottom: 12px;
+      margin-left: -14px;
+      margin-right: -14px;
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+
+    .daytab {
+      scroll-snap-align: start;
+      min-width: 82px;
+      padding: 9px 11px 10px;
+    }
+
+    .daytab b {
+      font-size: 1.02rem;
+    }
+
+    .dayhead {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .daymap {
+      height: 260px;
+      margin-left: -14px;
+      margin-right: -14px;
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+    }
+
+    .order {
+      font-size: 1.15rem;
+      min-width: 20px;
     }
   }
 </style>

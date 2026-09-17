@@ -12,7 +12,7 @@ sechs Stationen, 19 Nächte, 164 Orte.
 | Orte | Alle 164 Orte, filterbar, mit Karte |
 | Karte | Vollbildkarte mit Kategorie-Layern und Tagesansicht |
 | Organisation | Buchungen und Fristen, Budget in ¥/€, Packliste, Export/Import |
-| Reiseband | Der ursprüngliche Reiseführer, unverändert |
+| Reiseband | Der Reiseführer als Lektüre — Erzählung ohne die Ortskataloge |
 
 ## Wo die Daten herkommen
 
@@ -27,8 +27,12 @@ bearbeitet** werden sollten:
 
 - `src/data/places.json` — die 164 Orte mit Koordinaten, Texten und abgeleiteten
   Merkmalen (Freundestipp, Reservierung nötig, Schließtag, nur Bargeld)
-- `public/reiseband.html` — der Reiseband, ergänzt um Kapitelanker und einen
-  Rückweg zur App; inhaltlich unverändert
+- `public/reiseband.html` — der Reiseband als **Lesefassung**: Kapitelanker, ein
+  Rückweg zur App, und ohne die nummerierten Ortslisten. Die stehen vollständig
+  im Planer; an ihrer Stelle verweist je Station ein Block dorthin. Erhalten
+  bleiben die Erzählung, die 16 Anker, alle Kästen, die Probier-Tabellen und die
+  Einträge unter „Weitere Optionen — ohne Nummer" (die haben keine Koordinaten
+  und stehen deshalb nirgends sonst)
 
 Das Skript prüft sein Ergebnis gegen feste Erwartungswerte (164 Orte, lückenlose
 Nummern, Kategorieverteilung 54/35/26/25/24, sieben Freundestipps) und bricht bei

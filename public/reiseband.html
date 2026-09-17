@@ -418,6 +418,22 @@ table.bkqr code{background:#22304a;color:#EFE7D6}
 font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;background:#16233CEE;color:#EFE7D6;
 border:1px solid #A67C33;border-radius:999px;padding:9px 16px;text-decoration:none;backdrop-filter:blur(6px)}
 .app-back:hover{background:#C6402B;border-color:#C6402B}
+
+/* Verweis auf die Ortsliste im Planer — steht, wo früher die Tabellen standen */
+.app-orte{display:flex;align-items:center;gap:16px;margin:30px 0 10px;padding:16px 20px;
+background:#F6F1E6;border:1px solid #D7CBB2;border-left:5px solid #C6402B;border-radius:14px;
+text-decoration:none;color:#16233C;transition:border-color .15s,background .15s}
+.app-orte:hover{background:#EFE7D6;border-left-color:#A63220}
+.app-orte .ao-count{font-family:"Fraunces",Georgia,serif;font-weight:700;font-size:2.1rem;
+line-height:1;color:#C6402B;flex:none}
+.app-orte .ao-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.app-orte .ao-text b{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:1.12rem}
+.app-orte .ao-text small{font-family:"Zen Kaku Gothic New",sans-serif;font-size:.78rem;
+color:#4B5468;line-height:1.45}
+.app-orte .ao-go{font-family:"Zen Kaku Gothic New",sans-serif;font-size:.74rem;letter-spacing:.1em;
+text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
+@media(max-width:600px){.app-orte{flex-wrap:wrap;gap:10px;padding:14px 16px}
+.app-orte .ao-go{width:100%}}
 @media print{.app-back{display:none}}
 </style>
 <a class="app-back" href="./">← Zum Reiseplaner</a>
@@ -450,15 +466,15 @@ border:1px solid #A67C33;border-radius:999px;padding:9px 16px;text-decoration:no
         <div><b>📌 Merkkasten</b> — Etikette, damit ihr euch sicher bewegt.</div>
         <div><b>⚠️ Achtung</b> — Stolperfallen &amp; Buchungsfristen.</div>
         <div><b>🈁 Vokabeln</b> — Begriff · Lesung · Bedeutung.</div>
-        <div><b>🔢 Orte auf der Karte</b> — nummeriert und nach Kategorie gefärbt: Kultur, Essen, Einkaufen, Natur, Übernachten.</div>
+        <div><b>🔢 Orte im Planer</b> — alle 164, nummeriert und nach Kategorie gefärbt: Kultur, Essen, Einkaufen, Natur, Übernachten.</div>
       </div>
       <div class="meta" style="margin-top:20px">
         <span class="badge">Preise stets in <b>€ &amp; ¥</b> (Kurs ~185)</span>
-        <span class="badge">Nummern im Text = <b>Nummern auf der Karte</b></span>
+        <span class="badge">Nummern im Text = <b>Nummern im Planer</b></span>
       </div>
     </div>
 
-    <p>Noch ein Wort zu den <strong>Nummern</strong>: Jeder Ort in diesem Buch trägt eine — von 1 in Osaka bis 164 in Tokio. Dieselben Nummern stehen auf eurer Karte in Google My Maps — QR-Code auf der Rückseite, einmal scannen und sie ist auf dem Handy. Ihr lest hier „Nr. 96", sucht auf der Karte „096" — fertig. Das Buch erzählt, die Karte führt.</p>
+    <p>Noch ein Wort zu den <strong>Nummern</strong>: Jeder Ort trägt eine — von 1 in Osaka bis 164 in Tokio. Die vollständigen Ortslisten stehen nicht mehr in diesem Buch, sondern im <a href="./orte/">Reiseplaner</a>: dort sind sie durchsuchbar, nach Kategorie filterbar, liegen auf der Karte und lassen sich auf einzelne Reisetage legen. Ihr lest hier „Nr. 96" und findet denselben Punkt dort wieder. <strong>Das Buch erzählt, der Planer führt.</strong></p>
 
     <div class="divider"><span class="ln"></span>
       <svg viewBox="0 0 120 90" xmlns="http://www.w3.org/2000/svg"><g fill="#C6402B"><path d="M6 20 q54 -18 108 0 l0 9 q-54 -16 -108 0 z"/><rect x="14" y="36" width="92" height="7"/><rect x="27" y="29" width="10" height="55"/><rect x="83" y="29" width="10" height="55"/></g></svg>
@@ -679,64 +695,12 @@ reservieren.</li>
       <p>Takoyaki wurde 1935 in Osaka erfunden (Imbiss Aizuya, es gibt ihn noch). Okonomiyaki wurde nach dem Krieg groß, als Reis knapp war und Mehl von den Besatzern kam — „konamon" (Mehlzeug) ist also keine uralte Tradition, sondern geniale Armutsküche, die blieb. Das gehört zur Ehrlichkeit dieses Buchs: Nicht alles Gute ist alt. Manches Gute ist einfach gut.</p>
     </div>
 
-    <h3 class="sect">Orte auf der Karte <small>Nummern = Karte</small></h3>
-<div class="mapbox" data-map="osaka"></div>
-
-<div class="cat kultur">Kultur & Sehenswürdigkeiten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin kultur">1</span></td><td><b>Osaka-jo</b> — Ehrlichkeit zuerst: Der Turm ist eine Beton-Rekonstruktion von 1931 mit Aufzug und Museum. Hin lohnt es trotzdem — wegen der <strong>originalen Steinmauern</strong>: Quader von über 100 Tonnen, von Fürsten als Machtbeweis herangeschleppt. Von außen bestaunen kostet nichts. Optional Gozabune-Boot im Graben. 🧵 Burgen → Kap. 6 <a href="https://www.google.com/maps/search/?api=1&query=34.6872571,135.5258546&query_place_id=ChIJ_TooXM3gAGARQR6hXH3QAQ8">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">2</span></td><td><b>Shitenno-ji</b> — Gegründet 593 von Prinz Shōtoku, dem Mann, der den Buddhismus in Japan durchsetzte. Deutlich leerer als alles in Kyoto — wer den Tempel-Teil der Reise früh und ruhig beginnen will, tut es hier. <a href="https://www.google.com/maps/search/?api=1&query=34.6544581,135.5165239&query_place_id=ChIJIVA6O_jdAGARLWCtv8iBqrY">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat essen">Essen & Trinken</div>
-<table class="pins">
-<tr><td class="b"><span class="pin essen">3</span></td><td><b>Cascade (Bäckerei) ★Freundestipp</b> — Sehr guter Bäcker, einfach mehrere kleine Teile probieren. Nur Bargeld; zwei Schlangen - die für Mitnahme ist länger, drinnen essen geht schneller; 7:30-22 Uhr <a href="https://www.google.com/maps/search/?api=1&query=34.7041623,135.4982414&query_place_id=ChIJY2t6EJLmAGARGr666HItRG0">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">4</span></td><td><b>Dotonbori</b> — Neon-Postkartenmotiv; die ruhigeren Gassen liegen in Ura-Namba dahinter <a href="https://www.google.com/maps/search/?api=1&query=34.6686471,135.5030983&query_place_id=ChIJg2DcJhXnAGARCbeAHoZrPeQ">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">5</span></td><td><b>Glico Running Man (Dotonbori)</b> — Das Neon-Wahrzeichen seit 1935; abends am Kanal <a href="https://www.google.com/maps/search/?api=1&query=34.6689339,135.5010679&query_place_id=ChIJ6XHOkxTnAGARvyn92D4gWVs">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">6</span></td><td><b>Kokoro ni Amai Anpanya (Bäckerei) ★Freundestipp</b> — Klassiker seit Ewigkeiten, ~¥151/Stück. Probieren: Koshi-Anpan, Kuri-Anpan (Kastanie), Karee-Pan (frittiert mit Curry). Nur Bargeld, englische Bildkarte auf Nachfrage; 10-21:30 <a href="https://www.google.com/maps/search/?api=1&query=34.7038378,135.4976646&query_place_id=ChIJJc7FZZLmAGARGtFYyZ2tKYk">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">7</span></td><td><b>Kuromon-Markt</b> — Streetfood-Markt; vor 10 Uhr Händler-Alltag statt Spieße-Tourismus <a href="https://www.google.com/maps/search/?api=1&query=34.6653511,135.5062417&query_place_id=ChIJXSJB5UHnAGARQcEjvngsHaw">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">8</span></td><td><b>New Matsuzaka Umeda 32 ★Freundestipp</b> — Teppanyaki im 31. Stock mit Skyline-Blick, Kobe- und Matsusaka-Rind vor den Augen zubereitet. NUR MIT RESERVIERUNG, MITTWOCHS GESCHLOSSEN. Mittags deutlich günstiger als abends <a href="https://www.google.com/maps/search/?api=1&query=34.7028289,135.4992168&query_place_id=ChIJt45D_pLmAGAR8SjAKFlvWoY">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">9</span></td><td><b>Onigiri-ya Hitotsubu ★Freundestipp</b> — Öffnet schon 7 Uhr - ideal für den Zug. Erdgeschoss, von der Yodobashi-Camera-Kreuzung kommend links rein; 7-20 Uhr <a href="https://www.google.com/maps/search/?api=1&query=34.7043458,135.4982621&query_place_id=ChIJY2t6EJLmAGARVKV7hc70RwA">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">10</span></td><td><b>Shinsekai</b> — Retro-Viertel, gebaut nach Vorbildern Paris (Norden) und Coney Island (Süden), mit dem Tsūtenkaku-Turm. Hier frittiert man Kushikatsu-Spieße — eiserne Regel: <strong>nie zweimal in die geteilte Sauce dippen.</strong> Herrlich unpoliert. <a href="https://www.google.com/maps/search/?api=1&query=34.6516013,135.5059562&query_place_id=ChIJV6JXdmDnAGAR-9a4atjXsTY">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">11</span></td><td><b>Tenjinbashi-suji</b> — Japans längste Einkaufsstraße; abends Izakaya-Viertel der Einheimischen <a href="https://www.google.com/maps/search/?api=1&query=34.7025467,135.5114541&query_place_id=ChIJTW9DUrnmAGARVwa3Ga1U-JI">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat shop">Einkaufen & Handwerk</div>
-<table class="pins">
-<tr><td class="b"><span class="pin shop">12</span></td><td><b>America-mura</b> — Jünger und lauter; viele Second-Hand-Läden auf engem Raum <a href="https://www.google.com/maps/search/?api=1&query=34.6719318,135.4988498&query_place_id=ChIJby5T_xbnAGARF39mR8GVhdc">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">13</span></td><td><b>Den Den Town / Nipponbashi</b> — Osakas Antwort auf Akihabara, kompakter und entspannter: Jump Shop, Pokémon Center, Retro-Games. Falls One-Piece-Bedarf nicht bis Tokio warten kann. <a href="https://www.google.com/maps/search/?api=1&query=34.6604678,135.5061904&query_place_id=ChIJv6w_-2fnAGARH2p9wbwos3c">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">14</span></td><td><b>Nakazakicho</b> — Vintage-Viertel: alte Holzhäuser, Second-Hand-Läden, Retro-Cafés <a href="https://www.google.com/maps/search/?api=1&query=34.7067988,135.5051143&query_place_id=ChIJV2R0lpXmAGAR0isU5tWq7pU">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">15</span></td><td><b>Sakai Ichimonji Mitsuhide (Messer) ★Freundestipp</b> — 4,7 Sterne aus 333 Bewertungen - englischsprachiges Personal, Gratis-Gravur und Lifetime-Schleifkarte beim Kauf; bietet auch einen Messer-Kurs an. Mo-Fr 9:30-18:30, Sa/So ab 10:30 <a href="https://www.google.com/maps/search/?api=1&query=34.663507,135.503597&query_place_id=ChIJPUQn0GvnAGARjNL6DofupQI">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">16</span></td><td><b>Semba Center Building ★Freundestipp</b> — Unterirdische Arkade unter der Hochbahn: 10 Abschnitte, 2 Ebenen, ~4 km Läden. Second-Hand-Kimono ab ¥3.000, Chawan, Stoffballen, Obi. ACHTUNG: SONNTAGS GESCHLOSSEN, sonst 9-22 Uhr <a href="https://www.google.com/maps/search/?api=1&query=34.6818429,135.5040868&query_place_id=ChIJmdEbESLnAGARoi0uvToZmR8">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">17</span></td><td><b>Sennichimae Doguyasuji (Küchenwaren-Meile)</b> — 150 m Arkade voller Küchen-, Messer- und Geschirrläden; 10-18 Uhr. Am Ende der Straße gibt es eine Packstation mit Papier und Klebeband <a href="https://www.google.com/maps/search/?api=1&query=34.6640141,135.5035063&query_place_id=ChIJfQfezmvnAGARy4Sd3VGFy_A">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">18</span></td><td><b>Yamaka Toki (Geschirr) ★Freundestipp</b> — Geschirr von Mini-Sojaschälchen bis Ramen-Schalen, günstig; 10-18 Uhr. Kein Tax-Free, wird nur in Zeitungspapier gewickelt - eigene Luftpolsterfolie mitbringen <a href="https://www.google.com/maps/search/?api=1&query=34.6644726,135.5034209&query_place_id=ChIJueCKsGvnAGARWiD7HievOt0">▸ Karte</a></td></tr>
-</table>
-
-<div class="mapbox" data-map="osaka_ausfluege"><div class="cat trip">Ausflüge &amp; Umgebung ab Osaka</div></div>
-
-<table class="pins">
-<tr><td class="b"><span class="pin kultur">19</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Danjo Garan</b> — Das sakrale Zentrum, gegründet von Kukai; 49 m hohe Konpon-Daito-Pagode <a href="https://www.google.com/maps/search/?api=1&query=34.2134865,135.5799663&query_place_id=ChIJ-TitDQ0nB2ARwgYPgu5bEes">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">20</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Himeji-jo</b> — Japans größte und schönste Originalburg — die weiße Gegenthese zum rekonstruierten Osaka-jō. Wer zwei Burgen mag, bekommt hier den Vergleich; wer nur eine will, wartet auf Kapitel 6. 🧵 schwarz vs. weiß → Kap. 6 <a href="https://www.google.com/maps/search/?api=1&query=34.839449,134.6939047&query_place_id=ChIJsyQzogPgVDURsYG6bi-MT3o">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">21</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Iga-Ueno-Burg</b> — Eine der höchsten Steinmauern Japans; ruhig, weil abseits der großen Namen <a href="https://www.google.com/maps/search/?api=1&query=34.7701586,136.1270173&query_place_id=ChIJiyAGcclQAWARwzdxBxr_sSk">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">22</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Iga-ryu Ninja-Museum</b> — Ninja-Haus mit Geheimtüren, Werkzeug-Ausstellung, Live-Show (+600 ¥) und Shuriken-Werfen <a href="https://www.google.com/maps/search/?api=1&query=34.771836,136.129113&query_place_id=ChIJS_8NSspQAWAR3iMt6Fo5B6w">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">23</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Kongobu-ji</b> — Haupttempel des Shingon-Buddhismus; größter Steingarten Japans (140 Granitblöcke) <a href="https://www.google.com/maps/search/?api=1&query=34.214028,135.5840943&query_place_id=ChIJXVifh3InB2ARxY1UV-2ukyo">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">24</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Nyonin-do</b> — Letzte erhaltene Frauenhalle - hierher durften Frauen früher nur bis zum Rand des heiligen Bergs <a href="https://www.google.com/maps/search/?api=1&query=34.2199987,135.5809115&query_place_id=ChIJbbXRwAonB2ARbm5NmWIaaqU">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">25</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Okunoin-Friedhof</b> — Über 200.000 Grabmäler entlang eines 2 km langen Zedernwegs; nachts laternenbeleuchtet, 24 h offen <a href="https://www.google.com/maps/search/?api=1&query=34.2176933,135.6050531&query_place_id=ChIJ9-xm1p3YBmARIXiCrXhY99Y">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">26</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Ryusen-ji</b> — Wasserfall-Reinigung (Suigyo) + Feuerritual (Gomagyo); vorab arrangieren <a href="https://www.google.com/maps/search/?api=1&query=34.2695578,135.8792985&query_place_id=ChIJO3yg50bABmARv8JZy0oLWGY">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">27</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Sumiyoshi-Taisha</b> — Einer der ältesten Schreine des Landes mit eigener Architektur (<em>sumiyoshi-zukuri</em>) — gebaut, <em>bevor</em> chinesische Tempel-Vorbilder ankamen. Plus die berühmte Rundbogenbrücke. Vorgeschmack aufs Kyoto-Kapitel. <a href="https://www.google.com/maps/search/?api=1&query=34.6123945,135.4937612&query_place_id=ChIJAQB8xrvnAGARgh8ATf4d9ac">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">28</span></td><td><span class="tag shop">Einkaufen & Handwerk</span> <b>Sakai Messer-Museum &amp; Shop</b> — Tagesausflug: Messer-Workshop, schärfen + Griff + Gravur <a href="https://www.google.com/maps/search/?api=1&query=34.5828504,135.4774158&query_place_id=ChIJJ0mEmpLcAGARqDtnx525QRk">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">29</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Akame-48-Wasserfälle (Fallback)</b> — Alternative zu Dorogawa: Wasserfall-Meditation + historisches Ninja-Trainingsgelände <a href="https://www.google.com/maps/search/?api=1&query=34.5636079,136.0857439&query_place_id=ChIJ57-XctCtBmARdPODK8v8VSw">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">30</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Akameguchi (Bahnhof für Akame)</b> — Umstieg in den Bus zu den Akame-Wasserfällen; letzte Rückfahrt ~15:45 beachten <a href="https://www.google.com/maps/search/?api=1&query=34.5998307,136.0746011&query_place_id=ChIJF4bCxGytBmAR_LMH1gyBJNY">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">31</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Gokurakubashi (Seilbahnstation)</b> — Umstieg von der Nankai-Bahn in die Standseilbahn; Umsteigezeit ist knapp <a href="https://www.google.com/maps/search/?api=1&query=34.2339696,135.5822388&query_place_id=ChIJq3TtIZYnB2ARwStuEfmOx7w">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">32</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Kobe Nunobiki Kräutergarten &amp; Seilbahn</b> — Tagesausflug: Seilbahn ab Shin-Kobe, Wasserfälle, Panorama über die Bucht <a href="https://www.google.com/maps/search/?api=1&query=34.7044275,135.1938755&query_place_id=ChIJWapiVtGOAGARVY9nvX-kXII">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">33</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Mitarai-Schlucht</b> — Tageswanderung: türkise Gumpen, Hängebrücken, Herbstfarben <a href="https://www.google.com/maps/search/?api=1&query=34.2359005,135.8755448&query_place_id=ChIJUebdDc7rBmARAbSSJE823KM">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">34</span></td><td><span class="tag hotel">Übernachten</span> <b>Dorogawa Onsen (Ortszentrum)</b> — Laternendorf; Ryokan mit Privatbad wählen (Tattoo) <a href="https://www.google.com/maps/search/?api=1&query=34.2631686,135.8769039&query_place_id=ChIJjeT0ZwDBBmAR6zChnEg0F-g">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">35</span></td><td><span class="tag hotel">Übernachten</span> <b>Eko-in (Tempelübernachtung)</b> — Ausländerfreundlichstes Shukubo: Meditation, Goma-Feuerritual, Okunoin-Nachtführung <a href="https://www.google.com/maps/search/?api=1&query=34.2123167,135.5938011&query_place_id=ChIJl7v99GYnB2AR7wcK-LKwp_M">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">36</span></td><td><span class="tag hotel">Übernachten</span> <b>Ryokan Kadojin</b> — 350 Jahre alt, nur 8 Zimmer mitten im Laternendorf; Zimmer mit eigenem Rotenburo, Wildschwein-Hotpot <a href="https://www.google.com/maps/search/?api=1&query=34.2685655,135.8809956&query_place_id=ChIJVRq_u0DABmARrB83Rom_UYU">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">37</span></td><td><span class="tag hotel">Übernachten</span> <b>Ryokan Misenkan</b> — 4,8 Sterne - Privatbad mit Blick auf Fluss und Wald, Bergküche, Wirt fährt Gäste zum Schrein <a href="https://www.google.com/maps/search/?api=1&query=34.2453451,135.8559687&query_place_id=ChIJJ16lh9rBBmARhzMRdjvqcIU">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">38</span></td><td><span class="tag hotel">Übernachten</span> <b>Sekishoin (Tempelübernachtung)</b> — Alternative zu Eko-in: Zimmer mit eigenem Bad buchbar, ruhiger und weniger touristisch <a href="https://www.google.com/maps/search/?api=1&query=34.2132891,135.5940158&query_place_id=ChIJR6JWhmYnB2AR8M4_SAav0jw">▸ Karte</a></td></tr>
-</table>
-<div class="cat more">Weitere Optionen — ohne Nummer</div><table class="pins">
+    <a class="app-orte" href="./orte/?station=osaka">
+<span class="ao-count">38</span>
+<span class="ao-text"><b>Orte in Osaka</b><small>18 im Zentrum · 20 als Ausflüge — such- und filterbar im Planer, auf der Karte und für die Tagesplanung</small></span>
+<span class="ao-go">Ansehen →</span>
+</a>
+<div class="cat more">Weitere Optionen — ohne Nummer, nur hier im Buch</div><table class="pins">
 <tr><td class="b"><span class="pin more">◯</span></td><td><b>Round1 / Arcades Einfach Spaß</b> <small>Taiko-Trommeln!</small> — Mehrstöckige Spielhallen. Empfehlung für euch drei: <em>Taiko no Tatsujin</em> im Duell und die absurd ernsten Fahr-Simulatoren. In Amerikamura steht mit Silver Ball Planet zudem eine große Flipper-Halle. Keine Kultur, keine Einordnung — Münzen rein.</td></tr>
 <tr><td class="b"><span class="pin more">◯</span></td><td><b>Igelcafé</b> <small>Harry Wood, Namba</small> — Euer Tier-Programmpunkt (30 Min. ~980 ¥ / ~5 €). Die Tiere werden hier nur gehalten, nicht angefasst-bis-zum-Stress — kurz, freundlich, fertig.</td></tr>
 </table>
@@ -1030,63 +994,12 @@ nicht in unsere Tage.</em></li>
       </div>
     </div>
 
-    <h3 class="sect">Orte auf der Karte <small>Nummern = Karte</small></h3>
-<div class="mapbox" data-map="kyoto"></div>
-
-<div class="cat kultur">Kultur & Sehenswürdigkeiten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin kultur">39</span></td><td><b>Daitoku-ji</b> — Zen-Untertempel ohne Gedränge <a href="https://www.google.com/maps/search/?api=1&query=35.043891,135.74603&query_place_id=ChIJj-9V6PgHAWARobrWGXEGn58">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">40</span></td><td><b>Fushimi Inari Taisha</b> — 24 h offen: nach 20 Uhr im Laternenlicht fast leer <a href="https://www.google.com/maps/search/?api=1&query=34.9676945,135.7791876&query_place_id=ChIJIW0uPRUPAWAR6eI6dRzKGns">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">41</span></td><td><b>Gion Corner</b> — Kompakte Kultur-Show: sieben traditionelle Künste in ~50 Min.; vorab buchen <a href="https://www.google.com/maps/search/?api=1&query=35.001393,135.7755068&query_place_id=ChIJfwHp8MAIAWARSg0O3EYOO7o">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">42</span></td><td><b>Kinkaku-ji</b> — Goldener Pavillon; früh oder kurz vor Schließung <a href="https://www.google.com/maps/search/?api=1&query=35.03937,135.7292431&query_place_id=ChIJvUbrwCCoAWARX2QiHCsn5A4">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">43</span></td><td><b>Kiyomizu-dera</b> — Die 13 Meter hohe Holzbühne hängt auf Dutzenden Zelkova-Pfeilern am Hang — <strong>ohne einen einzigen Nagel</strong>, nur verzapft und verkeilt. 🧵 Faden Holz → Kap. 5 Die Redewendung „von der Bühne des Kiyomizu springen" (= sich ein Herz fassen) war einst wörtlich: Über 230 dokumentierte Sprünge in der Edo-Zeit, rund 85 % überlebt, 1872 verboten. Sehr voll — ganz früh oder zur Abendöffnung. Website <a href="https://www.google.com/maps/search/?api=1&query=34.9946662,135.784661&query_place_id=ChIJB_vchdMIAWARujTEUIZlr2I">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">44</span></td><td><b>Otagi Nenbutsu-ji</b> — Ruhigere Alternative: 1.200 moosbewachsene Steinfiguren <a href="https://www.google.com/maps/search/?api=1&query=35.0311428,135.6615546&query_place_id=ChIJi3CsmTmqAWAR0pV6QRGvt1c">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">45</span></td><td><b>Ryoan-ji</b> — Der berühmteste Zen-Steingarten; liegt 10 Gehminuten vom Kinkaku-ji <a href="https://www.google.com/maps/search/?api=1&query=35.0344943,135.7182634&query_place_id=ChIJp7ocMCqoAWARQoXXRj4Xq-E">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">46</span></td><td><b>Tenryu-ji</b> — Arashiyama: Garten mit Sogen-Teich, früh um 9 Uhr fast leer <a href="https://www.google.com/maps/search/?api=1&query=35.0158379,135.6737654&query_place_id=ChIJk54PuAGqAWARwEgz_9o-nM0">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">47</span></td><td><b>To-ji</b> — Japans höchste Holzpagode; hier findet am 21. der große Trödelmarkt statt <a href="https://www.google.com/maps/search/?api=1&query=34.9803395,135.7476935&query_place_id=ChIJTar7hQQGAWAREHkXsNkt7tM">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat essen">Essen & Trinken</div>
-<table class="pins">
-<tr><td class="b"><span class="pin essen">48</span></td><td><b>Miyagawacho</b> — Das zweite Geisha-Viertel - gleiche Fassaden, kaum Fotografen <a href="https://www.google.com/maps/search/?api=1&query=34.9995909,135.7714592&query_place_id=ChIJiQNFqcAIAWARo7tPQYiew9A">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">49</span></td><td><b>Nishiki-Markt</b> — Nishiki („Kyotos Küche", 400 m Markthalle) nachmittags fürs Probieren; Pontochō — die schmalste Restaurantgasse der Stadt — nach Einbruch der Dunkelheit für alles Weitere. <a href="https://www.google.com/maps/search/?api=1&query=35.0050258,135.764723&query_place_id=ChIJT8uMzZwIAWARnGzsARCjnrY">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">50</span></td><td><b>Pontocho</b> — Enge Flussgasse mit Bars; abends <a href="https://www.google.com/maps/search/?api=1&query=35.0039339,135.7710439&query_place_id=ChIJP2DblBgJAWARAgLlF0vWT6o">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat shop">Einkaufen & Handwerk</div>
-<table class="pins">
-<tr><td class="b"><span class="pin shop">51</span></td><td><b>Chicago Kyoto (Teramachi)</b> — 2. Stock komplett Kimono, ~6.000 Stück ab 2.000 Yen <a href="https://www.google.com/maps/search/?api=1&query=35.0066792,135.7668036&query_place_id=ChIJT0Hu5JMIAWARWaI-T0hdkm8">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">52</span></td><td><b>Modoribashi Shashinkan</b> — Antik-Kimono, 3. Stock alles 500 Yen; 13-18 Uhr, Do geschlossen <a href="https://www.google.com/maps/search/?api=1&query=35.0250657,135.7501503&query_place_id=ChIJf6GyI98HAWARDXxSptm1Sl8">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">53</span></td><td><b>Torin-in (Shojin Ryori)</b> — Keine Übernachtung, aber Shojin-Ryori-Erlebnis Di+Fr, Shojin-Lunch am Wochenende; Mitte Oktober Laternen-Lichterfest <a href="https://www.google.com/maps/search/?api=1&query=35.0229854,135.7224094&query_place_id=ChIJBXDIXJoHAWARBAdRToZKaeU">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat natur">Natur & Aktiv</div>
-<table class="pins">
-<tr><td class="b"><span class="pin natur">54</span></td><td><b>Arashiyama Bambushain</b> — Der Bambushain ist kürzer und voller als die Fotos versprechen — ehrlich gesagt. Die Rettung des Halbtags: der Zen-Garten des Tenryū-ji (Weltklasse, seit 1339 fast unverändert) und der Affenpark Iwatayama, wo die Menschen im Käfighaus sitzen und die Makaken frei sind. Tenryū-ji <a href="https://www.google.com/maps/search/?api=1&query=35.0168187,135.6713013&query_place_id=ChIJrYtcv-urAWAR3XzWvXv8n_s">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">55</span></td><td><b>Iwatayama-Affenpark</b> — 20 Min. Aufstieg, Makaken und der beste Blick über Kyoto <a href="https://www.google.com/maps/search/?api=1&query=35.011395,135.6766245&query_place_id=ChIJvUn7bqsAAWARsjQHQ7CTNBs">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat hotel">Übernachten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin hotel">56</span></td><td><b>Daishin-in (Tempelübernachtung)</b> — ~¥5.000 - man schläft im Tempel selbst, Tatami mit Zen-Gartenblick. Reservierung NUR telefonisch auf Japanisch: 075-461-5714 <a href="https://www.google.com/maps/search/?api=1&query=35.0229625,135.7211674&query_place_id=ChIJqxa8qpsHAWARrCiP40rHsjg">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">57</span></td><td><b>Shunko-in (Tempelübernachtung)</b> — Zen-Meditation auf Englisch; Zimmer für 2-3 Personen <a href="https://www.google.com/maps/search/?api=1&query=35.0240552,135.7195071&query_place_id=ChIJq7v2UZsHAWARXkzyx5VseK8">▸ Karte</a></td></tr>
-</table>
-
-<div class="mapbox" data-map="kyoto_ausfluege"><div class="cat trip">Ausflüge &amp; Umgebung ab Kyoto</div></div>
-
-<table class="pins">
-<tr><td class="b"><span class="pin kultur">58</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Byodo-in (Uji)</b> — Halbtagesausflug: Teezeremonie im städtischen Taihōan-Teehaus (günstig, echt, auf Gäste eingestellt) und der Byōdō-in — der Tempel auf der 10-Yen-Münze. Vergleicht Münze und Original. Taihōan <a href="https://www.google.com/maps/search/?api=1&query=34.8892908,135.8076783&query_place_id=ChIJqyva4AwRAWARpAf6j5MUhGA">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">59</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Heijo-Palast (Nara)</b> — Kaiserpalast des 8. Jh., riesig, kostenlos und fast leer <a href="https://www.google.com/maps/search/?api=1&query=34.6865079,135.7942516&query_place_id=ChIJFZVuxKM7AWARd4rzIg38E70">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">60</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Sanzen-in (Ohara)</b> — Wenn die Stadt zu voll wird: Ōhara (Moosgärten des Sanzen-in, Bergdorf-Ruhe) oder die Wanderung Kurama–Kibune (Bergtempel, Tengu-Legenden, Flussrestaurants). Jeweils ~1 Std. Anfahrt, dafür Kyoto wie vor fünfzig Jahren. <a href="https://www.google.com/maps/search/?api=1&query=35.119726,135.8344058&query_place_id=ChIJE6oLWdagAWARNC8P8LkIKlM">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">61</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Todai-ji (Nara)</b> — Der Große Buddha des Tōdai-ji (16 m Bronze, 8. Jh.) in einer der größten Holzhallen der Welt — plus 1.200 freilaufende, sich verbeugende (und rüpelhafte) Rehe. Kombiniert gut mit Fushimi Inari, liegt auf derselben Linie. <a href="https://www.google.com/maps/search/?api=1&query=34.6889851,135.8398158&query_place_id=ChIJ3XYIepA5AWARjzzVnT-skPg">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">62</span></td><td><span class="tag essen">Essen & Trinken</span> <b>Byodo-in Omotesando (Uji)</b> — Die Teestraße: alte Uji-Teehäuser, Matcha in jeder Form <a href="https://www.google.com/maps/search/?api=1&query=34.891707,135.806012&query_place_id=ChIJy9Uz30ERAWARP3Sz9DkSW2w">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">63</span></td><td><span class="tag essen">Essen & Trinken</span> <b>Gekkeikan Okura Sake-Museum</b> — Kyotos weiches Wasser macht seit Jahrhunderten Sake — Gekkeikan &amp; Kizakura haben Museen mit Verkostung (~600 ¥). Guter Regen-Nachmittag; Vertiefung folgt in Takayama. 🧵 Sake → Kap. 5 <a href="https://www.google.com/maps/search/?api=1&query=34.929136,135.76161&query_place_id=ChIJLZRyoJIPAWAR0xnG_CrMzn4">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">64</span></td><td><span class="tag essen">Essen & Trinken</span> <b>Tsuen Tea (Uji)</b> — Ältestes Teehaus der Welt, seit 1160 in 24. Generation - Matcha-Soba am Fluss <a href="https://www.google.com/maps/search/?api=1&query=34.89329,135.8072759&query_place_id=ChIJW7lOHQsRAWARQdYdv9VcLR0">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">65</span></td><td><span class="tag shop">Einkaufen & Handwerk</span> <b>Taihoan (Uji)</b> — Städtisches Teehaus: Teezeremonie, authentisch und günstig <a href="https://www.google.com/maps/search/?api=1&query=34.8890163,135.808708&query_place_id=ChIJpwPkLQ0RAWAR_oYLmZjsoH4">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">66</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Nara-Park (Rehe)</b> — In der Daemmerung bleiben, wenn die Tagesbusse abfahren <a href="https://www.google.com/maps/search/?api=1&query=34.685047,135.843012&query_place_id=ChIJYWCMvZY5AWARVnREV_OsbPk">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">67</span></td><td><span class="tag hotel">Übernachten</span> <b>Jorenge-in (Ohara, Tempelherberge)</b> — Bergtempel mit Morgenandacht, Zazen, Sutra-Abschreiben und Bergküche, ~¥8.000 <a href="https://www.google.com/maps/search/?api=1&query=35.1187701,135.8367616&query_place_id=ChIJi0JvMQChAWARtgAjs2zqyuc">▸ Karte</a></td></tr>
-</table>
-<div class="cat more">Weitere Optionen — ohne Nummer</div><table class="pins">
+    <a class="app-orte" href="./orte/?station=kyoto">
+<span class="ao-count">29</span>
+<span class="ao-text"><b>Orte in Kyoto</b><small>19 im Zentrum · 10 als Ausflüge — such- und filterbar im Planer, auf der Karte und für die Tagesplanung</small></span>
+<span class="ao-go">Ansehen →</span>
+</a>
+<div class="cat more">Weitere Optionen — ohne Nummer, nur hier im Buch</div><table class="pins">
 <tr><td class="b"><span class="pin more">◯</span></td><td><b>Gion, ehrlich</b> <small>Geiko-Viertel</small> — Geiko/Maiko sind hochtrainierte Künstlerinnen (Tanz, Musik, Konversation) — keine Kostümfiguren; die „Geishas", die ihr tagsüber fotografiert seht, sind fast immer Touristinnen im Leih-Kimono. Echte Maiko huschen abends zwischen Terminen. Private Gassen haben Fotoverbote (Bußgeld) — Hauptstraßen reichen völlig. Wer die Künste sehen will: Gion Corner zeigt sie im Schnelldurchlauf.</td></tr>
 <tr><td class="b"><span class="pin more">◯</span></td><td><b>Nijō-jō</b> <small>wo das Shogunat endete</small> — Palast der Tokugawa mit den „Nachtigallenböden": Die Dielen zwitschern beim Gehen. Die Museums-Erklärung sagt Alarmanlage, Restauratoren sagen eher Alterung der Nägel — schön quietscht es so oder so, und ihr dürft beide Versionen glauben. Hier gab der letzte Shogun 1867 die Macht an den Kaiser zurück. 🧵 Samurai → Kap. 6</td></tr>
 </table>
@@ -1266,40 +1179,12 @@ Karasuma-dori, geduldige Beratung).</li>
       <p>Überall in Higashi Chaya wird Softeis mit einem ganzen Blattgold-Blatt verkauft (~1.000 ¥ / ~5,40 €). Die Wahrheit: <strong>Gold schmeckt nach exakt nichts.</strong> Es ist reines Spektakel — aber eben eines, das nur in der Blattgold-Hauptstadt der Welt Sinn ergibt, und das Foto vom Wind-Kampf mit einem flatternden Goldblatt gehört zur Reise. <span class="fun">Einfach Spaß</span></p>
     </div>
 
-    <h3 class="sect">Orte auf der Karte <small>Nummern = Karte</small></h3>
-<div class="mapbox" data-map="kanazawa"></div>
-
-<div class="cat kultur">Kultur & Sehenswürdigkeiten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin kultur">68</span></td><td><b>Ashigaru-Museum</b> — Häuser einfacher Fußsoldaten - informativer als das Nomura-Haus und gratis <a href="https://www.google.com/maps/search/?api=1&query=36.5659126,136.6498538&query_place_id=ChIJR2o_Mnwz-F8RTJdAGan3YLY">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">69</span></td><td><b>D.T.-Suzuki-Museum</b> — Gewidmet dem Philosophen, der Zen in den Westen brachte — Sohn der Stadt. Das Museum ist selbst die Ausstellung: ein Wasserbecken, Beton, Stille. Der perfekte Ort, um den Ryōan-ji-Vormittag nachklingen zu lassen. 🧵 Zen <a href="https://www.google.com/maps/search/?api=1&query=36.5576632,136.6609126&query_place_id=ChIJBRk3CXg0-F8RYaKpk9GoiiE">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">70</span></td><td><b>Higashi Chaya</b> — Geisha-Distrikt von 1820, komplett erhalten. Die Häuser folgen bis heute teils der Regel <em>ichigen-san okotowari</em> — „keine Erstkunden ohne Empfehlung": Man kommt als Gast eines Gastes. Zwei Häuser (Shima, Kaikarō) kann man tagsüber besichtigen; abends gehört die Gasse den Laternen. <a href="https://www.google.com/maps/search/?api=1&query=36.5725825,136.6665601&query_place_id=ChIJsfC6oXQz-F8RdA1qXiF6jLs">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">71</span></td><td><b>Kanazawa-jo</b> — Burgpark; Gyokusen&#x27;inmaru-Garten abends illuminiert, Eintritt frei <a href="https://www.google.com/maps/search/?api=1&query=36.5659458,136.6588451&query_place_id=ChIJlUfxPYIz-F8RSh7ml54YJ6g">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">72</span></td><td><b>Myoryu-ji (Ninja-Tempel)</b> — Hat mit Ninja nichts zu tun — der Spitzname kommt von den Tricks: versteckte Treppen, Fallböden, getarnte Räume, ein Brunnen mit Fluchtlegende. In Wahrheit ein als Tempel getarnter Verteidigungsposten der Maeda (die offiziell ja ganz harmlos waren …). <strong>Nur mit telefonischer Reservierung.</strong> <a href="https://www.google.com/maps/search/?api=1&query=36.5553843,136.6489974&query_place_id=ChIJuYLrXHs0-F8RGY1Ld3voBB4">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">73</span></td><td><b>Nagamachi (Samurai-Viertel)</b> — Erdwall-Gassen, in denen mittlere Samurai wohnten; das restaurierte Nomura-Haus zeigt, wie kultiviert Krieger im Frieden lebten — der Hausgarten ist winzig und weltklasse. 🧵 Samurai → Kap. 6 <a href="https://www.google.com/maps/search/?api=1&query=36.5637517,136.6510146&query_place_id=ChIJhycOJtYz-F8RO54LaTG6_p0">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">74</span></td><td><b>Nomura-Samurai-Haus</b> — Restaurierte Samurai-Residenz mit berühmtem Miniaturgarten <a href="https://www.google.com/maps/search/?api=1&query=36.5642058,136.6500324&query_place_id=ChIJF_AqPH4z-F8Rmtm1IKiShVQ">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat essen">Essen & Trinken</div>
-<table class="pins">
-<tr><td class="b"><span class="pin essen">75</span></td><td><b>Omicho-Markt</b> — Seit ~300 Jahren Fischmarkt der Stadt. Mittags Kaisendon direkt zwischen den Ständen — siehe Essens-Fokus. <a href="https://www.google.com/maps/search/?api=1&query=36.5717335,136.6558651&query_place_id=ChIJ0xPT93Az-F8RpTSlbHwo9L8">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat shop">Einkaufen & Handwerk</div>
-<table class="pins">
-<tr><td class="b"><span class="pin shop">76</span></td><td><b>Kanazawa Kominge Kaikan</b> — Antikhaus: Tansu-Kommoden, Holzmöbel; nur Bargeld, Di geschlossen <a href="https://www.google.com/maps/search/?api=1&query=36.5553728,136.635772&query_place_id=ChIJ-betFIo0-F8Rc5uytq6sm7Q">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat natur">Natur & Aktiv</div>
-<table class="pins">
-<tr><td class="b"><span class="pin natur">77</span></td><td><b>Kenroku-en</b> — Einer der drei schönsten Gärten Japans <a href="https://www.google.com/maps/search/?api=1&query=36.5621278,136.6626515&query_place_id=ChIJBVmy-YMz-F8R5PID8D17Cpc">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat hotel">Übernachten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin hotel">78</span></td><td><b>Ryokan Sumiyoshiya</b> — 300 Jahre alt, 1 Min. vom Omicho-Markt, englischsprachig <a href="https://www.google.com/maps/search/?api=1&query=36.5705046,136.6580886&query_place_id=ChIJg3h543Az-F8R68PfUp5dC-c">▸ Karte</a></td></tr>
-</table>
-<div class="cat more">Weitere Optionen — ohne Nummer</div><table class="pins">
+    <a class="app-orte" href="./orte/?station=kanazawa">
+<span class="ao-count">11</span>
+<span class="ao-text"><b>Orte in Kanazawa</b><small>11 im Zentrum — such- und filterbar im Planer, auf der Karte und für die Tagesplanung</small></span>
+<span class="ao-go">Ansehen →</span>
+</a>
+<div class="cat more">Weitere Optionen — ohne Nummer, nur hier im Buch</div><table class="pins">
 <tr><td class="b"><span class="pin more">◯</span></td><td><b>21st Century Museum</b> <small>Kunst zum Anfassen</small> — Kreisrundes Gegenwartskunst-Museum; Publikumsliebling ist Leandro Erlichs „Swimming Pool", in dem ihr scheinbar unter Wasser steht. Leichtfüßig, sehr fotogen. Einfach Spaß</td></tr>
 </table>
 <h3 class="sect">Der Guide <small>Klassiker, ruhigere Alternativen, Tipps</small></h3>
@@ -1440,43 +1325,12 @@ und die Vintage-Läden rund um <strong>Katamachi</strong>.</p>
       </div>
     </div>
 
-    <h3 class="sect">Orte auf der Karte <small>Nummern = Karte</small></h3>
-<div class="mapbox" data-map="takayama"></div>
-
-<div class="cat kultur">Kultur & Sehenswürdigkeiten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin kultur">79</span></td><td><b>Sanmachi-Suji</b> — Altstadtgasse; vor 9:30 oder nach 17 Uhr laufen <a href="https://www.google.com/maps/search/?api=1&query=36.1413161,137.2596227&query_place_id=ChIJczG1tNu6AmARjrgU-Yh3zH8">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">80</span></td><td><b>Takayama Jinya</b> — Siehe Kasten oben — einziges erhaltenes Shogunats-Amt Japans. ~45–60 Min., direkt an der Altstadt. <a href="https://www.google.com/maps/search/?api=1&query=36.1396312,137.2576045&query_place_id=ChIJj29EXtm6AmAR4ZH1chH39Zg">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat essen">Essen & Trinken</div>
-<table class="pins">
-<tr><td class="b"><span class="pin essen">81</span></td><td><b>Miyagawa-Morgenmarkt</b> — Bäuerinnen am Flussufer, eingelegtes Gemüse, Äpfel, Mitarashi-Dango als Frühstück. Klein, echt, um 8 am besten. <a href="https://www.google.com/maps/search/?api=1&query=36.144704,137.2579466&query_place_id=ChIJE-ywz9a6AmAR1uD5rAwvJkw">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat natur">Natur & Aktiv</div>
-<table class="pins">
-<tr><td class="b"><span class="pin natur">82</span></td><td><b>Higashiyama-Tempelweg</b> — Ruhigere Alternative: ~3,5 km stille Runde durchs Tempelviertel <a href="https://www.google.com/maps/search/?api=1&query=36.1449631,137.2632852&query_place_id=ChIJ99T-4q67AmAR-m13onTdQ_w">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat hotel">Übernachten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin hotel">83</span></td><td><b>Antique Inn Sumiyoshi</b> — 4,8 Sterne - altes Haus am Fluss, Wirtsleute kochen, kleines Onsen; das perfekte Alt-Japan-Erlebnis <a href="https://www.google.com/maps/search/?api=1&query=36.1460233,137.2570301&query_place_id=ChIJM63nvda6AmAR4jKJ-VWsqYo">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">84</span></td><td><b>Honjin Hiranoya Kofukan</b> — Sehr ausländerfreundlich, Kaiseki mit Hida-Rind, Flussblick, Gepäckaufbewahrung <a href="https://www.google.com/maps/search/?api=1&query=36.1402794,137.2587828&query_place_id=ChIJlY4zxdu6AmARNHQuwlXrUFs">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">85</span></td><td><b>Hotel Takayama Ouan</b> — Drei private Onsen-Bäder, tattoo-freundlich <a href="https://www.google.com/maps/search/?api=1&query=36.1386977,137.2519786&query_place_id=ChIJcc04vCe7AmART66G1eelXXA">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">86</span></td><td><b>Iroriyado Hidaya</b> — 130 Jahre altes Wohnhaus mit Holzkohle-Feuerstelle im Zimmer; Onsen zeitweise tattoo-freundlich, abends privat mietbar <a href="https://www.google.com/maps/search/?api=1&query=36.130221,137.248081&query_place_id=ChIJlS16GyK7AmAR8scmyyBJpUo">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">87</span></td><td><b>Minshuku Sosuke</b> — Fast 200 Jahre altes Haus, Irori, Gemeinschaftsbad, sehr sparsame Zimmer - das ehrlichste Rustikal-Erlebnis <a href="https://www.google.com/maps/search/?api=1&query=36.138374,137.247893&query_place_id=ChIJZzIL-CW7AmAR8cK1-qqs8Aw">▸ Karte</a></td></tr>
-</table>
-
-<div class="mapbox" data-map="takayama_ausfluege"><div class="cat trip">Ausflüge &amp; Umgebung ab Takayama</div></div>
-
-<table class="pins">
-<tr><td class="b"><span class="pin natur">88</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Ainokura (Gokayama)</b> — Die abgelegeneren Gasshō-Dörfer (Ainokura, Suganuma) — falls euch Ogimachi zu voll war und ein Extra-Ausflug reizt. <a href="https://www.google.com/maps/search/?api=1&query=36.4260061,136.9354778&query_place_id=ChIJseVkTg4W-F8RegJ6zJErGlU">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">89</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Hida Furukawa</b> — 15 Bahnminuten: weiße Speicherhäuser, Karpfen in den Kanälen, kaum Besucher — und Pilgerort für „Your Name"-Fans (der Bahnhof ist im Film). Halber Nachmittag. <a href="https://www.google.com/maps/search/?api=1&query=36.2353207,137.1867874&query_place_id=ChIJh6IDmeWgAmARisGVD1qfPKc">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">90</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Shirakawa-go (Ogimachi)</b> — UNESCO-Gassho-Dörfer; Halbtagesausflug <a href="https://www.google.com/maps/search/?api=1&query=36.2550982,136.9022991&query_place_id=ChIJZS8K5LBx-F8R3iMSHZ_7Tis">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">91</span></td><td><span class="tag hotel">Übernachten</span> <b>Wanosato (Minka-Ryokan)</b> — 160+ Jahre altes Bauernhaus mit Gassho-Strohdach, Irori-Feuerstelle, 8 Zimmer, am Fluss; Abholung ab Bahnhof <a href="https://www.google.com/maps/search/?api=1&query=36.0731892,137.2104369&query_place_id=ChIJ8YOG5gu8AmARwRZiLryzYRs">▸ Karte</a></td></tr>
-</table>
-<div class="cat more">Weitere Optionen — ohne Nummer</div><table class="pins">
+    <a class="app-orte" href="./orte/?station=takayama">
+<span class="ao-count">13</span>
+<span class="ao-text"><b>Orte in Takayama</b><small>9 im Zentrum · 4 als Ausflüge — such- und filterbar im Planer, auf der Karte und für die Tagesplanung</small></span>
+<span class="ao-go">Ansehen →</span>
+</a>
+<div class="cat more">Weitere Optionen — ohne Nummer, nur hier im Buch</div><table class="pins">
 <tr><td class="b"><span class="pin more">◯</span></td><td><b>Shinhotaka-Seilbahn</b> <small>Alpen-Panorama</small> — Doppelstöckige Gondel auf 2.156 m — Anfang Oktober oben oft schon erste Herbstfärbung. Wetterabhängig; nur bei klarer Prognose einplanen.</td></tr>
 </table>
 <h3 class="sect">Der Guide <small>Klassiker, ruhigere Alternativen, Tipps</small></h3>
@@ -1623,40 +1477,11 @@ alte Textilien; echte Second-Hand-Ausbeute gibt es hier kaum.</p>
       <p>Euer Ryokan ist kein Hotel mit Futon, sondern ein Ablauf: Schuhe im Genkan, Tee auf Tatami, dann <strong>Kaiseki</strong> — das mehrgängige Abendessen, dessen Dramaturgie die Saison erzählt (kleine Vorspeisen, etwas Rohes, etwas Gegrilltes, etwas Gedämpftes, Reis zum Schluss). Danach wird das Zimmer umgebaut: Der Tisch verschwindet, die Futons erscheinen. Der <strong>Yukata</strong> wird <em>links über rechts</em> gewickelt — andersherum kleidet man Verstorbene. Im Yukata durchs Dorf zu schlendern ist hier ausdrücklich erwünscht; Dorogawa abends, wenn die Laternen der Holzveranden angehen, ist genau dafür gebaut.</p>
     </div>
 
-<h3 class="sect">Orte auf der Karte <small>Nummern = Karte</small></h3>
-<div class="mapbox" data-map="hakone"></div>
-
-<div class="cat kultur">Kultur & Sehenswürdigkeiten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin kultur">92</span></td><td><b>Hakone-Freilichtmuseum</b> — Skulpturen im Bergpanorama <a href="https://www.google.com/maps/search/?api=1&query=35.2451601,139.0507271&query_place_id=ChIJMfOWowSiGWARX2wK6ac5jlg">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">93</span></td><td><b>Hakone-Schrein</b> — Rotes Torii im Wasser; früh morgens hin <a href="https://www.google.com/maps/search/?api=1&query=35.2048263,139.0253782&query_place_id=ChIJtcIqzYuYGWARmuDHR2ij5Ko">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">94</span></td><td><b>Hakone-Sekisho</b> — Rekonstruierte Kontrollstation der Tokaido-Straße <a href="https://www.google.com/maps/search/?api=1&query=35.1923709,139.0262346&query_place_id=ChIJ8xdp8WSYGWARRaUVLnalZyM">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat essen">Essen & Trinken</div>
-<table class="pins">
-<tr><td class="b"><span class="pin essen">95</span></td><td><b>Amazake-chaya</b> — 400 Jahre alte Teestube an der alten Tokaido-Zedernallee <a href="https://www.google.com/maps/search/?api=1&query=35.2022356,139.0487714&query_place_id=ChIJ7XvjLIeiGWARC9MOeCs7c8k">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">96</span></td><td><b>Amazake-chaya (alte Tokaido-Straße)</b> — 400 Jahre alte Teestube an der Zedernallee - der historische Reiseweg nach Edo <a href="https://www.google.com/maps/search/?api=1&query=35.2022356,139.0487714&query_place_id=ChIJ7XvjLIeiGWARC9MOeCs7c8k">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat natur">Natur & Aktiv</div>
-<table class="pins">
-<tr><td class="b"><span class="pin natur">97</span></td><td><b>Ashi-See</b> — Piratenschiff-Überfahrt; morgens die beste Fuji-Chance <a href="https://www.google.com/maps/search/?api=1&query=35.2095674,139.0034626&query_place_id=ChIJoT-oK-mYGWARy-ItUPA6ekk">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">98</span></td><td><b>Ashinoko Club (Kajak)</b> — Geführte Kajaktouren 60-90 Min., u.a. zum schwimmenden Torii des Hakone-Schreins <a href="https://www.google.com/maps/search/?api=1&query=35.1930556,139.0261111">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">99</span></td><td><b>Owakudani</b> — Dampfende Schwefelschlucht, schwarze Eier <a href="https://www.google.com/maps/search/?api=1&query=35.2436011,139.0197304&query_place_id=ChIJfw3hyDefGWARilyx_0ZSqKE">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">100</span></td><td><b>Tenzan Onsen (Tagesbad)</b> — 4,4 Sterne aus ~6.000 Bewertungen - tattoo-freundlich, 7 Freiluftbäder, Dampfbad mit Teeblättern; ~¥1.400, NUR BARGELD <a href="https://www.google.com/maps/search/?api=1&query=35.2252429,139.0886999&query_place_id=ChIJp9Vk7AajGWARUYrjpXc1SYg">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat hotel">Übernachten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin hotel">101</span></td><td><b>Bansuiro Fukuzumi (Ryokan)</b> — 1625 gegründet, erstes Ryokan als Wichtiges Kulturgut Japans; eigene Quelle, Zimmer mit Privatbad, Englisch, 5 Min. vom Bahnhof <a href="https://www.google.com/maps/search/?api=1&query=35.2313317,139.0997163&query_place_id=ChIJedIy8QqjGWARn8QO_R6ggKk">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">102</span></td><td><b>Fuji-Hakone Guest House</b> — ALLE Bäder privat und ausdrücklich tattoo-freundlich; Owakudani-Quellwasser, englischsprachiger Gastgeber, günstig <a href="https://www.google.com/maps/search/?api=1&query=35.2654751,139.0143522&query_place_id=ChIJY56z6Q6fGWARDBrE2h4BWME">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">103</span></td><td><b>Fukuzumiro (historisches Holz-Ryokan)</b> — 4,7 Sterne aus ~600 Bewertungen - altes Holzhaus am Fluss, 3 private + 2 öffentliche Onsen (Tattoo gelöst), Service im Zimmer <a href="https://www.google.com/maps/search/?api=1&query=35.232925,139.0946418&query_place_id=ChIJ93tkAaejGWARmleYor0hPTU">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">104</span></td><td><b>Gora Kansuirou</b> — Privatbad im Zimmer + Rotenburo, 1 Min. vom Bahnhof Gora; Bewertungen gemischt (Preis/Zustand) <a href="https://www.google.com/maps/search/?api=1&query=35.2491523,139.0493071&query_place_id=ChIJkcetZP-hGWARBihlqY6odqc">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">105</span></td><td><b>Kinnotake Tonosawa</b> — Gehobenes Ryokan über einer Schlucht; privates Rotenburo in jedem Zimmer, Tattoos kein Thema <a href="https://www.google.com/maps/search/?api=1&query=35.2337293,139.0889301&query_place_id=ChIJm26t266jGWARmzWN5sy3TKc">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">106</span></td><td><b>Tonosawa Ichinoyu Honkan (Ryokan)</b> — 1630, vierstöckiger Holzbau am Fluss; Zimmer mit privatem Rotenburo, tattoo-erfahren, gutes Preis-Leistung <a href="https://www.google.com/maps/search/?api=1&query=35.2331731,139.0934361&query_place_id=ChIJN3cOE_yeGWARz-Y_gvhVFWo">▸ Karte</a></td></tr>
-</table>
-
+<a class="app-orte" href="./orte/?station=hakone">
+<span class="ao-count">15</span>
+<span class="ao-text"><b>Orte in Hakone</b><small>15 im Zentrum — such- und filterbar im Planer, auf der Karte und für die Tagesplanung</small></span>
+<span class="ao-go">Ansehen →</span>
+</a>
 <h3 class="sect">Der Guide <small>Klassiker, ruhigere Alternativen, Tipps</small></h3>
 <h3>Klassiker — und die ruhigere Alternative</h3>
 <table class="data">
@@ -1827,92 +1652,12 @@ höher).</p></div>
     <h3>Sensō-ji — der älteste Faden der Stadt</h3>
     <p>Wenn ihr <em>ein</em> klassisches Tokio-Heiligtum wählt, dann dieses, und zwar zur Randzeit: <strong>Sensō-ji</strong> in Asakusa geht auf das Jahr 628 zurück — zwei Fischer zogen eine kleine Kannon-Statue aus dem Fluss, und um sie herum wuchs erst ein Tempel, dann eine Stadt. Der heutige Bau ist Nachkriegs-Rekonstruktion (ihr wisst ja jetzt, wie diese Stadt funktioniert) — aber der <em>Ort</em> ist seit 1.400 Jahren derselbe, die Einkaufsgasse Nakamise davor versorgt Pilger seit dem 17. Jahrhundert, und genau das ist die Pointe dieses Kapitels an einem einzigen Beispiel. Tagsüber Volksfest-Gedränge; <strong>nach 19 Uhr</strong> ist das Gelände beleuchtet, offen und fast leer — dann gehört euch der Blick durchs Donnertor bis zur Pagode. <a href="https://www.senso-ji.jp/english/" target="_blank" rel="noopener">senso-ji.jp</a></p>
 
-    <h3 class="sect">Orte auf der Karte <small>Nummern = Karte</small></h3>
-<div class="mapbox" data-map="tokio"></div>
-
-<div class="cat kultur">Kultur & Sehenswürdigkeiten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin kultur">107</span></td><td><b>Gotoku-ji</b> — Der Legende nach winkte hier eine Tempelkatze einen Fürsten aus dem Gewitter — er überlebte, stiftete, und heute stehen tausende Maneki-neko in allen Größen auf dem Gelände. Ruhig, skurril, im Wohnviertel. gotokuji.jp <a href="https://www.google.com/maps/search/?api=1&query=35.6488124,139.647481&query_place_id=ChIJVVUBmZ_zGGARrEy-Ua3psAY">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">108</span></td><td><b>Meiji-Jingu</b> — Zur Öffnung bei Sonnenaufgang: Kies knirscht, sonst Stille <a href="https://www.google.com/maps/search/?api=1&query=35.6763976,139.6993259&query_place_id=ChIJ5SZMmreMGGARcz8QSTiJyo8">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">109</span></td><td><b>Nezu-Schrein</b> — Eigener Mini-Torii-Tunnel, kaum Touristen <a href="https://www.google.com/maps/search/?api=1&query=35.7201366,139.7607695&query_place_id=ChIJ-X4hzjKMGGARDSsGeHOACgw">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">110</span></td><td><b>Schwertmuseum Ryogoku</b> — Echte historische Klingen; Mo geschlossen <a href="https://www.google.com/maps/search/?api=1&query=35.6989606,139.7936629&query_place_id=ChIJD1-Hg8qOGGARrTp2UJ6Be14">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">111</span></td><td><b>Sengaku-ji</b> — Gräber der 47 Ronin; Räucherstäbchen-Ritual möglich <a href="https://www.google.com/maps/search/?api=1&query=35.6377397,139.7364006&query_place_id=ChIJh64KT6uLGGARKx4cxgOaL54">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">112</span></td><td><b>Senso-ji</b> — Nach 21 Uhr angestrahlt und leer - einer der schönsten Momente <a href="https://www.google.com/maps/search/?api=1&query=35.7147651,139.7966553&query_place_id=ChIJ8T1GpMGOGGARDYGSgpooDWw">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">113</span></td><td><b>teamLab Borderless</b> — Die zweite teamLab-Welt (Azabudai Hills) - anders als Planets, kein Wasser <a href="https://www.google.com/maps/search/?api=1&query=35.6620689,139.7432671&query_place_id=ChIJQ5Sa1PqJGGARUSaNKKOrMVg">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">114</span></td><td><b>teamLab Planets</b> — Digitale Kunst zum Durchwaten — buchstäblich: Schuhe aus, Hosen hochkrempeln, durch knietiefes Wasser zwischen Lichtkoi. Kitsch? Vielleicht. Wirkt trotzdem. <strong>Zeitfenster früh buchen.</strong> Einfach Spaß teamlab.art <a href="https://www.google.com/maps/search/?api=1&query=35.6491207,139.7897739&query_place_id=ChIJSeco5wiJGGARItbTS8lQ5G0">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat essen">Essen & Trinken</div>
-<table class="pins">
-<tr><td class="b"><span class="pin essen">115</span></td><td><b>2D Café</b> — Comic-Optik: alles wirkt gezeichnet; in Shin-Okubo, ohne Reservierung <a href="https://www.google.com/maps/search/?api=1&query=35.7001517,139.7007061&query_place_id=ChIJcYlyqrKNGGARPVEOuT73zjI">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">116</span></td><td><b>DAWN Avatar Robot Café</b> — Roboter werden von Menschen ferngesteuert, die das Haus nicht verlassen können - man unterhält sich mit ihnen <a href="https://www.google.com/maps/search/?api=1&query=35.6893288,139.7761285&query_place_id=ChIJW37-maSJGGARAVfOsHNGMxg">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">117</span></td><td><b>First Airlines Ikebukuro</b> — Virtueller Erste-Klasse-Flug: echte Flugzeugsitze, VR-Reiseziel, Menü passend dazu <a href="https://www.google.com/maps/search/?api=1&query=35.7309604,139.7056039&query_place_id=ChIJ8390W1mNGGARdfAADiFeGjI">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">118</span></td><td><b>Fukumuro-an (Soba)</b> — Kleines Soba-Lokal um die Ecke vom Winkekatzen-Tempel; Mo geschlossen <a href="https://www.google.com/maps/search/?api=1&query=35.6505667,139.6459022&query_place_id=ChIJ9RUeEpzzGGARRDiUmN_P0uE">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">119</span></td><td><b>Nakamise-dori</b> — Ladenstraße zum Senso-ji; morgens vor Ladenöffnung menschenleer <a href="https://www.google.com/maps/search/?api=1&query=35.7118413,139.7964542&query_place_id=ChIJPd37MMGOGGARvJ2hfxoiNVE">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">120</span></td><td><b>Ninja Experience Café Asakusa</b> — Ninja-Training mit Katana, Shuriken und Blasrohr + Essen; sehr gute Bewertungen <a href="https://www.google.com/maps/search/?api=1&query=35.7170149,139.7918297&query_place_id=ChIJb9DD4ZSOGGARJBUezRn27mo">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">121</span></td><td><b>Ninja Experience Café Harajuku</b> — Gleiche Idee wie Asakusa, zentraler gelegen (B1 unter dem 539 Bldg.) <a href="https://www.google.com/maps/search/?api=1&query=35.6709562,139.7049288&query_place_id=ChIJE3pSTlSNGGARD0KogbdRISw">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">122</span></td><td><b>Nonbei Yokocho</b> — Ruhigere Alternative zum Golden Gai: Mini-Bars mit Stammgästen <a href="https://www.google.com/maps/search/?api=1&query=35.6599499,139.701533&query_place_id=ChIJpwDSAViLGGARVaJ_WUwQrt8">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">123</span></td><td><b>Omoide Yokocho</b> — Yakitori-Gassen; früh am Abend <a href="https://www.google.com/maps/search/?api=1&query=35.6927011,139.6995778&query_place_id=ChIJP9eKBdeMGGAR0zzBXJNVj5A">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">124</span></td><td><b>Pokémon Café Nihonbashi</b> — Nur mit Reservierung (Online-Losverfahren, sehr begehrt); Show am Mitteltisch <a href="https://www.google.com/maps/search/?api=1&query=35.6806385,139.7744332&query_place_id=ChIJT5kFjFeJGGARJYhFoKi3lEE">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">125</span></td><td><b>Samurai Restaurant Time</b> — Neon-Dinnershow in Kabukicho, Nachfolger des Robot Restaurant; nur bis ~18 Uhr <a href="https://www.google.com/maps/search/?api=1&query=35.6942728,139.7027663&query_place_id=ChIJ9eLvweSNGGARpLA8HtSkuC0">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">126</span></td><td><b>Yadorigi Café (Katzencafé)</b> — Geretteten Katzen, sehr sauber geführt - liegt mitten in Yanaka; Mo geschlossen <a href="https://www.google.com/maps/search/?api=1&query=35.7287015,139.7653665&query_place_id=ChIJEwo9WquNGGARM2RPO2s9cP4">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">127</span></td><td><b>Yanaka Ginza</b> — Das Viertel, das Erdbeben und Bomben übersprangen: schiefe Holzhäuser, Katzen, Handwerksläden, Friedhofs-Alleen — plus der Nezu-Schrein (~1705) mit seinem Mini-Torii-Tunnel, Fushimi im Taschenformat. 🧵 Torii-Faden <a href="https://www.google.com/maps/search/?api=1&query=35.7276934,139.7657232&query_place_id=ChIJPYwFnNGNGGARYEeXwiYQPe8">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">128</span></td><td><b>at-home cafe Akihabara (Maid Café)</b> — Das bekannteste Maid-Café; Ticket unten im Haus ziehen, Wartezeit möglich <a href="https://www.google.com/maps/search/?api=1&query=35.6996066,139.7708027&query_place_id=ChIJFw0-qR2MGGARK8G9zFZx69w">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat shop">Einkaufen & Handwerk</div>
-<table class="pins">
-<tr><td class="b"><span class="pin shop">129</span></td><td><b>Ameyoko-Markt</b> — Second-Hand-Kimono bei Shitenno; werktags morgens hin <a href="https://www.google.com/maps/search/?api=1&query=35.7090028,139.7746259&query_place_id=ChIJh7eDrwCPGGARCs9fpCkKS2U">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">130</span></td><td><b>Cat Street</b> — Die ruhigere Alternative zur Takeshita: autofreie Gasse mit Vintage-Läden <a href="https://www.google.com/maps/search/?api=1&query=35.6671358,139.7064336&query_place_id=Eh1DYXQgU3QsIFNoaWJ1eWEsIFRva3lvLCBKYXBhbiIuKiwKFAoSCde5GQijjBhgEdADRQTN6CtGEhQKEgnlXVPkoowYYBGVMuIGuMgZSA">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">131</span></td><td><b>GiGO Akihabara Building 3</b> — Mehrstöckige Spielhalle; pro Etage ein Genre, Rhythmusspiele oben <a href="https://www.google.com/maps/search/?api=1&query=35.6992456,139.7709552&query_place_id=ChIJR-PMBx2MGGARPFrgtULaJB0">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">132</span></td><td><b>Hanazono-Schrein</b> — Trödelmarkt an den meisten Sonntagen 6:30-15 Uhr - Sonntag 11.10.! <a href="https://www.google.com/maps/search/?api=1&query=35.6935311,139.7053279&query_place_id=ChIJK9584NuMGGARVKfZjpYoQDs">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">133</span></td><td><b>Harajuku Kawaii Zoo Land</b> — Waschbären und Igel an einem Ort <a href="https://www.google.com/maps/search/?api=1&query=35.6711522,139.7051552&query_place_id=ChIJqbFe3WSNGGARhhw-d2d4Kww">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">134</span></td><td><b>Jimbocho (Buchviertel)</b> — Größtes Antiquariatsviertel der Welt; Ukiyo-e und alte Karten <a href="https://www.google.com/maps/search/?api=1&query=35.6958463,139.7572397&query_place_id=ChIJlfkRIs6NGGARkNOcR_rqLuI">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">135</span></td><td><b>Kappabashi</b> — Küchengerät, Messer, Schleifsteine <a href="https://www.google.com/maps/search/?api=1&query=35.7105797,139.7879645&query_place_id=ChIJXYV-6JWOGGAR85vIZbM1RCE">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">136</span></td><td><b>Nakano Broadway</b> — Mandarake: Anime-Cels, Figuren, Vintage-Uhren; Kameras nebenan <a href="https://www.google.com/maps/search/?api=1&query=35.7092475,139.6656524&query_place_id=ChIJg-7dspDyGGARvvDv4E5-tuE">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">137</span></td><td><b>STREET KART Shibuya</b> — Als Kolonne verkleideter Gokarts durch Shibuya — objektiv albern, subjektiv unvergesslich. Braucht die JAF-Übersetzung des Führerscheins — vorab online beantragen. Einfach Spaß streetkart.com <a href="https://www.google.com/maps/search/?api=1&query=35.6578204,139.6942086&query_place_id=ChIJAegY-QaNGGAR0t2U3IVjyyE">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">138</span></td><td><b>TAITO Station Akihabara</b> — 5 Etagen Arcade; 3. Stock für Prügel- und Shoot-em-up-Klassiker <a href="https://www.google.com/maps/search/?api=1&query=35.700244,139.771697&query_place_id=ChIJwQY4mB2MGGARgn-IBKS98Q8">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin shop">139</span></td><td><b>Takeshita-Straße</b> — Harajukus schrille Hauptgasse - liegt direkt beim Waschbär-/Igel-Café <a href="https://www.google.com/maps/search/?api=1&query=35.6710335,139.7051821&query_place_id=ChIJlVne8bqMGGARtX5O6ojMvsI">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat natur">Natur & Aktiv</div>
-<table class="pins">
-<tr><td class="b"><span class="pin natur">140</span></td><td><b>MAGNET by Shibuya109 (Dachterrasse)</b> — Der klassische Blick von oben direkt auf die Kreuzung; Eintritt bzw. Getränk nötig <a href="https://www.google.com/maps/search/?api=1&query=35.6597925,139.7009365&query_place_id=ChIJu7Og_VeLGGARpxf60AU-EGw">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">141</span></td><td><b>Rathaus Shinjuku - Aussichtsplattform</b> — 45. Stock, KOSTENLOS, bei klarer Sicht bis zum Fuji; Mo geschlossen <a href="https://www.google.com/maps/search/?api=1&query=35.689733,139.6916563&query_place_id=ChIJnctryNSMGGARLv4MknPFseU">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">142</span></td><td><b>Shibuya Crossing</b> — Die Kreuzung selbst; am besten von oben betrachten (siehe nächste Einträge) <a href="https://www.google.com/maps/search/?api=1&query=35.659482,139.7005596&query_place_id=ChIJK9EM68qLGGARacmu4KJj5SA">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">143</span></td><td><b>Shibuya Hikarie Sky Lobby</b> — 11. Stock, KOSTENLOS, Blick auf die Kreuzung - die Gratis-Alternative zu Shibuya Sky <a href="https://www.google.com/maps/search/?api=1&query=35.6589891,139.7033923&query_place_id=ChIJg2SAmtiLGGARj3yqq4Upxkg">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">144</span></td><td><b>Shibuya Sky</b> — Bis zu 3.000 Menschen pro Grünphase überqueren die Kreuzung unter euch — vom offenen Dach auf 229 m das beste Stadt-Panorama (Zeitfenster vorab buchen, Sonnenuntergang zuerst weg). Unten wartet Hachikō: Der Akita wartete hier neun Jahre lang täglich auf sein verstorbenes Herrchen; die Statue wurde 1934 noch zu seinen Lebzeiten aufgestellt. Tickets <a href="https://www.google.com/maps/search/?api=1&query=35.6586719,139.7019848&query_place_id=ChIJ4Rr2JWiLGGARcyRSHuZ-9G8">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">145</span></td><td><b>Shinjuku Gyoen</b> — Riesiger Garten mitten in der Stadt; Mo geschlossen, ~500 Yen <a href="https://www.google.com/maps/search/?api=1&query=35.6851763,139.7100517&query_place_id=ChIJPyOTG8KMGGARh_IXobWxHmo">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">146</span></td><td><b>Tokyo Skytree</b> — Höchster Turm der Welt; teuer und voll - das Rathaus ist die Spar-Alternative <a href="https://www.google.com/maps/search/?api=1&query=35.7100627,139.8107004&query_place_id=ChIJ35ov0dCOGGARKvdDH7NPHX0">▸ Karte</a></td></tr>
-</table>
-
-<div class="cat hotel">Übernachten</div>
-<table class="pins">
-<tr><td class="b"><span class="pin hotel">147</span></td><td><b>Shin-Ōkubo (Airbnb, gebucht)</b> — JR-Yamanote-Linie, K-Town; 10-15 Min. zu Golden Gai/Omoide Yokocho <a href="https://www.google.com/maps/search/?api=1&query=35.7012459,139.7002258&query_place_id=ChIJKUnkNy-NGGARRdVS60w64HA">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">148</span></td><td><b>Ryokan Katsutaro</b> — Winziges Familien-Ryokan nahe Ueno; schlicht, ruhig, traditionell, Wirtsfamilie wohnt im Haus <a href="https://www.google.com/maps/search/?api=1&query=35.717876,139.7694412&query_place_id=ChIJKanmECmMGGARXiz7aIqLSNI">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">149</span></td><td><b>Ryokan Sawanoya (Yanaka)</b> — 4,8 Sterne - seit 70+ Jahren familiengeführt, Holzfassade, Tatami/Futon, 2 private Bäder am Garten; mitten in Yanaka <a href="https://www.google.com/maps/search/?api=1&query=35.720999,139.7648659&query_place_id=ChIJgareHi2MGGARDtCIy-GJdcg">▸ Karte</a></td></tr>
-</table>
-
-<div class="mapbox" data-map="tokio_ausfluege"><div class="cat trip">Ausflüge &amp; Umgebung ab Tokio</div></div>
-
-<table class="pins">
-<tr><td class="b"><span class="pin kultur">150</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Cup Noodles Museum (Yokohama)</b> — Eigene Cup-Noodle mischen und bemalen; Di geschlossen, vorab buchen <a href="https://www.google.com/maps/search/?api=1&query=35.4554755,139.6388669&query_place_id=ChIJ3ZNhe1dcGGARvjq5QHdmaHM">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">151</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Ghibli Museum</b> — Ticket am 10.09. um 10 Uhr JST buchen; Di geschlossen <a href="https://www.google.com/maps/search/?api=1&query=35.696238,139.5704317&query_place_id=ChIJLYwD5TTuGGARBZKEP5BV4U0">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">152</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Kamakura: Hase-dera</b> — Hanggarten mit Meerblick, 9-m-Kannon und Benzaiten-Höhle; früh hin <a href="https://www.google.com/maps/search/?api=1&query=35.3124645,139.5330634&query_place_id=ChIJ1SdxB_RFGGAR0a33ulBh61c">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">153</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Kamakura: Tsurugaoka Hachimangu</b> — Der zentrale Schrein der Kamakura-Zeit, am Ende der Hauptallee <a href="https://www.google.com/maps/search/?api=1&query=35.3259856,139.5563462&query_place_id=ChIJiaqQeLhFGGARtTZQEBCtZ6g">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">154</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Kotoku-in (Kamakura)</b> — Tagesausflug: Großer Buddha <a href="https://www.google.com/maps/search/?api=1&query=35.3168145,139.5357442&query_place_id=ChIJBbxJ3_JFGGARTO9rLbCTwx4">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">155</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Nikko Tosho-gu</b> — Tagesausflug: Mausoleum von Tokugawa Ieyasu <a href="https://www.google.com/maps/search/?api=1&query=36.7580878,139.5987466&query_place_id=ChIJNSAhU8WmH2ARlA7wenFbUKs">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">156</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Nikko: Futarasan-Schrein</b> — Älter und viel ruhiger als der Toshogu nebenan <a href="https://www.google.com/maps/search/?api=1&query=36.7584491,139.5964386&query_place_id=ChIJF0MR5MSmH2ARto0YlyRPpLU">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">157</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Nikko: Shinkyo-Brücke</b> — Die rote Brücke am Eingang zum Schreinbezirk; von außen gratis <a href="https://www.google.com/maps/search/?api=1&query=36.75337,139.6040034&query_place_id=ChIJI0JCh9amH2AR5y9YEeyfKjk">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">158</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Takao 599 Museum</b> — Kostenlos, direkt an der Station - Natur des Bergs vor dem Aufstieg <a href="https://www.google.com/maps/search/?api=1&query=35.6303991,139.2687022&query_place_id=ChIJ4bdZTFAZGWARVP34wSUUjtA">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin kultur">159</span></td><td><span class="tag kultur">Kultur & Sehenswürdigkeiten</span> <b>Yokohama: Kanteibyo-Tempel</b> — Taoistischer Tempel für Guan Yu; Eintritt frei, prunkvolle Decke <a href="https://www.google.com/maps/search/?api=1&query=35.442282,139.64526&query_place_id=ChIJFW8gguRcGGARs2d1YSn4usk">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">160</span></td><td><span class="tag essen">Essen & Trinken</span> <b>Straw Hat Café (Ghibli Museum)</b> — Nur mit Museumsticket zugänglich; beliebte Gerichte sind früh ausverkauft <a href="https://www.google.com/maps/search/?api=1&query=35.6961641,139.5707816&query_place_id=ChIJLYwD5TTuGGAR-19kHfqPnUA">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin essen">161</span></td><td><span class="tag essen">Essen & Trinken</span> <b>Yokohama Chinatown: Zenrinmon-Tor</b> — Eingang zu Japans größtem Chinatown; viele Stände schließen schon 19:30 <a href="https://www.google.com/maps/search/?api=1&query=35.4430716,139.6441052&query_place_id=ChIJ3zn-vuRcGGARld9SADfxTYU">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">162</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Mt. Takao</b> — Tagesausflug: leichte Wanderung + Onsen an der Talstation <a href="https://www.google.com/maps/search/?api=1&query=35.6254126,139.2437385&query_place_id=ChIJb4ejXn8ZGWAR3y_2HoQLB8c">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin natur">163</span></td><td><span class="tag natur">Natur & Aktiv</span> <b>Nikko: Kegon-Wasserfall</b> — 97 m Fall aus dem Chuzenji-See; Anfang Oktober beginnt die Laubfärbung <a href="https://www.google.com/maps/search/?api=1&query=36.7380893,139.501941&query_place_id=ChIJwb6wwMioH2ARjVZDylifnCc">▸ Karte</a></td></tr>
-<tr><td class="b"><span class="pin hotel">164</span></td><td><span class="tag hotel">Übernachten</span> <b>Takao: Onsen Gokurakuyu</b> — Onsen direkt an der Talstation nach der Wanderung. Achtung: Tattoos problematisch <a href="https://www.google.com/maps/search/?api=1&query=35.6322309,139.2694859&query_place_id=ChIJ4bdZTFAZGWARNJV5dfRAXwQ">▸ Karte</a></td></tr>
-</table>
-<div class="cat more">Weitere Optionen — ohne Nummer</div><table class="pins">
+    <a class="app-orte" href="./orte/?station=tokio">
+<span class="ao-count">58</span>
+<span class="ao-text"><b>Orte in Tokio</b><small>43 im Zentrum · 15 als Ausflüge — such- und filterbar im Planer, auf der Karte und für die Tagesplanung</small></span>
+<span class="ao-go">Ansehen →</span>
+</a>
+<div class="cat more">Weitere Optionen — ohne Nummer, nur hier im Buch</div><table class="pins">
 <tr><td class="b"><span class="pin more">◯</span></td><td><b>Tsukiji-Außenmarkt</b> <small>Frühstück!</small> — Der Großmarkt zog 2018 nach Toyosu — die Garküchen und Händler des Außenmarkts blieben (Gewohnheiten, nicht Gebäude …). Tamagoyaki vom Spieß, Thunfisch-Schälchen, Messerläden. Vormittags.</td></tr>
 </table>
 <h3 class="sect">Der Guide <small>Klassiker, ruhigere Alternativen, Tipps</small></h3>
@@ -2173,5 +1918,5 @@ Museumsticket.</li>
 <tr><td>ごちそうさまでした</td><td>Gochisōsama deshita<span>Danke für das Essen</span></td></tr>
 </table>
 <div class="bknote"><b>Im Notfall</b>Polizei <b class="i">110</b> · Feuerwehr und Rettung <b class="i">119</b><br/>Japan Visitor Hotline, 24 h, Englisch: <b class="i">050-3816-2787</b></div>
-<table class="bkqr"><tr><td class="q"><img src="data:image/png;base64,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" alt="QR-Code zur Japan-Karte in Google Maps" width="88" height="88"/></td><td class="t"><b>Eure Karte in Google Maps</b>Scannen — alle 164 Orte mit denselben Nummern wie im Buch, nach Stationen sortiert und nach Kategorie gefärbt. In der Maps-App danach unter <i>Gespeichert &rsaquo; Karten</i>, auch offline.</td></tr></table>
+<table class="bkqr"><tr><td class="q"><img src="data:image/png;base64,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" alt="QR-Code zur Japan-Karte in Google Maps" width="88" height="88"/></td><td class="t"><b>Eure Karte in Google Maps</b>Scannen — alle 164 Orte mit denselben Nummern wie im Planer, nach Stationen sortiert und nach Kategorie gefärbt. Für Navigation und Offline-Karten unterwegs. In der Maps-App danach unter <i>Gespeichert &rsaquo; Karten</i>, auch offline.</td></tr></table>
 </div></div></body></html>

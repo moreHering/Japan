@@ -26,6 +26,10 @@ const EXPECT = {
   total: 164,
   categories: { kultur: 54, essen: 35, natur: 26, hotel: 25, shop: 24 },
   friendTips: 7,
+  /** Einträge unter "Weitere Optionen — ohne Nummer"; ohne Koordinaten, nur im Band. */
+  unnumbered: 7,
+  /** Abschnitte, in denen diese Einträge stehen — einer je Station außer Kanazawa. */
+  unnumberedSections: 5,
 };
 
 /** KML-Style-IDs → interne Kategorie-Slugs. */
@@ -314,15 +318,107 @@ for (const p of places) byStation[p.stationLabel] = (byStation[p.stationLabel] ?
 // ------------------------------------------------- Reiseband nach public/ legen
 
 /**
- * Der Reiseband wird inhaltlich nicht angefasst. Ergänzt werden nur
- *   a) Anker an den 11 Kapiteln, damit die App hineinverlinken kann, und
- *   b) ein Rückweg zur App, sonst ist man im Band gefangen.
- * Beides ist rein additiv — kein Text und kein Stil wird verändert.
+ * Die Lesefassung des Reisebands.
+ *
+ * Die Quelldatei bleibt unangetastet — aus ihr werden weiterhin alle 164
+ * Ortstexte für places.json gelesen. Verändert wird nur die veröffentlichte
+ * Fassung, und zwar in drei Richtungen:
+ *
+ *   a) Anker an den 11 Kapiteln, damit die App hineinverlinken kann
+ *   b) ein Rückweg zur App, sonst ist man im Band gefangen
+ *   c) die nummerierten Ortslisten fallen weg: sie stehen vollständig und
+ *      besser bedienbar im Planer. Der Band wird damit zur reinen Lektüre.
+ *
+ * Was ausdrücklich bleibt: die Erzählung, die Anker samt Praxiszeile, alle
+ * Kästen, die Probier-Tabellen — und die Einträge unter "Weitere Optionen —
+ * ohne Nummer". Letztere haben keine Koordinaten, stehen deshalb nicht in
+ * places.json und wären sonst ersatzlos verloren.
  */
 const CHAPTER_IDS = [
   'einladung', 'prolog', 'route', 'ankunft', 'osaka', 'kyoto',
   'kanazawa', 'takayama', 'hakone', 'tokio', 'epilog',
 ];
+
+/**
+ * Der Verweis, der an die Stelle einer Ortsliste tritt. Die Zahlen stammen aus
+ * den eben zusammengeführten Orten, sind also nie von Hand nachgepflegt.
+ */
+function listLink(slug) {
+  const all = places.filter((p) => p.station === slug);
+  if (!all.length) fail(`Kein Ort zur Station "${slug}" — Slug im Reiseband geändert?`);
+
+  const name = all[0].stationLabel.split('—')[0].trim();
+  const zentrum = all.filter((p) => p.area === 'zentrum').length;
+  const ausflug = all.length - zentrum;
+
+  const detail = [
+    `${zentrum} im Zentrum`,
+    ausflug ? `${ausflug} als Ausflüge` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return `<a class="app-orte" href="./orte/?station=${slug}">
+<span class="ao-count">${all.length}</span>
+<span class="ao-text"><b>Orte in ${name}</b><small>${detail} — such- und filterbar im Planer, auf der Karte und für die Tagesplanung</small></span>
+<span class="ao-go">Ansehen →</span>
+</a>
+`;
+}
+
+/**
+ * Die Einleitung erklärte bisher die Nummernlisten und einen QR-Code zu Google
+ * My Maps. Beides trifft nicht mehr zu, sobald die Listen im Planer stehen.
+ */
+function rewriteIntro(html) {
+  const replacements = [
+    [
+      '<p>Noch ein Wort zu den <strong>Nummern</strong>: Jeder Ort in diesem Buch trägt eine — von 1 in Osaka bis 164 in Tokio. Dieselben Nummern stehen auf eurer Karte in Google My Maps — QR-Code auf der Rückseite, einmal scannen und sie ist auf dem Handy. Ihr lest hier „Nr. 96", sucht auf der Karte „096" — fertig. Das Buch erzählt, die Karte führt.</p>',
+      '<p>Noch ein Wort zu den <strong>Nummern</strong>: Jeder Ort trägt eine — von 1 in Osaka bis 164 in Tokio. Die vollständigen Ortslisten stehen nicht mehr in diesem Buch, sondern im <a href="./orte/">Reiseplaner</a>: dort sind sie durchsuchbar, nach Kategorie filterbar, liegen auf der Karte und lassen sich auf einzelne Reisetage legen. Ihr lest hier „Nr. 96" und findet denselben Punkt dort wieder. <strong>Das Buch erzählt, der Planer führt.</strong></p>',
+    ],
+    [
+      '\n        <div><b>🔢 Orte auf der Karte</b> — nummeriert und nach Kategorie gefärbt: Kultur, Essen, Einkaufen, Natur, Übernachten.</div>',
+      '\n        <div><b>🔢 Orte im Planer</b> — alle 164, nummeriert und nach Kategorie gefärbt: Kultur, Essen, Einkaufen, Natur, Übernachten.</div>',
+    ],
+    [
+      '<span class="badge">Nummern im Text = <b>Nummern auf der Karte</b></span>',
+      '<span class="badge">Nummern im Text = <b>Nummern im Planer</b></span>',
+    ],
+    // Der QR-Code auf der Rückseite bleibt: Google Maps kann Navigation und
+    // Offline-Karten, was der Planer nicht leistet. Nur der Verweis "wie im
+    // Buch" stimmt nicht mehr, seit die Listen dort nicht mehr stehen.
+    [
+      'Scannen — alle 164 Orte mit denselben Nummern wie im Buch, nach Stationen sortiert und nach Kategorie gefärbt.',
+      'Scannen — alle 164 Orte mit denselben Nummern wie im Planer, nach Stationen sortiert und nach Kategorie gefärbt. Für Navigation und Offline-Karten unterwegs.',
+    ],
+  ];
+
+  for (const [from, to] of replacements) {
+    if (!html.includes(from)) {
+      fail(`Textstelle für die Einleitung nicht gefunden:\n      ${from.slice(0, 90)}…`);
+    }
+    html = html.replace(from, to);
+  }
+
+  // Diese Überschriften stehen jetzt direkt unter dem Planer-Verweis. Ohne
+  // Zusatz wirkt es, als hätte man dort etwas vergessen — der Hinweis sagt,
+  // warum genau diese Einträge nicht im Planer stehen.
+  const before = 'Weitere Optionen — ohne Nummer';
+  const after = 'Weitere Optionen — ohne Nummer, nur hier im Buch';
+  const count = (html.match(new RegExp(before, 'g')) ?? []).length;
+  if (count !== EXPECT.unnumberedSections) {
+    fail(`${count} Abschnitte "ohne Nummer", erwartet ${EXPECT.unnumberedSections}`);
+  }
+  html = html.replaceAll(before, after);
+
+  return html;
+}
+
+/** Erwartete Anzahl der Blockköpfe "Orte auf der Karte" — einer je Station. */
+const EXPECTED_LIST_BLOCKS = 6;
+
+/** Kategorien, deren Pins eine Nummer tragen und damit in der App stehen. */
+const NUMBERED = 'kultur|essen|shop|natur|hotel';
 
 function writeGuide() {
   let html = readFileSync(HTML, 'utf8');
@@ -341,26 +437,116 @@ function writeGuide() {
     fail(`${i} Kapitel im Reiseband statt ${CHAPTER_IDS.length} — Ankerliste anpassen`);
   }
 
-  const backLink = `<style>
+  const stats = { rows: 0, tables: 0, cats: 0, blocks: 0, kept: 0 };
+
+  // 1. Die nummerierten Ortszeilen entfernen — das ist das Duplikat zur App.
+  html = html.replace(
+    new RegExp(`<tr><td class="b"><span class="pin (?:${NUMBERED})">\\d+</span></td><td>[\\s\\S]*?</td></tr>\\s*`, 'g'),
+    () => {
+      stats.rows++;
+      return '';
+    },
+  );
+
+  stats.kept = (html.match(/<span class="pin more">/g) ?? []).length;
+
+  // 2. Tabellen, die dadurch leer geworden sind, samt ihrer Kategorie-
+  //    überschrift entfernen. Tabellen mit verbliebenen Zeilen ("Weitere
+  //    Optionen — ohne Nummer") bleiben mitsamt Überschrift stehen.
+  html = html.replace(/<div class="cat [a-z]+">[^<]*<\/div>\s*<table class="pins">\s*<\/table>\s*/g, () => {
+    stats.cats++;
+    stats.tables++;
+    return '';
+  });
+  // Leere Tabellen ohne eigene Überschrift (kommt bei den Ausflugsblöcken vor)
+  html = html.replace(/<table class="pins">\s*<\/table>\s*/g, () => {
+    stats.tables++;
+    return '';
+  });
+
+  // 3. Blockkopf und den (unsichtbaren, nirgends gestylten) Kartenplatzhalter
+  //    durch einen Verweis in den Planer ersetzen.
+  html = html.replace(
+    /<h3 class="sect">Orte auf der Karte.*?<\/h3>\s*<div class="mapbox" data-map="([^"]*)"><\/div>\s*/gs,
+    (_match, slug) => {
+      stats.blocks++;
+      return listLink(slug);
+    },
+  );
+
+  // Die Platzhalter der Ausflugsblöcke fallen ersatzlos weg. Sie sind nirgends
+  // gestylt und umschließen nur die Überschrift "Ausflüge & Umgebung ab …",
+  // deren Tabelle gerade entfernt wurde — sonst bliebe eine leere Überschrift.
+  html = html.replace(
+    /<div class="mapbox"[^>]*>(?:<div class="cat [a-z ]+">[^<]*<\/div>)?<\/div>\s*/g,
+    () => {
+      stats.cats++;
+      return '';
+    },
+  );
+
+  if (stats.blocks !== EXPECTED_LIST_BLOCKS) {
+    fail(`${stats.blocks} Listenblöcke ersetzt, erwartet ${EXPECTED_LIST_BLOCKS}`);
+  }
+  if (stats.rows !== EXPECT.total) {
+    fail(`${stats.rows} Ortszeilen entfernt, erwartet ${EXPECT.total}`);
+  }
+  if (stats.kept !== EXPECT.unnumbered) {
+    fail(`${stats.kept} nummernlose Einträge erhalten, erwartet ${EXPECT.unnumbered}`);
+  }
+  if (/<span class="pin (?:kultur|essen|shop|natur|hotel)">/.test(html)) {
+    fail('In der Lesefassung stehen noch nummerierte Pins');
+  }
+  if (/class="mapbox"/.test(html)) {
+    fail('Kartenplatzhalter in der Lesefassung übrig geblieben');
+  }
+
+  // Jede verbliebene Kategorieüberschrift muss eine Tabelle mit Inhalt haben —
+  // sonst steht im Band eine Überschrift ohne alles darunter.
+  const cats = (html.match(/<div class="cat [a-z ]+">/g) ?? []).length;
+  const tables = (html.match(/<table class="pins">/g) ?? []).length;
+  if (cats !== tables) {
+    fail(`${cats} Kategorieüberschriften, aber ${tables} Tabellen — eine steht verwaist da`);
+  }
+
+  html = rewriteIntro(html);
+
+  const injected = `<style>
 .app-back{position:fixed;top:14px;right:14px;z-index:99;font-family:"Zen Kaku Gothic New",sans-serif;
 font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;background:#16233CEE;color:#EFE7D6;
 border:1px solid #A67C33;border-radius:999px;padding:9px 16px;text-decoration:none;backdrop-filter:blur(6px)}
 .app-back:hover{background:#C6402B;border-color:#C6402B}
+
+/* Verweis auf die Ortsliste im Planer — steht, wo früher die Tabellen standen */
+.app-orte{display:flex;align-items:center;gap:16px;margin:30px 0 10px;padding:16px 20px;
+background:#F6F1E6;border:1px solid #D7CBB2;border-left:5px solid #C6402B;border-radius:14px;
+text-decoration:none;color:#16233C;transition:border-color .15s,background .15s}
+.app-orte:hover{background:#EFE7D6;border-left-color:#A63220}
+.app-orte .ao-count{font-family:"Fraunces",Georgia,serif;font-weight:700;font-size:2.1rem;
+line-height:1;color:#C6402B;flex:none}
+.app-orte .ao-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.app-orte .ao-text b{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:1.12rem}
+.app-orte .ao-text small{font-family:"Zen Kaku Gothic New",sans-serif;font-size:.78rem;
+color:#4B5468;line-height:1.45}
+.app-orte .ao-go{font-family:"Zen Kaku Gothic New",sans-serif;font-size:.74rem;letter-spacing:.1em;
+text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
+@media(max-width:600px){.app-orte{flex-wrap:wrap;gap:10px;padding:14px 16px}
+.app-orte .ao-go{width:100%}}
 @media print{.app-back{display:none}}
 </style>
 <a class="app-back" href="./">← Zum Reiseplaner</a>
 `;
 
   if (!html.includes('class="app-back"')) {
-    html = html.replace('<body>', `<body>${backLink}`);
+    html = html.replace('<body>', `<body>${injected}`);
   }
 
   const out = resolve(root, 'public/reiseband.html');
   writeFileSync(out, html, 'utf8');
-  return added;
+  return { added, ...stats };
 }
 
-const anchorsAdded = writeGuide();
+const guide = writeGuide();
 
 const doubled = places.filter((p) => p.sameSpotAs?.length);
 
@@ -378,4 +564,9 @@ console.log(`  Schließtage   ${places.filter((p) => p.closedDay).length}`);
 console.log(`  Reservierung  ${places.filter((p) => p.needsBooking).length}`);
 console.log(`  Nur Bargeld   ${places.filter((p) => p.cashOnly).length}`);
 console.log(`  Stationen     ${Object.entries(byStation).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
-console.log(`  Reiseband     public/reiseband.html (${anchorsAdded} Kapitelanker ergänzt)\n`);
+console.log(`  Reiseband     public/reiseband.html`);
+console.log(`    · ${guide.added} Kapitelanker ergänzt`);
+console.log(`    · ${guide.rows} Ortszeilen entfernt (stehen im Planer)`);
+console.log(`    · ${guide.tables} Tabellen und ${guide.cats} Kategorieüberschriften aufgelöst`);
+console.log(`    · ${guide.blocks} Blockköpfe durch Planer-Verweis ersetzt`);
+console.log(`    · ${guide.kept} nummernlose Einträge behalten\n`);

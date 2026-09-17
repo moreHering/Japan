@@ -44,8 +44,8 @@ lauf -f test/local-auth-stub.sql > /dev/null
 
 for datei in migrations/*.sql; do
   echo "  $datei"
-  lauf -v pw_eins=test-eins -v pw_zwei=test-zwei -v pw_drei=test-drei \
-       -f "$datei" 2>&1 | grep -E "NOTICE:.*(Konten|Passw)" | sed 's/^/    /' || true
+  lauf -v pw=test-passwort -f "$datei" 2>&1 \
+    | grep -E "NOTICE:.*(Konten|Passwort)" | sed 's/^/    /' || true
 done
 
 echo ""

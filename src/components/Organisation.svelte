@@ -8,6 +8,7 @@
    * abgeleitet, damit sie nicht doppelt gepflegt werden müssen.
    */
   import type { Place } from '../lib/places';
+  import LoginPanel from './LoginPanel.svelte';
   import bookingsData from '../data/bookings.json';
   import packingData from '../data/packing.json';
   import {
@@ -326,6 +327,10 @@
   <section class="block">
     <div class="eyebrow">Plan sichern &amp; übertragen</div>
     <h2>Datenabgleich</h2>
+
+    <div class="login">
+      <LoginPanel />
+    </div>
 
     <p class="sub">
       Der Plan liegt ausschließlich in diesem Browser — <b>er wird nicht automatisch
@@ -708,6 +713,14 @@
     color: var(--ai-40);
     line-height: 1.3;
     display: block;
+  }
+
+  .login {
+    background: var(--washi-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 11px 13px;
+    margin-bottom: 12px;
   }
 
   .dataactions {

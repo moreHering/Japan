@@ -48,9 +48,8 @@ jobs:
           PGDATABASE: postgres
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PGSSLMODE: require
-          PW_EINS: ${{ secrets.ACCOUNT_PW_EINS }}
-          PW_ZWEI: ${{ secrets.ACCOUNT_PW_ZWEI }}
-          PW_DREI: ${{ secrets.ACCOUNT_PW_DREI }}
+          # Gemeinsames Anmeldepasswort der drei Konten.
+          ACCOUNT_PW: ${{ secrets.ACCOUNT_PW }}
         run: |
           set -euo pipefail
 
@@ -60,11 +59,7 @@ jobs:
           for datei in supabase/migrations/*.sql; do
             echo ""
             echo "── $datei ──────────────────────────────────────────"
-            psql -v ON_ERROR_STOP=1 \
-                 -v pw_eins="${PW_EINS:-}" \
-                 -v pw_zwei="${PW_ZWEI:-}" \
-                 -v pw_drei="${PW_DREI:-}" \
-                 -f "$datei"
+            psql -v ON_ERROR_STOP=1 -v pw="${ACCOUNT_PW:-}" -f "$datei"
           done
 
       - name: Ergebnis prüfen

@@ -8,16 +8,16 @@
 -- statt halbe Konten anzulegen, und die Benutzer werden dann im Dashboard
 -- angelegt und unten nur noch mit `profiles` verknüpft.
 --
--- Die Passwörter kommen als psql-Variablen aus GitHub-Secrets und stehen
--- nirgends im Repository. Ohne sie überspringt die Migration die Kontenanlage.
+-- Alle drei teilen sich ein Passwort. Es kommt als psql-Variable aus einem
+-- GitHub-Secret und steht nirgends im Repository — das Repo ist öffentlich,
+-- ein Passwort darin wäre dauerhaft im Git-Verlauf und böte keinen Schutz mehr.
+-- Ohne die Variable überspringt die Migration die Kontenanlage.
 --
---   psql -v pw_eins="…" -v pw_zwei="…" -v pw_drei="…" -f 0002_accounts.sql
+--   psql -v pw="…" -f 0002_accounts.sql
 -- ============================================================================
 
 -- Fehlende Variablen auf Leerstring setzen, damit die Datei auch ohne sie läuft.
-\if :{?pw_eins} \else \set pw_eins '' \endif
-\if :{?pw_zwei} \else \set pw_zwei '' \endif
-\if :{?pw_drei} \else \set pw_drei '' \endif
+\if :{?pw} \else \set pw '' \endif
 
 \set ON_ERROR_STOP on
 
@@ -25,24 +25,20 @@ create extension if not exists pgcrypto;
 
 -- psql ersetzt :variablen nicht innerhalb von $$-Blöcken. Deshalb wandern die
 -- Passwörter hier in Sitzungsvariablen, die der Block dann ausliest.
-select set_config('japan.pw_eins', :'pw_eins', false);
-select set_config('japan.pw_zwei', :'pw_zwei', false);
-select set_config('japan.pw_drei', :'pw_drei', false);
+select set_config('japan.pw', :'pw', false);
 
 do $$
 declare
   konten constant jsonb := jsonb_build_array(
-    jsonb_build_object('email', 'eins@japan2026.local', 'name', 'Reisende:r 1',
-                       'farbe', '#C6402B', 'pw', current_setting('japan.pw_eins', true)),
-    jsonb_build_object('email', 'zwei@japan2026.local', 'name', 'Reisende:r 2',
-                       'farbe', '#3E6B5E', 'pw', current_setting('japan.pw_zwei', true)),
-    jsonb_build_object('email', 'drei@japan2026.local', 'name', 'Reisende:r 3',
-                       'farbe', '#A67C33', 'pw', current_setting('japan.pw_drei', true))
+    jsonb_build_object('email', 'paule@japan2026.local',  'name', 'Paule',  'farbe', '#C6402B'),
+    jsonb_build_object('email', 'deggel@japan2026.local', 'name', 'Deggel', 'farbe', '#3E6B5E'),
+    jsonb_build_object('email', 'baldes@japan2026.local', 'name', 'Baldes', 'farbe', '#A67C33')
   );
+  pw       constant text := coalesce(current_setting('japan.pw', true), '');
   k        jsonb;
   uid      uuid;
   angelegt integer := 0;
-  ohne_pw  integer := 0;
+  erneuert integer := 0;
 begin
   -- Ohne auth-Schema läuft die Datei lokal gegen einen nackten Postgres; dann
   -- gibt es nichts anzulegen.
@@ -51,12 +47,12 @@ begin
     return;
   end if;
 
-  for k in select * from jsonb_array_elements(konten) loop
-    if coalesce(k->>'pw', '') = '' then
-      ohne_pw := ohne_pw + 1;
-      continue;
-    end if;
+  if pw = '' then
+    raise notice 'Kein Passwort hinterlegt (Secret ACCOUNT_PW) — Kontenanlage übersprungen.';
+    return;
+  end if;
 
+  for k in select * from jsonb_array_elements(konten) loop
     select id into uid from auth.users where email = k->>'email';
 
     if uid is null then
@@ -67,7 +63,7 @@ begin
         raw_app_meta_data, raw_user_meta_data
       ) values (
         '00000000-0000-0000-0000-000000000000', uid, 'authenticated', 'authenticated',
-        k->>'email', crypt(k->>'pw', gen_salt('bf')),
+        k->>'email', crypt(pw, gen_salt('bf')),
         now(), now(), now(),
         '{"provider":"email","providers":["email"]}'::jsonb,
         jsonb_build_object('name', k->>'name')
@@ -89,10 +85,11 @@ begin
       -- erneuter Lauf nach einer Passwortänderung wieder einen bekannten Stand
       -- herstellt.
       update auth.users
-         set encrypted_password = crypt(k->>'pw', gen_salt('bf')),
+         set encrypted_password = crypt(pw, gen_salt('bf')),
              email_confirmed_at = coalesce(email_confirmed_at, now()),
              updated_at = now()
        where id = uid;
+      erneuert := erneuert + 1;
     end if;
 
     insert into public.profiles (id, name, farbe)
@@ -101,10 +98,6 @@ begin
       set name = excluded.name, farbe = excluded.farbe;
   end loop;
 
-  raise notice 'Konten: % neu angelegt, % ohne hinterlegtes Passwort übersprungen.',
-    angelegt, ohne_pw;
-
-  if ohne_pw > 0 then
-    raise notice 'Fehlende Passwörter als Secrets hinterlegen und Migration erneut ausführen.';
-  end if;
+  raise notice 'Konten: % neu angelegt, % aktualisiert (Paule, Deggel, Baldes).',
+    angelegt, erneuert;
 end $$;

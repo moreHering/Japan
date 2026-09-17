@@ -1,0 +1,107 @@
+name: Datenbank migrieren
+
+# Spielt die Migrationen aus supabase/migrations/ gegen das Supabase-Projekt ein.
+#
+# Warum über die CI und nicht lokal: Die Entwicklungsumgebung erreicht die
+# Datenbank nicht (API gesperrt, Direktverbindung nur über IPv6, Pooler-Ports
+# geschlossen). GitHub-Runner haben freies Netz.
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/migrate.yml'
+  workflow_dispatch:
+
+# Zwei gleichzeitige Migrationsläufe auf derselben Datenbank wären ein Problem.
+concurrency:
+  group: migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v7
+
+      - name: Voraussetzungen prüfen
+        env:
+          DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -z "$DB_PASSWORD" ]; then
+            echo "::error::Das Secret SUPABASE_DB_PASSWORD fehlt."
+            echo "Zu finden unter Project Settings → Database → Connection string,"
+            echo "zu hinterlegen unter Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          psql --version
+
+      - name: Migrationen einspielen
+        env:
+          # Der Session-Pooler ist der einzige Weg mit IPv4 — die direkte
+          # Adresse db.<ref>.supabase.co löst ausschließlich auf IPv6 auf.
+          PGHOST: aws-0-${{ vars.SUPABASE_REGION || 'eu-central-1' }}.pooler.supabase.com
+          PGPORT: '5432'
+          PGUSER: postgres.${{ vars.SUPABASE_PROJECT_REF || 'hfrvdbaiyeddeiyprwmw' }}
+          PGDATABASE: postgres
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+          PW_EINS: ${{ secrets.ACCOUNT_PW_EINS }}
+          PW_ZWEI: ${{ secrets.ACCOUNT_PW_ZWEI }}
+          PW_DREI: ${{ secrets.ACCOUNT_PW_DREI }}
+        run: |
+          set -euo pipefail
+
+          echo "Verbindung zu $PGHOST als $PGUSER"
+          psql -v ON_ERROR_STOP=1 -tAc "select current_database(), version();"
+
+          for datei in supabase/migrations/*.sql; do
+            echo ""
+            echo "── $datei ──────────────────────────────────────────"
+            psql -v ON_ERROR_STOP=1 \
+                 -v pw_eins="${PW_EINS:-}" \
+                 -v pw_zwei="${PW_ZWEI:-}" \
+                 -v pw_drei="${PW_DREI:-}" \
+                 -f "$datei"
+          done
+
+      - name: Ergebnis prüfen
+        env:
+          PGHOST: aws-0-${{ vars.SUPABASE_REGION || 'eu-central-1' }}.pooler.supabase.com
+          PGPORT: '5432'
+          PGUSER: postgres.${{ vars.SUPABASE_PROJECT_REF || 'hfrvdbaiyeddeiyprwmw' }}
+          PGDATABASE: postgres
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+
+          echo "Tabellen und RLS-Status:"
+          psql -v ON_ERROR_STOP=1 -c "
+            select c.relname as tabelle,
+                   c.relrowsecurity as rls,
+                   (select count(*) from pg_policies p
+                     where p.schemaname='public' and p.tablename=c.relname) as policies
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname='public' and c.relkind='r'
+             order by c.relname;"
+
+          echo ""
+          echo "Zugelassene Bearbeiter:"
+          psql -v ON_ERROR_STOP=1 -c "select name, farbe from public.profiles order by name;"
+
+          # Eine Tabelle ohne RLS wäre mit dem öffentlich lesbaren Schlüssel
+          # für jeden zugänglich — das darf nicht unbemerkt durchgehen.
+          OFFEN=$(psql -tAc "
+            select count(*) from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname='public' and c.relkind='r' and not c.relrowsecurity;")
+
+          if [ "$OFFEN" != "0" ]; then
+            echo "::error::$OFFEN Tabelle(n) ohne Row Level Security."
+            exit 1
+          fi
+          echo "Alle Tabellen sind durch RLS geschützt."

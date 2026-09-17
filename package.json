@@ -1,0 +1,19 @@
+{
+  "name": "japan-2026",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "data": "node scripts/build-data.mjs",
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/svelte": "^9.0.1",
+    "astro": "^7.3.3",
+    "leaflet": "^1.9.4",
+    "svelte": "^5.57.0"
+  }
+}

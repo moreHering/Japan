@@ -1,0 +1,12 @@
+---
+import Base from '../layouts/Base.astro';
+import Organisation from '../components/Organisation.svelte';
+import { places } from '../lib/places';
+---
+
+<Base
+  title="Organisation"
+  subtitle="Buchungen und Fristen, Ausgaben in ¥ und €, Packliste — und der Export, um den Plan auf ein anderes Gerät zu bringen."
+>
+  <Organisation client:only="svelte" places={places} />
+</Base>

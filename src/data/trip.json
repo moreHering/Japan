@@ -1,0 +1,11 @@
+{
+  "title": "Japan 2026",
+  "subtitle": "Die Route als Geschichte",
+  "start": "2026-09-26",
+  "end": "2026-10-15",
+  "nights": 19,
+  "travellers": ["Reisender 1", "Reisender 2", "Reisender 3"],
+  "yenPerEuro": 185,
+  "guideFile": "reiseband.html",
+  "kmlFile": "Japan-Karte-2026.kml"
+}

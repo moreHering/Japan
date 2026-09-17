@@ -1,0 +1,12 @@
+---
+import Base from '../layouts/Base.astro';
+import PlaceExplorer from '../components/PlaceExplorer.svelte';
+import { places } from '../lib/places';
+---
+
+<Base
+  title="Orte"
+  subtitle="Alle 164 Orte des Reisebands — filterbar, auf der Karte und direkt auf einen Reisetag legbar."
+>
+  <PlaceExplorer client:only="svelte" places={places} />
+</Base>

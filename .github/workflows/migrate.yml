@@ -29,13 +29,52 @@ jobs:
       - name: Voraussetzungen prüfen
         env:
           DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          ACCOUNT_PW: ${{ secrets.ACCOUNT_PW }}
+          SB_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          SB_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+          REGION: ${{ vars.SUPABASE_REGION }}
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
         run: |
+          # Zeigt an, was ankommt — ohne Werte preiszugeben. Die Länge hilft
+          # bei versehentlich mitkopierten Leerzeichen oder Anführungszeichen.
+          zeige() {
+            if [ -n "$2" ]; then
+              printf '  vorhanden  %-28s (%s Zeichen)\n' "$1" "${#2}"
+            else
+              printf '  FEHLT      %-28s\n' "$1"
+            fi
+          }
+
+          echo "Secrets:"
+          zeige "SUPABASE_DB_PASSWORD" "$DB_PASSWORD"
+          zeige "ACCOUNT_PW" "$ACCOUNT_PW"
+          zeige "PUBLIC_SUPABASE_URL" "$SB_URL"
+          zeige "PUBLIC_SUPABASE_ANON_KEY" "$SB_KEY"
+          echo "Variablen (optional):"
+          zeige "SUPABASE_REGION" "$REGION"
+          zeige "SUPABASE_PROJECT_REF" "$PROJECT_REF"
+          echo ""
+
           if [ -z "$DB_PASSWORD" ]; then
-            echo "::error::Das Secret SUPABASE_DB_PASSWORD fehlt."
-            echo "Zu finden unter Project Settings → Database → Connection string,"
-            echo "zu hinterlegen unter Settings → Secrets and variables → Actions."
+            echo "::error::Das Secret SUPABASE_DB_PASSWORD kommt leer an."
+            echo ""
+            echo "Häufigste Ursachen, in dieser Reihenfolge:"
+            echo "  1. Es liegt unter 'Environment secrets' statt unter"
+            echo "     'Repository secrets'. Beide stehen auf derselben Seite —"
+            echo "     gebraucht wird der obere Block 'Repository secrets'."
+            echo "  2. Der Name weicht ab (Bindestrich statt Unterstrich,"
+            echo "     Kleinschreibung, Tippfehler)."
+            echo "  3. Es wurde unter 'Variables' statt 'Secrets' angelegt."
+            echo ""
+            echo "Anzulegen unter:"
+            echo "  https://github.com/moreHering/Japan/settings/secrets/actions"
             exit 1
           fi
+
+          if [ -z "$ACCOUNT_PW" ]; then
+            echo "::warning::ACCOUNT_PW fehlt — die Konten werden nicht angelegt."
+          fi
+
           psql --version
 
       - name: Migrationen einspielen

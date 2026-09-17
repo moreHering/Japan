@@ -8,12 +8,37 @@
    */
   import MapView from './MapView.svelte';
   import PlaceCard from './PlaceCard.svelte';
-  import { CATEGORIES, plainText, type Category, type Place } from '../lib/places';
+  import OrtFormular from './OrtFormular.svelte';
+  import {
+    ABSEITS,
+    ABSEITS_LABEL,
+    CATEGORIES,
+    istAbseits,
+    istEigen,
+    plainText,
+    type Category,
+    type EigenerOrt,
+    type Place,
+  } from '../lib/places';
   import { buildDays, formatDay, stations, type TripDay } from '../lib/trip';
-  import { addToDay, dayOfPlace, isDone, plan, unplacePlace } from '../lib/store.svelte';
+  import {
+    addToDay,
+    dayOfPlace,
+    isDone,
+    istPlanbar,
+    plan,
+    unplacePlace,
+  } from '../lib/store.svelte';
 
   type Props = { places: Place[] };
   let { places }: Props = $props();
+
+  /**
+   * Feste Orte aus dem Build plus die selbst ergänzten aus dem Plan. Alle
+   * Filter arbeiten danach auf einer Liste — sie müssen nicht wissen, woher
+   * ein Ort kommt.
+   */
+  let alle = $derived<Place[]>([...places, ...plan.customPlaces]);
 
   const days: TripDay[] = buildDays();
 
@@ -21,7 +46,9 @@
   const initialStation = (() => {
     if (typeof location === 'undefined') return 'alle';
     const wanted = new URLSearchParams(location.search).get('station');
-    return wanted && stations.some((s) => s.slug === wanted) ? wanted : 'alle';
+    if (!wanted) return 'alle';
+    const bekannt = wanted === ABSEITS || stations.some((s) => s.slug === wanted);
+    return bekannt ? wanted : 'alle';
   })();
 
   let query = $state('');
@@ -36,9 +63,15 @@
   let mobileView = $state<'liste' | 'karte'>('liste');
   let mapRef = $state<MapView | null>(null);
 
+  /** Erfassung eigener Orte, ausgelöst über den langen Druck auf der Karte. */
+  let pin = $state<{ lat: number; lng: number } | null>(null);
+  let pickMode = $state(false);
+  let formOffen = $state(false);
+  let bearbeiten = $state<EigenerOrt | null>(null);
+
   let filtered = $derived.by(() => {
     const q = query.trim().toLowerCase();
-    return places.filter((p) => {
+    return alle.filter((p) => {
       if (!cats.has(p.category)) return false;
       if (station !== 'alle' && p.station !== station) return false;
       if (onlyTips && !p.isFriendTip) return false;
@@ -89,6 +122,37 @@
     else mapRef?.fitVisible();
   }
 
+  let abseitsAnzahl = $derived(alle.filter(istAbseits).length);
+  let eigeneAnzahl = $derived(plan.customPlaces.length);
+
+  function stelleGewaehlt(lat: number, lng: number) {
+    pin = { lat, lng };
+    pickMode = false;
+    formOffen = true;
+    mobileView = 'liste';
+  }
+
+  function erfassenStarten() {
+    bearbeiten = null;
+    pin = null;
+    formOffen = false;
+    pickMode = true;
+    mobileView = 'karte';
+  }
+
+  function bearbeitenStarten(ort: EigenerOrt) {
+    bearbeiten = ort;
+    pin = { lat: ort.lat, lng: ort.lng };
+    formOffen = true;
+  }
+
+  function erfassenSchliessen() {
+    formOffen = false;
+    pickMode = false;
+    pin = null;
+    bearbeiten = null;
+  }
+
   let plannedTotal = $derived(
     Object.values(plan.days).reduce((sum, d) => sum + d.placeNrs.length, 0),
   );
@@ -115,6 +179,9 @@
       {#each stations as s (s.slug)}
         <option value={s.slug}>{s.no} · {s.name}</option>
       {/each}
+      {#if abseitsAnzahl}
+        <option value={ABSEITS}>{ABSEITS_LABEL} ({abseitsAnzahl})</option>
+      {/if}
     </select>
   </div>
 
@@ -148,7 +215,7 @@
   </div>
 
   <div class="row status">
-    <span class="count"><b>{filtered.length}</b> von {places.length} Orten</span>
+    <span class="count"><b>{filtered.length}</b> von {alle.length} Orten</span>
     <span class="count dim">{plannedTotal} eingeplant · {plan.done.length} besucht</span>
 
     <span class="spacer"></span>
@@ -163,6 +230,9 @@
     </label>
 
     <button class="btn small ghost" onclick={() => mapRef?.fitVisible()}>Karte einpassen</button>
+    <button class="btn small" class:primary={pickMode} onclick={() => (pickMode ? erfassenSchliessen() : erfassenStarten())}>
+      {pickMode ? 'abbrechen' : '+ eigener Ort'}
+    </button>
   </div>
 
   <div class="row switch">
@@ -174,6 +244,32 @@
     </button>
   </div>
 </div>
+
+{#if formOffen && pin}
+  <div class="erfassen">
+    <OrtFormular
+      lat={pin.lat}
+      lng={pin.lng}
+      ort={bearbeiten}
+      onfertig={(nr) => {
+        erfassenSchliessen();
+        if (nr !== null) {
+          selected = nr;
+          // Ein frisch angelegter Ort soll auffindbar sein, auch wenn die
+          // Filter ihn gerade ausschließen würden.
+          station = 'alle';
+          query = '';
+        }
+      }}
+      onabbruch={erfassenSchliessen}
+      onneuwaehlen={() => {
+        formOffen = false;
+        pickMode = true;
+        mobileView = 'karte';
+      }}
+    />
+  </div>
+{/if}
 
 <div class="split" data-view={mobileView}>
   <div class="list">
@@ -187,14 +283,23 @@
       </h2>
       {#each group as place (place.nr)}
         <PlaceCard {place} active={selected === place.nr} onselect={select}>
+          {#if istEigen(place)}
+            <button class="btn small ghost" onclick={() => bearbeitenStarten(place)}>
+              bearbeiten
+            </button>
+          {/if}
           {#if dayOfPlace(place.nr)}
             <button class="btn small" onclick={() => unplacePlace(place.nr)}>
               vom {formatDay(dayOfPlace(place.nr)!)} nehmen
             </button>
-          {:else}
+          {:else if istPlanbar(place.nr)}
             <button class="btn small primary" onclick={() => addToDay(targetDay, place.nr)}>
               + {formatDay(targetDay)}
             </button>
+          {:else}
+            <span class="nichtplanbar" title="Zu weit weg, um an einem Reisetag dazwischenzupassen">
+              nicht auf der Route
+            </span>
           {/if}
         </PlaceCard>
       {/each}
@@ -202,7 +307,16 @@
   </div>
 
   <div class="mapwrap">
-    <MapView bind:this={mapRef} {places} visible={visibleNrs} {selected} onselect={(nr) => (selected = nr)} />
+    <MapView
+      bind:this={mapRef}
+      places={alle}
+      visible={visibleNrs}
+      {selected}
+      {pin}
+      {pickMode}
+      onselect={(nr) => (selected = nr)}
+      onpick={stelleGewaehlt}
+    />
   </div>
 </div>
 
@@ -224,6 +338,27 @@
   .search {
     flex: 1;
     min-width: 190px;
+  }
+
+  /* Die Maske schiebt sich über die Werkzeugleiste, damit sie auf dem Handy
+     nicht unter der Liste verschwindet. */
+  .erfassen {
+    background: var(--washi-2);
+    border: 1px solid var(--shu);
+    border-radius: var(--radius);
+    padding: 14px 15px;
+    margin-bottom: 14px;
+  }
+
+  .nichtplanbar {
+    font-family: var(--util);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: var(--kin);
+    border: 1px dashed var(--kin);
+    border-radius: 999px;
+    padding: 5px 10px;
+    white-space: nowrap;
   }
 
   input[type='search'],

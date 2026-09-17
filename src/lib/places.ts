@@ -1,6 +1,7 @@
 /** Typen und Beschriftungen rund um die 164 Orte des Reisebands. */
 
 import placesData from '../data/places.json';
+import stationsData from '../data/stations.json';
 
 export type Category = 'kultur' | 'essen' | 'shop' | 'natur' | 'hotel';
 
@@ -26,6 +27,56 @@ export type Place = {
   sameSpotAs?: number[];
 };
 
+/**
+ * Ein selbst angelegter Ort. Trägt dieselben Felder wie die 164 aus dem
+ * Reiseband, plus drei eigene.
+ */
+export type EigenerOrt = Place & {
+  eigen: true;
+  /**
+   * Die Nummer ist noch nicht die endgültige.
+   *
+   * Nummern kommen aus einer Sequenz in der Datenbank, damit zwei Leute nicht
+   * gleichzeitig dieselbe bekommen. Ohne Netz gibt es keine Nummer — der Ort
+   * bekommt dann eine negative, die mit nichts kollidieren kann, und wird als
+   * „neu" angezeigt. Beim nächsten Abgleich holt er sich seine echte.
+   */
+  vorlaeufig: boolean;
+  angelegtVon: string | null;
+};
+
+export const istEigen = (p: Place): p is EigenerOrt =>
+  (p as Partial<EigenerOrt>).eigen === true;
+
+/**
+ * Station für Orte aus dem Reiseführer, die nicht an der Route liegen
+ * (Kusatsu, Matsumoto, Jigokudani, Kawaguchiko …).
+ *
+ * Sie stehen auf Karte und in der Liste, sind aber **nicht auf einen Reisetag
+ * legbar**: Jigokudani ist kein Nachmittagsausflug ab Takayama, und eine
+ * Tagesplanung, die das zulässt, lügt. Die Station steht deshalb bewusst nicht
+ * in `stations.json` — dort hängen Nächte und Datumsbereiche dran.
+ */
+export const ABSEITS = 'abseits';
+export const ABSEITS_LABEL = 'Nicht auf der Route';
+
+export const istAbseits = (p: Place) => p.station === ABSEITS;
+
+/**
+ * Beschriftung einer Station aus ihrem Slug. Wird gebraucht, wenn ein eigener
+ * Ort aus der Datenbank kommt — dort steht nur der Slug.
+ */
+export function stationLabelOf(slug: string): string {
+  if (slug === ABSEITS) return ABSEITS_LABEL;
+  return stationsData.find((s) => s.slug === slug)?.name ?? slug;
+}
+
+/** Die sechs Stationen der Route plus die Ablage für alles daneben. */
+export const STATIONSWAHL: { slug: string; label: string; planbar: boolean }[] = [
+  ...stationsData.map((s) => ({ slug: s.slug, label: `${s.no} · ${s.name}`, planbar: true })),
+  { slug: ABSEITS, label: ABSEITS_LABEL, planbar: false },
+];
+
 export const places = placesData as Place[];
 
 export const CATEGORIES: { key: Category; label: string; short: string; color: string }[] = [
@@ -41,6 +92,9 @@ export const categoryOf = (key: Category) => CATEGORIES.find((c) => c.key === ke
 export function placeByNr(nr: number): Place | undefined {
   return places.find((p) => p.nr === nr);
 }
+
+/** Die höchste vergebene Nummer der festen Orte — eigene zählen darüber weiter. */
+export const HOECHSTE_FESTE_NR = places.reduce((m, p) => Math.max(m, p.nr), 0);
 
 /** Orte einer Station, optional nur Zentrum oder nur Ausflüge. */
 export function placesOfStation(station: string, area?: 'zentrum' | 'ausflug'): Place[] {

@@ -46,9 +46,11 @@ import {
   beobachteAenderungen,
   uebernehmeFremdstand,
   hatInhalt,
+  nummerErsetzen,
   type Aenderung,
   type PlanState,
 } from './store.svelte';
+import { ABSEITS, stationLabelOf, type Category, type EigenerOrt } from './places';
 
 const WARTESCHLANGE = 'japan2026:offene-aenderungen';
 /** Meldung über eine Änderung, die endgültig nicht durchkam. */
@@ -114,6 +116,9 @@ function schluessel(a: Aenderung): string {
     case 'ausgabe-neu':
     case 'ausgabe-weg':
       return `ausgabe:${a.id}`;
+    case 'ort':
+    case 'ort-weg':
+      return `ort:${a.nr}`;
     case 'alles':
       return 'alles';
   }
@@ -179,6 +184,30 @@ function anstellen(änderungen: Aenderung[]) {
   }
   speichereWarteschlange();
   baldSenden();
+}
+
+/**
+ * Trägt eine neu vergebene Ortsnummer in die noch wartenden Änderungen nach.
+ *
+ * Ohne das schreibt ein Häkchen, das vor dem Abgleich gesetzt wurde, weiter auf
+ * die vorläufige Nummer — und das echte „besucht" kommt nie an. Die Vorgänge
+ * lesen ihren Wert beim Senden aus dem aktuellen Zustand, deshalb genügt es,
+ * den Schlüssel zu ersetzen; doppelte Schlüssel sind unschädlich, weil jeder
+ * Vorgang für sich wiederholbar ist.
+ */
+function nummerInWarteschlange(alt: number, neu: number) {
+  let geändert = false;
+  for (const e of warteschlange) {
+    const a = e.a;
+    if (a.art === 'marke' && a.typ === 'done' && a.schluessel === String(alt)) {
+      e.a = { ...a, schluessel: String(neu) };
+      geändert = true;
+    } else if ((a.art === 'ort' || a.art === 'ort-weg') && a.nr === alt) {
+      e.a = { ...a, nr: neu };
+      geändert = true;
+    }
+  }
+  if (geändert) speichereWarteschlange();
 }
 
 // ------------------------------------------------------------------ Senden ---
@@ -281,11 +310,69 @@ async function sendeEine(sb: SB, a: Aenderung, wer: string) {
       return;
     }
 
+    case 'ort': {
+      const ort = plan.customPlaces.find((p) => p.nr === a.nr);
+      // Gleich wieder gelöscht — der Löschvorgang hat den Eintrag ersetzt.
+      if (!ort) return;
+
+      if (ort.vorlaeufig) {
+        // Die Nummer vergibt die Sequenz in der Datenbank, nicht der Client:
+        // Zwei Leute, die gleichzeitig einen Ort anlegen, bekommen sonst
+        // dieselbe. Deshalb ohne `nr` einfügen und die vergebene zurücklesen.
+        const { data, error } = await sb
+          .from('places_custom')
+          .insert(zeileAusOrt(ort, wer, false))
+          .select('nr')
+          .single();
+        if (error) throw error;
+        const neu = Number(data?.nr);
+        if (!Number.isInteger(neu) || neu <= 0) {
+          throw new Error('Die Datenbank hat keine Nummer für den neuen Ort geliefert.');
+        }
+        nummerErsetzen(a.nr, neu);
+        nummerInWarteschlange(a.nr, neu);
+        return;
+      }
+
+      const { error } = await sb
+        .from('places_custom')
+        .upsert(zeileAusOrt(ort, wer, true), { onConflict: 'nr' });
+      if (error) throw error;
+      return;
+    }
+
+    case 'ort-weg': {
+      // Eine vorläufige Nummer stand nie in der Ablage.
+      if (a.nr < 0) return;
+      const { error } = await sb.from('places_custom').delete().eq('nr', a.nr);
+      if (error) throw error;
+      return;
+    }
+
     case 'alles': {
       await sendeAlles(sb, wer);
       return;
     }
   }
+}
+
+/** Ein eigener Ort als Datenbankzeile. Ohne `nr`, wenn die Sequenz sie vergibt. */
+function zeileAusOrt(ort: EigenerOrt, wer: string, mitNr: boolean) {
+  return {
+    ...(mitNr ? { nr: ort.nr } : {}),
+    name: ort.name,
+    kategorie: ort.category,
+    station: ort.station,
+    area: ort.area,
+    lat: ort.lat,
+    lng: ort.lng,
+    beschreibung: ort.descriptionHtml,
+    from_book: Boolean(ort.book) || Boolean(ort.bookTitle),
+    closed_day: ort.closedDay,
+    needs_booking: ort.needsBooking,
+    cash_only: ort.cashOnly,
+    created_by: wer,
+  };
 }
 
 /**
@@ -337,6 +424,35 @@ async function sendeAlles(sb: SB, wer: string) {
     const { error } = await sb.from('expenses').delete().neq('created_at', '1970-01-01T00:00:00Z');
     if (error) throw error;
   }
+  {
+    // Eigene Orte behalten ihre Nummer: Sie steht in den Tagen und womöglich
+    // schon auf einem Zettel. Nur was hier fehlt, verschwindet.
+    const bleiben = plan.customPlaces.filter((p) => !p.vorlaeufig).map((p) => p.nr);
+    let weg = sb.from('places_custom').delete().gt('nr', 0);
+    if (bleiben.length) weg = weg.not('nr', 'in', `(${bleiben.join(',')})`);
+    const { error } = await weg;
+    if (error) throw error;
+  }
+  for (const ort of plan.customPlaces) {
+    if (ort.vorlaeufig) {
+      const { data, error } = await sb
+        .from('places_custom')
+        .insert(zeileAusOrt(ort, wer, false))
+        .select('nr')
+        .single();
+      if (error) throw error;
+      const neu = Number(data?.nr);
+      if (Number.isInteger(neu) && neu > 0) {
+        nummerErsetzen(ort.nr, neu);
+        nummerInWarteschlange(ort.nr, neu);
+      }
+      continue;
+    }
+    const { error } = await sb
+      .from('places_custom')
+      .upsert(zeileAusOrt(ort, wer, true), { onConflict: 'nr' });
+    if (error) throw error;
+  }
 
   for (const [tabelle, zeilen] of [
     ['plan_days', tage],
@@ -353,15 +469,21 @@ async function sendeAlles(sb: SB, wer: string) {
 // ------------------------------------------------------------------- Holen ---
 
 async function holeStand(sb: SB): Promise<{ stand: Partial<PlanState>; leer: boolean }> {
-  const [tage, notizen, marken, ausgaben] = await Promise.all([
+  const [tage, notizen, marken, ausgaben, orte] = await Promise.all([
     sb.from('plan_days').select('datum, place_nr, position').order('position'),
     sb.from('plan_notes').select('datum, notiz'),
     sb.from('plan_flags').select('art, schluessel, wert'),
     sb.from('expenses').select('id, datum, text, yen, payer, station').order('datum', {
       ascending: false,
     }),
+    sb
+      .from('places_custom')
+      .select(
+        'nr, name, kategorie, station, area, lat, lng, beschreibung, from_book, closed_day, needs_booking, cash_only, created_by',
+      )
+      .order('nr'),
   ]);
-  for (const r of [tage, notizen, marken, ausgaben]) if (r.error) throw r.error;
+  for (const r of [tage, notizen, marken, ausgaben, orte]) if (r.error) throw r.error;
 
   const days: PlanState['days'] = {};
   for (const z of tage.data ?? []) {
@@ -396,13 +518,41 @@ async function holeStand(sb: SB): Promise<{ stand: Partial<PlanState>; leer: boo
     station: z.station ?? '',
   }));
 
+  const customPlaces: EigenerOrt[] = (orte.data ?? []).map((z) => ({
+    eigen: true as const,
+    vorlaeufig: false,
+    angelegtVon: z.created_by ?? null,
+    nr: z.nr,
+    name: z.name,
+    category: z.kategorie as Category,
+    station: z.station ?? ABSEITS,
+    stationLabel: stationLabelOf(z.station ?? ABSEITS),
+    area: z.area === 'ausflug' ? ('ausflug' as const) : ('zentrum' as const),
+    lat: z.lat,
+    lng: z.lng,
+    placeId: null,
+    descriptionHtml: z.beschreibung ?? '',
+    isFriendTip: false,
+    // Aus der Datenbank kommt nur „aus dem Reiseführer, ja oder nein" — die
+    // Erlebnisnummer führt nur die kuratierte Liste der festen Orte.
+    book: z.from_book ? '—' : undefined,
+    bookTitle: z.from_book ? 'Aus dem Reiseführer' : undefined,
+    needsBooking: Boolean(z.needs_booking),
+    closedDay: z.closed_day ?? null,
+    cashOnly: Boolean(z.cash_only),
+  }));
+
   const leer =
     !(tage.data ?? []).length &&
     !(notizen.data ?? []).length &&
     !(marken.data ?? []).length &&
-    !expenses.length;
+    !expenses.length &&
+    !customPlaces.length;
 
-  return { stand: { days, done, bookings, packing, packingExtra, expenses }, leer };
+  return {
+    stand: { days, done, bookings, packing, packingExtra, expenses, customPlaces },
+    leer,
+  };
 }
 
 // ------------------------------------------------------------------- Ablauf ---
@@ -454,6 +604,10 @@ export async function abgleichen(nurSenden = false) {
   try {
     // ---- senden
     while (warteschlange.length) {
+      // Orte zuerst: Ein Tag, der einen frisch angelegten Ort enthält, darf
+      // erst hochgehen, wenn dessen endgültige Nummer feststeht.
+      const zuerst = warteschlange.findIndex((x) => x.a.art === 'ort');
+      if (zuerst > 0) warteschlange.unshift(...warteschlange.splice(zuerst, 1));
       const e = warteschlange[0];
       try {
         await sendeEine(sb, e.a, wer);

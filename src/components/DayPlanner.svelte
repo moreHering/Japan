@@ -9,7 +9,14 @@
    */
   import PlaceCard from './PlaceCard.svelte';
   import MapView from './MapView.svelte';
-  import { CATEGORIES, categoryOf, type Category, type Place } from '../lib/places';
+  import {
+    CATEGORIES,
+    categoryOf,
+    istAbseits,
+    istEigen,
+    type Category,
+    type Place,
+  } from '../lib/places';
   import { buildDays, formatDay, formatFull, type TripDay } from '../lib/trip';
   import {
     addToDay,
@@ -26,7 +33,19 @@
   let { places }: Props = $props();
 
   const days: TripDay[] = buildDays();
-  const byNr = new Map(places.map((p) => [p.nr, p]));
+
+  /**
+   * Feste und eigene Orte zusammen. Orte abseits der Route fallen hier heraus:
+   * Sie sind nicht auf einen Reisetag legbar, also haben sie im Planer nichts
+   * zu suchen — auch nicht als Vorschlag, der sich dann nicht anklicken lässt.
+   */
+  let alle = $derived<Place[]>([
+    ...places,
+    ...plan.customPlaces.filter((p) => !istAbseits(p)),
+  ]);
+
+  /** Nachschlagewerk für die Orte eines Tages. Wächst mit den eigenen Orten. */
+  let byNr = $derived(new Map(alle.map((p) => [p.nr, p])));
 
   let openDay = $state<string>(days[0].date);
   let poolQuery = $state('');
@@ -41,7 +60,7 @@
   /** Vorschläge: standardmäßig nur die Station des geöffneten Tages. */
   let pool = $derived.by(() => {
     const q = poolQuery.trim().toLowerCase();
-    return places
+    return alle
       .filter((p) => {
         if (dayOfPlace(p.nr)) return false;
         if (!poolCats.has(p.category)) return false;
@@ -195,7 +214,7 @@
       {#if showMap}
         <div class="daymap">
           <MapView
-            {places}
+            places={alle}
             visible={placesOfDay(current.date)}
             route={placesOfDay(current.date)}
             center={current.station.center as [number, number]}

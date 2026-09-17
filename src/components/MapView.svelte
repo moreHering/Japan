@@ -11,7 +11,7 @@
    */
   import { onMount } from 'svelte';
   import 'leaflet/dist/leaflet.css';
-  import { CATEGORIES, plainText, type Category, type Place } from '../lib/places';
+  import { CATEGORIES, istEigen, plainText, type Category, type Place } from '../lib/places';
   import { maps } from '../lib/paths';
 
   type Props = {
@@ -33,6 +33,18 @@
     /** Vollbildkarte: reagiert sofort auf einen Finger, statt erst nach Antippen. */
     fullscreen?: boolean;
     onselect?: (nr: number) => void;
+    /**
+     * Koordinaten für einen neuen Ort abgreifen.
+     *
+     * Ist ein Handler gesetzt, liefert ein langer Druck (auf dem Rechner ein
+     * Rechtsklick) die Stelle. `pickMode` macht daraus einen einfachen Tipp —
+     * der lange Druck ist auf dem Handy nicht auffindbar, wenn man ihn nicht
+     * kennt, deshalb gibt es zusätzlich den ausdrücklichen Modus.
+     */
+    onpick?: (lat: number, lng: number) => void;
+    pickMode?: boolean;
+    /** Vorschau-Pin während des Erfassens. */
+    pin?: { lat: number; lng: number } | null;
   };
 
   let {
@@ -44,6 +56,9 @@
     route = [],
     fullscreen = false,
     onselect,
+    onpick,
+    pickMode = false,
+    pin = null,
   }: Props = $props();
 
   let host: HTMLDivElement;
@@ -51,6 +66,7 @@
   let L: any = null;
   let markers = new Map<number, any>();
   let routeLine: any = null;
+  let pinMarker: any = null;
   let ready = $state(false);
 
   const colorOf = (cat: Category) => CATEGORIES.find((c) => c.key === cat)!.color;
@@ -60,11 +76,14 @@
    * liegen (Nr. 95/96), werden minimal versetzt, sonst verdeckt einer den anderen.
    */
   function iconFor(place: Place) {
-    const digits = String(place.nr).length;
-    const size = digits > 2 ? 30 : 26;
+    // Ein Ort ohne endgültige Nummer zeigt keine an — eine negative Zahl wäre
+    // schlicht falsch, und "neu" ist die Wahrheit.
+    const eigen = istEigen(place);
+    const text = eigen && place.vorlaeufig ? 'neu' : String(place.nr);
+    const size = text.length > 2 ? 30 : 26;
     return L.divIcon({
-      className: 'jp-marker',
-      html: `<span style="background:${colorOf(place.category)}">${place.nr}</span>`,
+      className: eigen ? 'jp-marker jp-eigen' : 'jp-marker',
+      html: `<span style="background:${colorOf(place.category)}">${text}</span>`,
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
       popupAnchor: [0, -(size / 2)],
@@ -82,7 +101,9 @@
 
   function popupHtml(place: Place) {
     const cat = CATEGORIES.find((c) => c.key === place.category)!;
+    const eigen = istEigen(place);
     const flags = [
+      eigen ? (place.vorlaeufig ? 'selbst ergänzt — Nummer folgt' : 'selbst ergänzt') : '',
       place.isFriendTip ? '★ Freundestipp' : '',
       place.book ? `📖 Reiseführer ${place.book} · ${place.bookTitle}` : '',
       place.closedDay ? `${place.closedDay}. geschlossen` : '',
@@ -93,7 +114,9 @@
     return `
       <div class="jp-popup">
         <div class="jp-popup-head">
-          <span class="jp-popup-nr" style="background:${cat.color}">${place.nr}</span>
+          <span class="jp-popup-nr" style="background:${cat.color}">${
+            eigen && place.vorlaeufig ? 'neu' : place.nr
+          }</span>
           <strong>${place.name}</strong>
         </div>
         <div class="jp-popup-cat">${cat.label} · ${place.stationLabel}</div>
@@ -144,21 +167,80 @@
         }, { passive: true });
       }
 
-      for (const place of places) {
-        const marker = L.marker(offsetOf(place), {
-          icon: iconFor(place),
-          title: `${place.nr} · ${place.name}`,
-          riseOnHover: true,
-        });
-        marker.bindPopup(popupHtml(place), { maxWidth: 300, minWidth: 220 });
-        marker.on('click', () => onselect?.(place.nr));
-        markers.set(place.nr, marker);
-      }
+      /*
+       * Koordinaten abgreifen — bewusst am Container statt über Leaflets
+       * `click`:
+       *
+       * Gemessen, nicht vermutet: Leaflets `click` erreicht bei einem
+       * Fingertipp den Handler nicht (mit `tap: false` verlässt sich Leaflet auf
+       * den nativen Klick und unterdrückt ihn nach Berührungen). Am Container
+       * kommt er verlässlich an, bei Maus und Finger gleichermaßen. Die
+       * Umrechnung in Koordinaten macht Leaflet trotzdem.
+       */
+      const zuKoordinate = (clientX: number, clientY: number) => {
+        const r = host.getBoundingClientRect();
+        const ll = map.containerPointToLatLng(L.point(clientX - r.left, clientY - r.top));
+        onpick?.(ll.lat, ll.lng);
+      };
 
+      host.addEventListener(
+        'click',
+        (e: MouseEvent) => {
+          if (pickMode) zuKoordinate(e.clientX, e.clientY);
+        },
+        true,
+      );
+
+      // Rechtsklick am Rechner.
+      map.on('contextmenu', (e: any) => {
+        onpick?.(e.latlng.lat, e.latlng.lng);
+      });
+
+      /*
+       * Langer Druck auf dem Handy. Auch das selbst gebaut: iOS erzeugt bei
+       * einem langen Druck kein `contextmenu`, und Leaflets alter Tap-Handler
+       * greift auf heutigen Geräten nicht mehr. Abgebrochen wird, sobald der
+       * Finger wandert — sonst löst jedes Verschieben der Karte aus.
+       */
+      let druck: ReturnType<typeof setTimeout> | undefined;
+      let start: { x: number; y: number } | null = null;
+
+      host.addEventListener(
+        'touchstart',
+        (e: TouchEvent) => {
+          if (!onpick || e.touches.length !== 1) return;
+          const t = e.touches[0];
+          start = { x: t.clientX, y: t.clientY };
+          clearTimeout(druck);
+          druck = setTimeout(() => {
+            if (!start) return;
+            zuKoordinate(start.x, start.y);
+            start = null;
+          }, 550);
+        },
+        { passive: true },
+      );
+
+      const druckAbbrechen = (e?: TouchEvent) => {
+        if (e && start && e.touches.length === 1) {
+          const t = e.touches[0];
+          // Kleine Wackler sind kein Verschieben.
+          if (Math.abs(t.clientX - start.x) < 12 && Math.abs(t.clientY - start.y) < 12) return;
+        }
+        clearTimeout(druck);
+        start = null;
+      };
+
+      host.addEventListener('touchmove', druckAbbrechen, { passive: true });
+      host.addEventListener('touchend', () => druckAbbrechen(), { passive: true });
+      host.addEventListener('touchcancel', () => druckAbbrechen(), { passive: true });
+
+      baueMarker();
       ready = true;
       applyVisible();
       applyRoute();
       applySelected();
+      applyPin();
     })();
 
     return () => {
@@ -168,6 +250,60 @@
       markers.clear();
     };
   });
+
+  /**
+   * Marker zur Ortsliste aufbauen. Läuft erneut, wenn Orte dazukommen oder
+   * sich ändern — eigene Orte entstehen erst zur Laufzeit.
+   */
+  function baueMarker() {
+    if (!map || !L) return;
+    const gewuenscht = new Set(places.map((p) => p.nr));
+
+    for (const [nr, marker] of markers) {
+      if (gewuenscht.has(nr)) continue;
+      if (map.hasLayer(marker)) map.removeLayer(marker);
+      markers.delete(nr);
+    }
+
+    for (const place of places) {
+      const vorhanden = markers.get(place.nr);
+      if (vorhanden) {
+        // Name, Kategorie oder Koordinate können sich geändert haben.
+        vorhanden.setLatLng(offsetOf(place));
+        vorhanden.setIcon(iconFor(place));
+        vorhanden.setPopupContent(popupHtml(place));
+        continue;
+      }
+      const marker = L.marker(offsetOf(place), {
+        icon: iconFor(place),
+        title: `${place.nr} · ${place.name}`,
+        riseOnHover: true,
+      });
+      marker.bindPopup(popupHtml(place), { maxWidth: 300, minWidth: 220 });
+      marker.on('click', () => onselect?.(place.nr));
+      markers.set(place.nr, marker);
+    }
+  }
+
+  /** Vorschau-Pin für einen Ort, der gerade erfasst wird. */
+  function applyPin() {
+    if (!map || !L) return;
+    if (pinMarker) {
+      map.removeLayer(pinMarker);
+      pinMarker = null;
+    }
+    if (!pin) return;
+    pinMarker = L.marker([pin.lat, pin.lng], {
+      icon: L.divIcon({
+        className: 'jp-pin-neu',
+        html: '<span>+</span>',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+      }),
+      zIndexOffset: 1000,
+      interactive: false,
+    }).addTo(map);
+  }
 
   /** Nur die Marker anzeigen, die aktuell gefiltert sind. */
   function applyVisible() {
@@ -231,8 +367,28 @@
 
   // Auf Änderungen der Props reagieren, sobald die Karte steht.
   $effect(() => {
+    // Auf die Liste selbst und auf die Felder horchen, die den Marker prägen:
+    // Ein umbenannter Ort soll auch umbenannt auf der Karte stehen.
+    void places.map((p) => `${p.nr}|${p.name}|${p.category}|${p.lat}|${p.lng}`).join();
+    if (ready) {
+      baueMarker();
+      applyVisible();
+    }
+  });
+
+  $effect(() => {
     void visible;
     if (ready) applyVisible();
+  });
+
+  $effect(() => {
+    void pin;
+    if (ready) applyPin();
+  });
+
+  $effect(() => {
+    if (!host) return;
+    host.classList.toggle('picking', pickMode);
   });
 
   $effect(() => {
@@ -248,6 +404,10 @@
 
 <div class="map" bind:this={host} role="application" aria-label="Karte der Reiseorte"></div>
 
+{#if pickMode}
+  <div class="pickhint">Auf die Karte tippen, um die Stelle zu setzen</div>
+{/if}
+
 {#if !ready}
   <div class="loading">Karte wird geladen …</div>
 {/if}
@@ -259,6 +419,27 @@
     min-height: 260px;
     background: var(--washi-2);
     z-index: 0;
+  }
+
+  /* Im Erfassungsmodus soll klar sein, dass ein Tipp etwas anderes tut. */
+  .map.picking {
+    cursor: crosshair;
+  }
+
+  .pickhint {
+    position: absolute;
+    left: 50%;
+    top: 12px;
+    transform: translateX(-50%);
+    z-index: 500;
+    background: var(--shu);
+    color: #fff;
+    font-family: var(--util);
+    font-size: 0.74rem;
+    padding: 7px 13px;
+    border-radius: 999px;
+    pointer-events: none;
+    box-shadow: 0 2px 10px rgba(22, 35, 60, 0.3);
   }
 
   .loading {
@@ -315,6 +496,54 @@
     border: 2px solid rgba(239, 231, 214, 0.92);
     box-shadow: 0 1px 4px rgba(13, 22, 38, 0.45);
     cursor: pointer;
+  }
+
+  /* Selbst ergänzte Orte tragen einen gestrichelten Ring — auf der Karte soll
+     erkennbar sein, was aus dem Reiseband kommt und was von euch. */
+  :global(.jp-eigen span) {
+    border-style: dashed;
+    border-color: #fff;
+    box-shadow:
+      0 0 0 2px rgba(198, 64, 43, 0.55),
+      0 1px 4px rgba(13, 22, 38, 0.45);
+  }
+
+  :global(.jp-pin-neu) {
+    background: none !important;
+    border: none !important;
+  }
+
+  :global(.jp-pin-neu span) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--shu);
+    color: #fff;
+    font-family: var(--util);
+    font-size: 1.1rem;
+    font-weight: 700;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(13, 22, 38, 0.5);
+    animation: jp-pin-puls 1.4s ease-in-out infinite;
+  }
+
+  @keyframes jp-pin-puls {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.12);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.jp-pin-neu span) {
+      animation: none;
+    }
   }
 
   :global(.leaflet-container) {

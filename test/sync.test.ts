@@ -22,7 +22,13 @@ import {
   removeExpense,
   resetAll,
   uebernehmeFremdstand,
+  ortAnlegen,
+  ortAendern,
+  ortLoeschen,
+  istPlanbar,
+  vorlaeufigeOrte,
 } from '../src/lib/store.svelte';
+import { ABSEITS } from '../src/lib/places';
 import { auth } from '../src/lib/auth.svelte';
 import {
   sync,
@@ -436,5 +442,176 @@ describe('Störungen', () => {
     expect(ablage.tabellen.expenses).toHaveLength(0);
     expect(sync.offen).toBe(0);
     expect(sync.status).toBe('bereit');
+  });
+});
+
+describe('Eigene Orte', () => {
+  /** Grundgerüst für einen neuen Ort — die Maske füllt dasselbe. */
+  const HOSHINO = {
+    name: 'Hoshino Coffee',
+    category: 'essen' as const,
+    station: 'tokio',
+    stationLabel: 'Tokio',
+    area: 'zentrum' as const,
+    lat: 35.6932,
+    lng: 139.7005,
+    descriptionHtml: 'Pancakes, die eine halbe Stunde brauchen.',
+  };
+
+  it('vergibt die endgültige Nummer aus der Datenbank, nicht im Browser', async () => {
+    const vorlaeufig = ortAnlegen(HOSHINO, WER);
+    expect(vorlaeufig).toBeLessThan(0); // noch keine echte Nummer
+    expect(vorlaeufigeOrte()).toHaveLength(1);
+
+    await abgleichen();
+
+    // 165 ist der Start der Sequenz: 1–164 gehören dem gedruckten Reiseband.
+    expect(ablage.tabellen.places_custom[0].nr).toBe(165);
+    expect(plan.customPlaces[0].nr).toBe(165);
+    expect(plan.customPlaces[0].vorlaeufig).toBe(false);
+    expect(vorlaeufigeOrte()).toHaveLength(0);
+  });
+
+  it('zählt weiter statt eine Nummer zweimal zu vergeben', async () => {
+    ortAnlegen(HOSHINO, WER);
+    await abgleichen();
+    ortAnlegen({ ...HOSHINO, name: 'Ninja Café Asakusa' }, WER);
+    await abgleichen();
+
+    expect(plan.customPlaces.map((p) => p.nr)).toEqual([165, 166]);
+  });
+
+  it('zieht die neue Nummer in Tagesplan und Häkchen nach', async () => {
+    const vorlaeufig = ortAnlegen(HOSHINO, WER);
+    // Direkt auf einen Tag gelegt und abgehakt, bevor Netz da war.
+    addToDay('2026-10-12', vorlaeufig);
+    toggleDone(vorlaeufig);
+    expect(plan.days['2026-10-12'].placeNrs).toEqual([vorlaeufig]);
+
+    await abgleichen();
+
+    expect(plan.customPlaces[0].nr).toBe(165);
+    expect(plan.days['2026-10-12'].placeNrs).toEqual([165]);
+    expect(plan.done).toEqual([165]);
+    // Und in der Ablage steht die echte Nummer, keine vorläufige.
+    expect(ablage.tabellen.plan_days.map((z) => z.place_nr)).toEqual([165]);
+    expect(ablage.tabellen.plan_flags.map((z) => z.schluessel)).toEqual(['165']);
+  });
+
+  it('legt den Ort vor dem Tag an, der ihn enthält', async () => {
+    const nr = ortAnlegen(HOSHINO, WER);
+    addToDay('2026-10-12', nr);
+    await abgleichen();
+
+    const ortPost = ablage.verlauf.indexOf('POST places_custom');
+    const tagPost = ablage.verlauf.indexOf('POST plan_days');
+    expect(ortPost).toBeGreaterThanOrEqual(0);
+    expect(ortPost).toBeLessThan(tagPost);
+  });
+
+  it('überlebt einen Neustart ohne Netz und bekommt die Nummer später', async () => {
+    ablage.faelltAus = 1;
+    const vorlaeufig = ortAnlegen(HOSHINO, WER);
+    await abgleichen();
+    expect(sync.status).toBe('wartet');
+    expect(plan.customPlaces[0].nr).toBe(vorlaeufig);
+    // Nichts geholt — der lokale, nummernlose Ort ist noch da.
+    expect(plan.customPlaces).toHaveLength(1);
+
+    verbinde();
+    await abgleichen();
+    expect(plan.customPlaces[0].nr).toBe(165);
+  });
+
+  it('ändert einen Ort ohne neue Nummer', async () => {
+    ortAnlegen(HOSHINO, WER);
+    await abgleichen();
+    ortAendern(165, { name: 'Hoshino Coffee (Shinjuku)' });
+    await abgleichen();
+
+    expect(ablage.tabellen.places_custom).toHaveLength(1);
+    expect(ablage.tabellen.places_custom[0]).toMatchObject({
+      nr: 165,
+      name: 'Hoshino Coffee (Shinjuku)',
+    });
+  });
+
+  it('löscht einen Ort samt seiner Spuren im Plan', async () => {
+    ortAnlegen(HOSHINO, WER);
+    await abgleichen();
+    addToDay('2026-10-12', 165);
+    toggleDone(165);
+    await abgleichen();
+
+    ortLoeschen(165);
+    await abgleichen();
+
+    expect(ablage.tabellen.places_custom).toHaveLength(0);
+    // Ein Tag ohne Orte verschwindet beim Holen ganz — er hat keine Zeile mehr.
+    expect(plan.days['2026-10-12']?.placeNrs ?? []).toEqual([]);
+    expect(plan.done).toEqual([]);
+    expect(ablage.tabellen.plan_days).toHaveLength(0);
+  });
+
+  it('holt eigene Orte anderer Geräte', async () => {
+    ablage.tabellen.places_custom = [
+      {
+        nr: 170,
+        name: 'Burg Matsumoto',
+        kategorie: 'kultur',
+        station: ABSEITS,
+        area: 'zentrum',
+        lat: 36.2384,
+        lng: 137.969,
+        beschreibung: 'Schwarze Burg, Original von 1594.',
+        from_book: true,
+        closed_day: null,
+        needs_booking: false,
+        cash_only: false,
+        updated_at: 'x',
+      },
+    ];
+    await abgleichen();
+
+    const ort = plan.customPlaces[0];
+    expect(ort).toMatchObject({ nr: 170, name: 'Burg Matsumoto', station: ABSEITS });
+    expect(ort.stationLabel).toBe('Nicht auf der Route');
+    expect(ort.book).toBeTruthy(); // 📖 ist gesetzt
+    expect(ort.vorlaeufig).toBe(false);
+  });
+});
+
+describe('Nicht auf der Route', () => {
+  const MATSUMOTO = {
+    name: 'Burg Matsumoto',
+    category: 'kultur' as const,
+    station: ABSEITS,
+    stationLabel: 'Nicht auf der Route',
+    area: 'zentrum' as const,
+    lat: 36.2384,
+    lng: 137.969,
+  };
+
+  it('ist nicht auf einen Reisetag legbar', async () => {
+    const nr = ortAnlegen(MATSUMOTO, WER);
+    expect(istPlanbar(nr)).toBe(false);
+
+    addToDay('2026-10-06', nr);
+    expect(plan.days['2026-10-06']?.placeNrs ?? []).toEqual([]);
+  });
+
+  it('nimmt einen Ort vom Tag, der nachträglich abseits landet', async () => {
+    const nr = ortAnlegen({ ...MATSUMOTO, station: 'takayama', stationLabel: 'Takayama' }, WER);
+    addToDay('2026-10-06', nr);
+    expect(plan.days['2026-10-06'].placeNrs).toEqual([nr]);
+
+    ortAendern(nr, { station: ABSEITS, stationLabel: 'Nicht auf der Route' });
+    expect(plan.days['2026-10-06'].placeNrs).toEqual([]);
+  });
+
+  it('lässt feste Orte des Reisebands unverändert planbar', () => {
+    expect(istPlanbar(1)).toBe(true);
+    expect(istPlanbar(164)).toBe(true);
+    expect(istPlanbar(999)).toBe(false);
   });
 });

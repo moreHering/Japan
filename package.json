@@ -11,7 +11,9 @@
     "check": "astro check",
     "db:test": "supabase/test/run.sh",
     "test": "vitest run",
-    "db:dashboard": "node scripts/migration-fuer-dashboard.mjs"
+    "db:dashboard": "node scripts/migration-fuer-dashboard.mjs",
+    "test:browser": "node test/browser-orte.mjs",
+    "test:all": "vitest run && node test/browser-orte.mjs"
   },
   "dependencies": {
     "@astrojs/svelte": "^9.0.1",
@@ -21,6 +23,7 @@
     "svelte": "^5.57.0"
   },
   "devDependencies": {
+    "playwright": "^1.63.0",
     "vitest": "^5.0.1"
   }
 }

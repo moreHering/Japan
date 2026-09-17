@@ -1,12 +1,31 @@
 <script lang="ts">
-  /** Vollbildkarte mit Kategorie-Layern, Stationssprung und Tagesfilter. */
+  /**
+   * Vollbildkarte mit Kategorie-Layern, Stationssprung und Tagesfilter — und
+   * der Stelle, an der eigene Orte entstehen.
+   *
+   * Die feste Ortsliste kommt als Prop aus dem Build; die selbst ergänzten
+   * kommen zur Laufzeit aus dem Plan dazu. Beides wird hier zusammengeführt,
+   * damit Filter, Marker und Zählung nichts davon unterscheiden müssen.
+   */
   import MapView from './MapView.svelte';
-  import { CATEGORIES, type Category, type Place } from '../lib/places';
+  import OrtFormular from './OrtFormular.svelte';
+  import {
+    ABSEITS_LABEL,
+    CATEGORIES,
+    istAbseits,
+    istEigen,
+    type Category,
+    type EigenerOrt,
+    type Place,
+  } from '../lib/places';
   import { buildDays, formatDay, stations, type TripDay } from '../lib/trip';
   import { placesOfDay, isDone, plan } from '../lib/store.svelte';
 
   type Props = { places: Place[] };
   let { places }: Props = $props();
+
+  /** Feste und eigene Orte in einer Liste. */
+  let alle = $derived<Place[]>([...places, ...plan.customPlaces]);
 
   const days: TripDay[] = buildDays();
 
@@ -17,8 +36,18 @@
   let mapRef = $state<MapView | null>(null);
   let panelOpen = $state(false);
 
+  /** Orte abseits der Route ausblenden, solange man sie nicht sehen will. */
+  let zeigeAbseits = $state(true);
+
+  /** Erfassung: gewählte Stelle, offenes Formular, Wartemodus. */
+  let pin = $state<{ lat: number; lng: number } | null>(null);
+  let pickMode = $state(false);
+  let formOffen = $state(false);
+  let bearbeiten = $state<EigenerOrt | null>(null);
+
   let visible = $derived.by(() => {
-    let list = places.filter((p) => cats.has(p.category));
+    let list = alle.filter((p) => cats.has(p.category));
+    if (!zeigeAbseits) list = list.filter((p) => !istAbseits(p));
 
     if (mode === 'tag') {
       const onDay = new Set(placesOfDay(day));
@@ -49,20 +78,104 @@
   }
 
   let dayCount = $derived(placesOfDay(day).length);
+  let eigeneAnzahl = $derived(plan.customPlaces.length);
+  let abseitsAnzahl = $derived(alle.filter(istAbseits).length);
+
+  // ------------------------------------------------------------- Erfassung --
+
+  /** Stelle auf der Karte gewählt — Formular öffnen. */
+  function stelleGewaehlt(lat: number, lng: number) {
+    pin = { lat, lng };
+    pickMode = false;
+    formOffen = true;
+    panelOpen = false;
+  }
+
+  function erfassenStarten() {
+    bearbeiten = null;
+    pin = null;
+    formOffen = false;
+    pickMode = true;
+    panelOpen = false;
+  }
+
+  function schliessen() {
+    formOffen = false;
+    pickMode = false;
+    pin = null;
+    bearbeiten = null;
+  }
+
+  function fertig(nr: number | null) {
+    schliessen();
+    if (nr !== null) selected = nr;
+  }
+
+  /** Den ausgewählten Ort bearbeiten, wenn es ein eigener ist. */
+  let auswahlEigen = $derived.by(() => {
+    if (selected == null) return null;
+    const p = alle.find((x) => x.nr === selected);
+    return p && istEigen(p) ? p : null;
+  });
+
+  function bearbeitenStarten() {
+    if (!auswahlEigen) return;
+    bearbeiten = auswahlEigen;
+    pin = { lat: auswahlEigen.lat, lng: auswahlEigen.lng };
+    formOffen = true;
+    panelOpen = false;
+  }
 </script>
 
 <div class="page">
   <div class="mapholder">
     <MapView
       bind:this={mapRef}
-      {places}
+      places={alle}
       {visible}
       {route}
       {selected}
+      {pin}
+      {pickMode}
       fullscreen
       onselect={(nr) => (selected = nr)}
+      onpick={stelleGewaehlt}
     />
   </div>
+
+  {#if !formOffen}
+    <div class="werkzeuge">
+      {#if auswahlEigen}
+        <button class="rundknopf" onclick={bearbeitenStarten} title="Diesen Ort bearbeiten">
+          ✎<span>Nr. {auswahlEigen.vorlaeufig ? 'neu' : auswahlEigen.nr}</span>
+        </button>
+      {/if}
+      <button
+        class="rundknopf haupt"
+        class:aktiv={pickMode}
+        onclick={() => (pickMode ? schliessen() : erfassenStarten())}
+        title="Eigenen Ort ergänzen — oder lange auf die Karte drücken"
+      >
+        {pickMode ? '✕' : '+'}<span>{pickMode ? 'abbrechen' : 'Ort'}</span>
+      </button>
+    </div>
+  {/if}
+
+  {#if formOffen && pin}
+    <div class="blatt">
+      <OrtFormular
+        lat={pin.lat}
+        lng={pin.lng}
+        ort={bearbeiten}
+        onfertig={fertig}
+        onabbruch={schliessen}
+        onneuwaehlen={() => {
+          formOffen = false;
+          pickMode = true;
+        }}
+      />
+    </div>
+  {/if}
 
   <button class="toggle" onclick={() => (panelOpen = !panelOpen)} aria-expanded={panelOpen}>
     {panelOpen ? '✕' : '☰'} Filter
@@ -89,7 +202,9 @@
     <section>
       <h4>Auswahl</h4>
       <div class="chips">
-        <button class="chip plain" class:on={mode === 'alle'} onclick={() => (mode = 'alle')}>alle 164</button>
+        <button class="chip plain" class:on={mode === 'alle'} onclick={() => (mode = 'alle')}>
+          alle {alle.length}
+        </button>
         <button class="chip plain" class:on={mode === 'offen'} onclick={() => (mode = 'offen')}>noch offen</button>
         <button class="chip plain" class:on={mode === 'geplant'} onclick={() => (mode = 'geplant')}>eingeplant</button>
         <button class="chip plain" class:on={mode === 'tag'} onclick={() => (mode = 'tag')}>ein Tag</button>
@@ -126,9 +241,30 @@
       </div>
     </section>
 
+    <section>
+      <h4>Eigene Orte</h4>
+      <p class="hint">
+        {#if eigeneAnzahl}
+          {eigeneAnzahl} selbst ergänzt — gestrichelter Ring auf der Karte.
+        {:else}
+          Noch keine. Lange auf die Karte drücken oder den +-Knopf nehmen.
+        {/if}
+      </p>
+      {#if abseitsAnzahl}
+        <button
+          class="chip plain"
+          class:on={zeigeAbseits}
+          onclick={() => (zeigeAbseits = !zeigeAbseits)}
+          aria-pressed={zeigeAbseits}
+        >
+          {ABSEITS_LABEL} ({abseitsAnzahl})
+        </button>
+      {/if}
+    </section>
+
     <section class="foot">
       <button class="btn small" onclick={() => mapRef?.fitVisible()}>Auf Auswahl einpassen</button>
-      <p class="count">{visible.length} von {places.length} Orten sichtbar</p>
+      <p class="count">{visible.length} von {alle.length} Orten sichtbar</p>
     </section>
   </aside>
 </div>
@@ -148,6 +284,85 @@
     flex: 1;
     position: relative;
     min-width: 0;
+  }
+
+  /* Die Knöpfe liegen unten links, weil rechts der Filterknopf sitzt und unten
+     mittig auf dem Handy die Tab-Leiste. */
+  .werkzeuge {
+    position: absolute;
+    left: 12px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    z-index: 500;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 9px;
+  }
+
+  .rundknopf {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 46px;
+    padding: 0 16px 0 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--washi);
+    color: var(--ai);
+    font-family: var(--util);
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(22, 35, 60, 0.22);
+  }
+
+  .rundknopf span {
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
+  }
+
+  .rundknopf.haupt {
+    background: var(--shu);
+    border-color: var(--shu);
+    color: #fff;
+  }
+
+  .rundknopf.haupt.aktiv {
+    background: var(--ai);
+    border-color: var(--ai);
+  }
+
+  /*
+   * Die Maske kommt auf dem Handy als Blatt von unten und am Rechner als Karte
+   * über der Karte. Beides dieselbe Komponente — nur die Platzierung
+   * unterscheidet sich.
+   */
+  .blatt {
+    position: absolute;
+    z-index: 600;
+    background: var(--washi-2);
+    border: 1px solid var(--line);
+    box-shadow: 0 -4px 24px rgba(22, 35, 60, 0.22);
+    padding: 15px 16px calc(18px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    left: 12px;
+    bottom: 14px;
+    width: 380px;
+    max-height: calc(100% - 28px);
+    border-radius: var(--radius);
+  }
+
+  @media (max-width: 640px) {
+    .blatt {
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: auto;
+      max-height: 88%;
+      border-radius: var(--radius) var(--radius) 0 0;
+      border-left: none;
+      border-right: none;
+      border-bottom: none;
+    }
   }
 
   .panel {

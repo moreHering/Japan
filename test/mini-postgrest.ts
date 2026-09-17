@@ -33,6 +33,7 @@ const SCHLUESSEL: Record<string, string[]> = {
   plan_notes: ['datum'],
   plan_flags: ['art', 'schluessel'],
   expenses: ['id'],
+  places_custom: ['nr'],
 };
 
 const SPALTEN: Record<string, string[]> = {
@@ -40,7 +41,30 @@ const SPALTEN: Record<string, string[]> = {
   plan_notes: ['datum', 'notiz', 'updated_at', 'updated_by'],
   plan_flags: ['art', 'schluessel', 'wert', 'updated_at', 'updated_by'],
   expenses: ['id', 'datum', 'text', 'yen', 'payer', 'station', 'created_at', 'created_by'],
+  places_custom: [
+    'nr',
+    'name',
+    'kategorie',
+    'station',
+    'area',
+    'lat',
+    'lng',
+    'beschreibung',
+    'from_book',
+    'closed_day',
+    'needs_booking',
+    'cash_only',
+    'created_at',
+    'created_by',
+    'updated_at',
+  ],
 };
+
+/**
+ * Spalten mit Standardwert — sie dürfen beim Einfügen fehlen.
+ * `places_custom.nr` kommt aus einer Sequenz ab 165, wie in der Migration.
+ */
+const SEQUENZ_START = 165;
 
 export class Ablage {
   tabellen: Record<string, Zeile[]> = {
@@ -48,7 +72,11 @@ export class Ablage {
     plan_notes: [],
     plan_flags: [],
     expenses: [],
+    places_custom: [],
   };
+
+  /** Nächster Wert der Nummernsequenz. Zählt auch nach Löschungen weiter. */
+  naechsteNr = SEQUENZ_START;
 
   /** Mitschrift aller Anfragen — damit ein Test die Reihenfolge prüfen kann. */
   verlauf: string[] = [];
@@ -59,6 +87,7 @@ export class Ablage {
   leeren() {
     for (const t of Object.keys(this.tabellen)) this.tabellen[t] = [];
     this.verlauf = [];
+    this.naechsteNr = SEQUENZ_START;
   }
 
   private pk(tabelle: string, z: Zeile) {
@@ -101,7 +130,13 @@ export class Ablage {
       case 'GET':
         return this.lesen(tabelle, url);
       case 'POST':
-        return this.schreiben(tabelle, url, koerper, prefer.includes('merge-duplicates'));
+        return this.schreiben(
+          tabelle,
+          url,
+          koerper,
+          prefer.includes('merge-duplicates'),
+          (kopf.get('Accept') ?? '').includes('vnd.pgrst.object'),
+        );
       case 'DELETE':
         return this.loeschen(tabelle, url);
       default:
@@ -136,9 +171,16 @@ export class Ablage {
 
   // -------------------------------------------------------------- schreiben --
 
-  private schreiben(tabelle: string, url: URL, koerper: unknown, upsert: boolean) {
+  private schreiben(
+    tabelle: string,
+    url: URL,
+    koerper: unknown,
+    upsert: boolean,
+    einObjekt: boolean,
+  ) {
     const zeilen = (Array.isArray(koerper) ? koerper : [koerper]) as Zeile[];
     const ziel = url.searchParams.get('on_conflict');
+    const geschrieben: Zeile[] = [];
 
     if (upsert) {
       if (!ziel) throw new Error(`Upsert auf ${tabelle} ohne on_conflict.`);
@@ -150,8 +192,16 @@ export class Ablage {
       throw new Error('on_conflict ohne Prefer: resolution=merge-duplicates.');
     }
 
-    for (const z of zeilen) {
+    for (const roh of zeilen) {
+      const z: Zeile = { ...roh };
       for (const k of Object.keys(z)) this.pruefeSpalte(tabelle, k);
+
+      // Die Nummer eigener Orte vergibt die Sequenz, wenn der Client keine
+      // mitschickt — genau wie `default nextval(...)` in der Migration.
+      if (tabelle === 'places_custom' && (z.nr === undefined || z.nr === null)) {
+        z.nr = this.naechsteNr++;
+      }
+
       for (const k of SCHLUESSEL[tabelle]) {
         if (z[k] === undefined || z[k] === null) {
           throw new Error(`${tabelle}: Primärschlüsselteil ${k} fehlt.`);
@@ -168,8 +218,10 @@ export class Ablage {
       const i = this.tabellen[tabelle].findIndex((v) => this.pk(tabelle, v) === key);
       if (i === -1) {
         this.tabellen[tabelle].push({ ...z });
+        geschrieben.push({ ...z });
       } else if (upsert) {
         this.tabellen[tabelle][i] = { ...this.tabellen[tabelle][i], ...z };
+        geschrieben.push({ ...this.tabellen[tabelle][i] });
       } else {
         return antwort(409, {
           code: '23505',
@@ -177,7 +229,19 @@ export class Ablage {
         });
       }
     }
-    return antwort(201, null);
+    // Nur wenn der Aufrufer `select` anhängt, kommt etwas zurück — so hält es
+    // PostgREST auch.
+    if (!url.searchParams.has('select')) return antwort(201, null);
+    if (einObjekt) {
+      if (geschrieben.length !== 1) {
+        return antwort(406, {
+          code: 'PGRST116',
+          message: `JSON object requested, multiple (or no) rows returned`,
+        });
+      }
+      return antwort(201, geschrieben[0]);
+    }
+    return antwort(201, geschrieben);
   }
 
   // --------------------------------------------------------------- löschen --
@@ -230,6 +294,21 @@ export class Ablage {
       case 'neq':
         treffer = String(wert) !== arg;
         break;
+      case 'gt':
+      case 'gte':
+      case 'lt':
+      case 'lte': {
+        // Zahlenvergleich, wenn beide Seiten Zahlen sind — sonst textuell,
+        // wie Postgres es je nach Spaltentyp auch tut.
+        const a = Number(wert);
+        const b = Number(arg);
+        const zahlen = Number.isFinite(a) && Number.isFinite(b);
+        const x: number | string = zahlen ? a : String(wert);
+        const y: number | string = zahlen ? b : arg;
+        treffer =
+          op === 'gt' ? x > y : op === 'gte' ? x >= y : op === 'lt' ? x < y : x <= y;
+        break;
+      }
       case 'in': {
         if (!/^\(.*\)$/.test(arg)) throw new Error(`in-Filter ohne Klammern: ${arg}`);
         const liste = arg

@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Ein Ort in der Liste: Nummer, Name, Hinweise, Aktionen. */
-  import { categoryOf, type Place } from '../lib/places';
+  import { categoryOf, istEigen, type Place } from '../lib/places';
   import { maps } from '../lib/paths';
   import { isDone, toggleDone, dayOfPlace } from '../lib/store.svelte';
   import { formatDay } from '../lib/trip';
@@ -19,6 +19,9 @@
   let { place, compact = false, active = false, onselect, children }: Props = $props();
 
   const cat = categoryOf(place.category);
+  // Ein Ort ohne endgültige Nummer zeigt "neu" — eine negative Zahl wäre falsch.
+  let eigen = $derived(istEigen(place) ? place : null);
+  let nummer = $derived(eigen?.vorlaeufig ? 'neu' : String(place.nr));
   let done = $derived(isDone(place.nr));
   let placedOn = $derived(dayOfPlace(place.nr));
   let expanded = $state(false);
@@ -35,10 +38,13 @@
 <article class="place" class:active class:done class:compact>
   <button
     class="pin {place.category}"
-    title={`Nr. ${place.nr} — auf der Karte zeigen`}
+    class:eigen={Boolean(eigen)}
+    title={eigen?.vorlaeufig
+      ? 'Noch ohne Nummer — kommt beim nächsten Abgleich'
+      : `Nr. ${place.nr} — auf der Karte zeigen`}
     onclick={() => onselect?.(place.nr)}
   >
-    {place.nr}
+    {nummer}
   </button>
 
   <div class="body">
@@ -48,9 +54,17 @@
         <span class="tip" title="Freundestipp">★</span>
       {/if}
       {#if place.book}
-        <span class="book" title={`Aus dem Reiseführer — Erlebnis ${place.book}: ${place.bookTitle}`}>
+        <span
+          class="book"
+          title={place.book === '—'
+            ? 'Aus dem Reiseführer'
+            : `Aus dem Reiseführer — Erlebnis ${place.book}: ${place.bookTitle}`}
+        >
           📖
         </span>
+      {/if}
+      {#if eigen}
+        <span class="selbst" title="Selbst ergänzt">✎</span>
       {/if}
     </h3>
 
@@ -152,6 +166,18 @@
   .book {
     font-size: 0.8em;
     opacity: 0.85;
+  }
+
+  .selbst {
+    font-size: 0.8em;
+    color: var(--shu);
+  }
+
+  /* Gestrichelter Rand wie der Marker auf der Karte — dieselbe Sprache für
+     dasselbe: von euch ergänzt, nicht aus dem Reiseband. */
+  .pin.eigen {
+    border-style: dashed;
+    box-shadow: 0 0 0 2px rgba(198, 64, 43, 0.4);
   }
 
   .meta {

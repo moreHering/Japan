@@ -16,6 +16,15 @@
  * die Naht, an der das Backend andockt, ohne die Oberfläche anzufassen.
  */
 
+import {
+  ABSEITS,
+  CATEGORIES,
+  istAbseits,
+  placeByNr,
+  type Category,
+  type EigenerOrt,
+} from './places';
+
 const KEY = 'japan2026:plan';
 const VERSION = 1;
 
@@ -46,6 +55,8 @@ export type PlanState = {
   /** Selbst ergänzte Packlisten-Einträge. */
   packingExtra: string[];
   expenses: Expense[];
+  /** Selbst angelegte Orte. Teil des Plans, damit der Export sie mitnimmt. */
+  customPlaces: EigenerOrt[];
   /** Zeitpunkt der letzten Änderung, für den Export sichtbar. */
   updatedAt: string | null;
 };
@@ -62,6 +73,8 @@ export type Aenderung =
   | { art: 'marke'; typ: 'done' | 'booking' | 'packing'; schluessel: string }
   | { art: 'ausgabe-neu'; id: string }
   | { art: 'ausgabe-weg'; id: string }
+  | { art: 'ort'; nr: number }
+  | { art: 'ort-weg'; nr: number }
   | { art: 'alles' };
 
 let beobachter: ((änderungen: Aenderung[]) => void) | null = null;
@@ -80,7 +93,45 @@ function emptyState(): PlanState {
     packing: {},
     packingExtra: [],
     expenses: [],
+    customPlaces: [],
     updatedAt: null,
+  };
+}
+
+const KATEGORIEN = new Set(CATEGORIES.map((c) => c.key));
+
+/** Macht aus unbekannten Daten einen gültigen eigenen Ort — oder null. */
+function normalisiereOrt(raw: unknown): EigenerOrt | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Partial<EigenerOrt>;
+  const nr = Number(o.nr);
+  const lat = Number(o.lat);
+  const lng = Number(o.lng);
+  const name = typeof o.name === 'string' ? o.name.trim() : '';
+  if (!Number.isInteger(nr) || nr === 0 || !name) return null;
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) return null;
+  if (!Number.isFinite(lng) || lng < -180 || lng > 180) return null;
+  const category = (KATEGORIEN.has(o.category as Category) ? o.category : 'kultur') as Category;
+  return {
+    eigen: true,
+    vorlaeufig: nr < 0,
+    angelegtVon: typeof o.angelegtVon === 'string' ? o.angelegtVon : null,
+    nr,
+    name,
+    category,
+    station: typeof o.station === 'string' && o.station ? o.station : ABSEITS,
+    stationLabel: typeof o.stationLabel === 'string' ? o.stationLabel : '',
+    area: o.area === 'ausflug' ? 'ausflug' : 'zentrum',
+    lat,
+    lng,
+    placeId: null,
+    descriptionHtml: typeof o.descriptionHtml === 'string' ? o.descriptionHtml : '',
+    isFriendTip: Boolean(o.isFriendTip),
+    book: typeof o.book === 'string' && o.book ? o.book : undefined,
+    bookTitle: typeof o.bookTitle === 'string' && o.bookTitle ? o.bookTitle : undefined,
+    needsBooking: Boolean(o.needsBooking),
+    closedDay: typeof o.closedDay === 'string' && o.closedDay ? o.closedDay : null,
+    cashOnly: Boolean(o.cashOnly),
   };
 }
 
@@ -121,6 +172,13 @@ function normalize(raw: unknown): PlanState {
         payer: String(e.payer ?? ''),
         station: String(e.station ?? ''),
       }));
+  }
+  if (Array.isArray(o.customPlaces)) {
+    for (const roh of o.customPlaces) {
+      const ort = normalisiereOrt(roh);
+      // Zwei Orte mit derselben Nummer wären in der Karte nicht auflösbar.
+      if (ort && !base.customPlaces.some((x) => x.nr === ort.nr)) base.customPlaces.push(ort);
+    }
   }
   if (typeof o.updatedAt === 'string') base.updatedAt = o.updatedAt;
   return base;
@@ -175,6 +233,7 @@ export function uebernehmeFremdstand(next: Partial<PlanState>) {
   plan.packing = voll.packing;
   plan.packingExtra = voll.packingExtra;
   plan.expenses = voll.expenses;
+  plan.customPlaces = voll.customPlaces;
   persist();
 }
 
@@ -184,6 +243,7 @@ export function hatInhalt(): boolean {
     Object.values(plan.days).some((d) => d.placeNrs.length > 0 || d.note !== '') ||
     plan.done.length > 0 ||
     plan.expenses.length > 0 ||
+    plan.customPlaces.length > 0 ||
     plan.packingExtra.length > 0 ||
     Object.values(plan.bookings).some(Boolean) ||
     Object.values(plan.packing).some(Boolean)
@@ -209,7 +269,21 @@ export function dayOfPlace(nr: number): string | null {
   return null;
 }
 
+/**
+ * Darf dieser Ort auf einen Reisetag? Orte abseits der Route nicht.
+ *
+ * Die Prüfung steht hier und nicht nur in der Oberfläche: Ein Knopf lässt sich
+ * ausblenden, eine Nummer per Tastatur trotzdem eintragen, und ein importierter
+ * Plan bringt womöglich eine mit.
+ */
+export function istPlanbar(nr: number): boolean {
+  const eigen = plan.customPlaces.find((p) => p.nr === nr);
+  if (eigen) return !istAbseits(eigen);
+  return placeByNr(nr) !== undefined;
+}
+
 export function addToDay(date: string, nr: number, index?: number) {
+  if (!istPlanbar(nr)) return;
   // Der Ort kann von einem anderen Tag kommen — dann ändern sich zwei Tage.
   const vorher = dayOfPlace(nr);
   const betroffen: Aenderung[] = [{ art: 'tag', datum: date }];
@@ -377,6 +451,7 @@ export function importJson(text: string): { ok: boolean; error?: string } {
       plan.packing = next.packing;
       plan.packingExtra = next.packingExtra;
       plan.expenses = next.expenses;
+      plan.customPlaces = next.customPlaces;
     },
     { art: 'alles' },
   );
@@ -393,6 +468,7 @@ export function resetAll() {
       plan.packing = fresh.packing;
       plan.packingExtra = fresh.packingExtra;
       plan.expenses = fresh.expenses;
+      plan.customPlaces = fresh.customPlaces;
     },
     { art: 'alles' },
   );
@@ -401,4 +477,106 @@ export function resetAll() {
 /** Zählt, wie viele Orte insgesamt eingeplant sind. */
 export function plannedCount(): number {
   return Object.values(plan.days).reduce((sum, d) => sum + d.placeNrs.length, 0);
+}
+
+// ------------------------------------------------------------- Eigene Orte ---
+
+/**
+ * Nächste vorläufige Nummer: negativ, absteigend.
+ *
+ * Positive Nummern gehören der Datenbanksequenz (ab 165) und dem gedruckten
+ * Reiseband (1–164). Eine negative kann mit keiner von beiden kollidieren und
+ * ist auf den ersten Blick als „noch nicht endgültig" erkennbar.
+ */
+function naechsteVorlaeufigeNr(): number {
+  const kleinste = plan.customPlaces.reduce((m, p) => Math.min(m, p.nr), 0);
+  return Math.min(kleinste, 0) - 1;
+}
+
+export type NeuerOrt = {
+  name: string;
+  category: Category;
+  station: string;
+  stationLabel: string;
+  area: 'zentrum' | 'ausflug';
+  lat: number;
+  lng: number;
+  descriptionHtml?: string;
+  book?: string;
+  bookTitle?: string;
+  closedDay?: string | null;
+  needsBooking?: boolean;
+  cashOnly?: boolean;
+};
+
+/** Legt einen Ort an und gibt seine (vorläufige) Nummer zurück. */
+export function ortAnlegen(daten: NeuerOrt, angelegtVon: string | null = null): number {
+  const nr = naechsteVorlaeufigeNr();
+  const ort = normalisiereOrt({ ...daten, nr, angelegtVon });
+  if (!ort) throw new Error('Der Ort ist unvollständig.');
+  mutate(
+    () => {
+      plan.customPlaces.push(ort);
+    },
+    { art: 'ort', nr },
+  );
+  return nr;
+}
+
+export function ortAendern(nr: number, daten: Partial<NeuerOrt>) {
+  const i = plan.customPlaces.findIndex((p) => p.nr === nr);
+  if (i === -1) return;
+  const zusammen = normalisiereOrt({ ...plan.customPlaces[i], ...daten, nr });
+  if (!zusammen) return;
+  mutate(
+    () => {
+      plan.customPlaces[i] = zusammen;
+      // Ein Ort, der abseits der Route landet, darf auf keinem Tag bleiben.
+      if (istAbseits(zusammen)) removeFromAnyDay(nr, false);
+    },
+    { art: 'ort', nr },
+  );
+}
+
+export function ortLoeschen(nr: number) {
+  if (!plan.customPlaces.some((p) => p.nr === nr)) return;
+  const datum = dayOfPlace(nr);
+  mutate(
+    () => {
+      plan.customPlaces = plan.customPlaces.filter((p) => p.nr !== nr);
+      removeFromAnyDay(nr, false);
+      const i = plan.done.indexOf(nr);
+      if (i !== -1) plan.done.splice(i, 1);
+    },
+    { art: 'ort-weg', nr },
+    ...(datum ? ([{ art: 'tag', datum }] as Aenderung[]) : []),
+    { art: 'marke', typ: 'done', schluessel: String(nr) },
+  );
+}
+
+/**
+ * Trägt die endgültige Nummer eines Orts nach, sobald die Datenbank sie
+ * vergeben hat — im Ort selbst **und** an jeder Stelle, die ihn referenziert.
+ *
+ * Löst absichtlich keine Meldung an den Abgleich aus: Der Aufrufer ist der
+ * Abgleich, der die Zeile gerade geschrieben hat.
+ */
+export function nummerErsetzen(alt: number, neu: number) {
+  const i = plan.customPlaces.findIndex((p) => p.nr === alt);
+  if (i === -1 || alt === neu) return;
+  plan.customPlaces[i] = { ...plan.customPlaces[i], nr: neu, vorlaeufig: false };
+
+  for (const tag of Object.values(plan.days)) {
+    const j = tag.placeNrs.indexOf(alt);
+    if (j !== -1) tag.placeNrs[j] = neu;
+  }
+  const d = plan.done.indexOf(alt);
+  if (d !== -1) plan.done[d] = neu;
+
+  persist();
+}
+
+/** Orte, die noch keine endgültige Nummer haben. */
+export function vorlaeufigeOrte(): EigenerOrt[] {
+  return plan.customPlaces.filter((p) => p.vorlaeufig);
 }

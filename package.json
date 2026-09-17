@@ -9,7 +9,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "db:test": "supabase/test/run.sh"
+    "db:test": "supabase/test/run.sh",
+    "test": "vitest run"
   },
   "dependencies": {
     "@astrojs/svelte": "^9.0.1",
@@ -17,5 +18,8 @@
     "astro": "^7.3.3",
     "leaflet": "^1.9.4",
     "svelte": "^5.57.0"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.1"
   }
 }

@@ -2,16 +2,18 @@
  * Der veränderliche Teil der Reiseplanung.
  *
  * Alles, was auf der Seite bearbeitet wird, liegt in genau einem Zustandsobjekt
- * und wird in den localStorage geschrieben. Das ist die bewusste Beschränkung
- * dieser Lösung: die Daten bleiben auf dem Gerät, auf dem sie entstanden sind.
- * Der Abgleich zwischen mehreren Geräten läuft über `exportJson` / `importJson`.
+ * und wird in den localStorage geschrieben. Der localStorage bleibt die Quelle,
+ * aus der die Oberfläche liest — auch ohne Netz, was in Japan nicht
+ * selbstverständlich ist.
  *
  * Alle Zugriffe auf den localStorage sind gekapselt und dürfen fehlschlagen
  * (privates Fenster, blockierte Site-Daten) — dann arbeitet die Seite einfach
  * ohne Persistenz weiter, statt mit einer Exception abzubrechen.
  *
- * Diese Datei ist die einzige Stelle, die etwas über Speicherung weiß. Ein
- * Backend würde `load` und `persist` ersetzen, nicht die Oberfläche.
+ * **Abgleich:** Diese Datei weiß nichts von Supabase. Sie meldet nur, *was*
+ * sich geändert hat (`Aenderung`), an einen Beobachter, den `sync.svelte.ts`
+ * registriert. Ist keiner registriert, verhält sich alles wie vorher. Das ist
+ * die Naht, an der das Backend andockt, ohne die Oberfläche anzufassen.
  */
 
 const KEY = 'japan2026:plan';
@@ -47,6 +49,27 @@ export type PlanState = {
   /** Zeitpunkt der letzten Änderung, für den Export sichtbar. */
   updatedAt: string | null;
 };
+
+/**
+ * Was sich geändert hat — nicht der neue Wert, sondern die betroffene Zeile.
+ * Der Abgleich liest den Wert beim Senden aus dem aktuellen Zustand. Dadurch
+ * lassen sich mehrere Änderungen an derselben Zeile zusammenfassen, und
+ * gesendet wird immer der jüngste Stand statt einer Kette alter Zwischenwerte.
+ */
+export type Aenderung =
+  | { art: 'tag'; datum: string }
+  | { art: 'notiz'; datum: string }
+  | { art: 'marke'; typ: 'done' | 'booking' | 'packing'; schluessel: string }
+  | { art: 'ausgabe-neu'; id: string }
+  | { art: 'ausgabe-weg'; id: string }
+  | { art: 'alles' };
+
+let beobachter: ((änderungen: Aenderung[]) => void) | null = null;
+
+/** Der Abgleich meldet sich hier an. Ohne Anmeldung passiert nichts. */
+export function beobachteAenderungen(fn: ((änderungen: Aenderung[]) => void) | null) {
+  beobachter = fn;
+}
 
 function emptyState(): PlanState {
   return {
@@ -133,9 +156,38 @@ function persist() {
 }
 
 /** Alle Mutationen laufen hierüber, damit kein Schreibvorgang vergessen wird. */
-function mutate(fn: () => void) {
+function mutate(fn: () => void, ...änderungen: Aenderung[]) {
   fn();
   persist();
+  if (beobachter && änderungen.length) beobachter(änderungen);
+}
+
+/**
+ * Übernimmt einen Stand aus der Ablage. Anders als `importJson` löst das
+ * **keine** Meldung an den Abgleich aus — sonst würde der gerade geholte Stand
+ * unmittelbar wieder hochgeschrieben.
+ */
+export function uebernehmeFremdstand(next: Partial<PlanState>) {
+  const voll = normalize({ ...emptyState(), ...next });
+  plan.days = voll.days;
+  plan.done = voll.done;
+  plan.bookings = voll.bookings;
+  plan.packing = voll.packing;
+  plan.packingExtra = voll.packingExtra;
+  plan.expenses = voll.expenses;
+  persist();
+}
+
+/** Liegt auf diesem Gerät überhaupt etwas, das verloren gehen könnte? */
+export function hatInhalt(): boolean {
+  return (
+    Object.values(plan.days).some((d) => d.placeNrs.length > 0 || d.note !== '') ||
+    plan.done.length > 0 ||
+    plan.expenses.length > 0 ||
+    plan.packingExtra.length > 0 ||
+    Object.values(plan.bookings).some(Boolean) ||
+    Object.values(plan.packing).some(Boolean)
+  );
 }
 
 // ------------------------------------------------------------------ Tagesplan
@@ -158,20 +210,28 @@ export function dayOfPlace(nr: number): string | null {
 }
 
 export function addToDay(date: string, nr: number, index?: number) {
+  // Der Ort kann von einem anderen Tag kommen — dann ändern sich zwei Tage.
+  const vorher = dayOfPlace(nr);
+  const betroffen: Aenderung[] = [{ art: 'tag', datum: date }];
+  if (vorher && vorher !== date) betroffen.push({ art: 'tag', datum: vorher });
+
   mutate(() => {
     removeFromAnyDay(nr, false);
     const list = dayOf(date).placeNrs;
     const at = index === undefined ? list.length : Math.max(0, Math.min(index, list.length));
     list.splice(at, 0, nr);
-  });
+  }, ...betroffen);
 }
 
 export function removeFromDay(date: string, nr: number) {
-  mutate(() => {
-    const entry = plan.days[date];
-    if (!entry) return;
-    entry.placeNrs = entry.placeNrs.filter((n) => n !== nr);
-  });
+  mutate(
+    () => {
+      const entry = plan.days[date];
+      if (!entry) return;
+      entry.placeNrs = entry.placeNrs.filter((n) => n !== nr);
+    },
+    { art: 'tag', datum: date },
+  );
 }
 
 function removeFromAnyDay(nr: number, doPersist = true) {
@@ -186,7 +246,9 @@ function removeFromAnyDay(nr: number, doPersist = true) {
 }
 
 export function unplacePlace(nr: number) {
+  const datum = dayOfPlace(nr);
   removeFromAnyDay(nr);
+  if (datum && beobachter) beobachter([{ art: 'tag', datum }]);
 }
 
 /** Verschiebt einen Ort innerhalb eines Tages. */
@@ -196,13 +258,16 @@ export function moveWithinDay(date: string, from: number, to: number) {
     if (!list || from === to) return;
     const [nr] = list.splice(from, 1);
     list.splice(Math.max(0, Math.min(to, list.length)), 0, nr);
-  });
+  }, { art: 'tag', datum: date });
 }
 
 export function setNote(date: string, note: string) {
-  mutate(() => {
-    dayOf(date).note = note;
-  });
+  mutate(
+    () => {
+      dayOf(date).note = note;
+    },
+    { art: 'notiz', datum: date },
+  );
 }
 
 // -------------------------------------------------------------------- Besucht
@@ -210,54 +275,80 @@ export function setNote(date: string, note: string) {
 export const isDone = (nr: number) => plan.done.includes(nr);
 
 export function toggleDone(nr: number) {
-  mutate(() => {
-    const i = plan.done.indexOf(nr);
-    if (i === -1) plan.done.push(nr);
-    else plan.done.splice(i, 1);
-  });
+  mutate(
+    () => {
+      const i = plan.done.indexOf(nr);
+      if (i === -1) plan.done.push(nr);
+      else plan.done.splice(i, 1);
+    },
+    { art: 'marke', typ: 'done', schluessel: String(nr) },
+  );
 }
 
 // --------------------------------------------------------- Buchungen & Packen
 
 export function toggleBooking(id: string) {
-  mutate(() => {
-    plan.bookings[id] = !plan.bookings[id];
-  });
+  mutate(
+    () => {
+      plan.bookings[id] = !plan.bookings[id];
+    },
+    { art: 'marke', typ: 'booking', schluessel: id },
+  );
 }
 
 export function togglePacking(id: string) {
-  mutate(() => {
-    plan.packing[id] = !plan.packing[id];
-  });
+  mutate(
+    () => {
+      plan.packing[id] = !plan.packing[id];
+    },
+    { art: 'marke', typ: 'packing', schluessel: id },
+  );
 }
 
 export function addPackingItem(label: string) {
   const clean = label.trim();
   if (!clean) return;
-  mutate(() => {
-    if (!plan.packingExtra.includes(clean)) plan.packingExtra.push(clean);
-  });
+  // Der Eintrag selbst wird als Häkchen-Zeile `extra:<Text>` abgeglichen: Die
+  // Existenz der Zeile ist der Eintrag, `wert` das Häkchen. Dafür braucht es
+  // keine eigene Tabelle.
+  mutate(
+    () => {
+      if (!plan.packingExtra.includes(clean)) plan.packingExtra.push(clean);
+      plan.packing[`extra:${clean}`] ??= false;
+    },
+    { art: 'marke', typ: 'packing', schluessel: `extra:${clean}` },
+  );
 }
 
 export function removePackingItem(label: string) {
-  mutate(() => {
-    plan.packingExtra = plan.packingExtra.filter((s) => s !== label);
-    delete plan.packing[`extra:${label}`];
-  });
+  mutate(
+    () => {
+      plan.packingExtra = plan.packingExtra.filter((s) => s !== label);
+      delete plan.packing[`extra:${label}`];
+    },
+    { art: 'marke', typ: 'packing', schluessel: `extra:${label}` },
+  );
 }
 
 // --------------------------------------------------------------------- Budget
 
 export function addExpense(e: Omit<Expense, 'id'>) {
-  mutate(() => {
-    plan.expenses.unshift({ ...e, id: crypto.randomUUID() });
-  });
+  const id = crypto.randomUUID();
+  mutate(
+    () => {
+      plan.expenses.unshift({ ...e, id });
+    },
+    { art: 'ausgabe-neu', id },
+  );
 }
 
 export function removeExpense(id: string) {
-  mutate(() => {
-    plan.expenses = plan.expenses.filter((e) => e.id !== id);
-  });
+  mutate(
+    () => {
+      plan.expenses = plan.expenses.filter((e) => e.id !== id);
+    },
+    { art: 'ausgabe-weg', id },
+  );
 }
 
 // ------------------------------------------------------------ Export / Import
@@ -278,27 +369,33 @@ export function importJson(text: string): { ok: boolean; error?: string } {
     return { ok: false, error: 'Die Datei ist kein gültiges JSON.' };
   }
   const next = normalize(parsed);
-  mutate(() => {
-    plan.days = next.days;
-    plan.done = next.done;
-    plan.bookings = next.bookings;
-    plan.packing = next.packing;
-    plan.packingExtra = next.packingExtra;
-    plan.expenses = next.expenses;
-  });
+  mutate(
+    () => {
+      plan.days = next.days;
+      plan.done = next.done;
+      plan.bookings = next.bookings;
+      plan.packing = next.packing;
+      plan.packingExtra = next.packingExtra;
+      plan.expenses = next.expenses;
+    },
+    { art: 'alles' },
+  );
   return { ok: true };
 }
 
 export function resetAll() {
   const fresh = emptyState();
-  mutate(() => {
-    plan.days = fresh.days;
-    plan.done = fresh.done;
-    plan.bookings = fresh.bookings;
-    plan.packing = fresh.packing;
-    plan.packingExtra = fresh.packingExtra;
-    plan.expenses = fresh.expenses;
-  });
+  mutate(
+    () => {
+      plan.days = fresh.days;
+      plan.done = fresh.done;
+      plan.bookings = fresh.bookings;
+      plan.packing = fresh.packing;
+      plan.packingExtra = fresh.packingExtra;
+      plan.expenses = fresh.expenses;
+    },
+    { art: 'alles' },
+  );
 }
 
 /** Zählt, wie viele Orte insgesamt eingeplant sind. */

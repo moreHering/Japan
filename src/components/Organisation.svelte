@@ -9,6 +9,8 @@
    */
   import type { Place } from '../lib/places';
   import LoginPanel from './LoginPanel.svelte';
+  import SyncPanel from './SyncPanel.svelte';
+  import { sync } from '../lib/sync.svelte';
   import bookingsData from '../data/bookings.json';
   import packingData from '../data/packing.json';
   import {
@@ -147,10 +149,22 @@
     URL.revokeObjectURL(a.href);
   }
 
+  /** Angemeldet schreibt jede Übernahme auch die gemeinsame Ablage um. */
+  let wirktAufAlle = $derived(sync.status !== 'aus' && sync.status !== 'abgemeldet');
+
   async function handleFile(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
+    if (
+      wirktAufAlle &&
+      !confirm(
+        'Diese Datei ersetzt den gemeinsamen Plan — auch auf den Geräten der anderen. Fortfahren?',
+      )
+    ) {
+      input.value = '';
+      return;
+    }
     const result = importJson(await file.text());
     importMsg = result.ok
       ? { ok: true, text: 'Plan übernommen.' }
@@ -159,7 +173,11 @@
   }
 
   function confirmReset() {
-    if (confirm('Wirklich alles zurücksetzen? Tagesplan, Häkchen und Ausgaben werden gelöscht.')) {
+    const frage = wirktAufAlle
+      ? 'Wirklich alles zurücksetzen? Tagesplan, Häkchen und Ausgaben werden gelöscht — '
+        + 'angemeldet auch in der gemeinsamen Ablage und damit für alle drei.'
+      : 'Wirklich alles zurücksetzen? Tagesplan, Häkchen und Ausgaben werden gelöscht.';
+    if (confirm(frage)) {
       resetAll();
       importMsg = { ok: true, text: 'Alles zurückgesetzt.' };
     }
@@ -330,12 +348,14 @@
 
     <div class="login">
       <LoginPanel />
+      <SyncPanel />
     </div>
 
     <p class="sub">
-      Der Plan liegt ausschließlich in diesem Browser — <b>er wird nicht automatisch
-      zwischen euren Geräten abgeglichen</b>. Wer auf einem anderen Gerät weiterplanen will,
-      exportiert hier eine Datei und spielt sie dort ein.
+      Angemeldet gleicht sich der Plan zwischen euren Geräten ab: Änderungen wirken sofort
+      hier und gehen dann in die gemeinsame Ablage — auch nachträglich, wenn gerade kein Netz
+      da war. Bearbeitet ihr <b>gleichzeitig denselben Tag</b>, gewinnt der spätere Stand.
+      Der Export bleibt als Sicherungskopie, die niemand versehentlich überschreiben kann.
     </p>
 
     <div class="stats">

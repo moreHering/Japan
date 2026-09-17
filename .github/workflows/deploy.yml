@@ -25,10 +25,30 @@ jobs:
       - name: Repository auschecken
         uses: actions/checkout@v7
 
+      - name: Zugangsdaten prüfen
+        env:
+          SB_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          SB_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          # Ohne diese beiden baut die Seite durch, kann aber nicht abgleichen.
+          # Das soll sichtbar sein, nicht erst am stillen Hinweis in der App
+          # auffallen. Ausgegeben wird nur die Länge, nicht der Wert.
+          if [ -n "$SB_URL" ] && [ -n "$SB_KEY" ]; then
+            echo "Supabase: URL (${#SB_URL} Zeichen) und Schlüssel (${#SB_KEY} Zeichen) vorhanden."
+          else
+            echo "::warning::PUBLIC_SUPABASE_URL oder PUBLIC_SUPABASE_ANON_KEY fehlt — die Seite wird ohne Geräte-Abgleich gebaut und arbeitet nur mit dem lokalen Speicher."
+          fi
+
       - name: Astro-Seite bauen und hochladen
         uses: withastro/action@v6
         with:
           node-version: 22
+        env:
+          # Astro nimmt PUBLIC_*-Variablen zur Build-Zeit in das Bundle auf.
+          # Der publishable Key ist dafür gedacht, öffentlich zu sein; die
+          # Absicherung leistet Row Level Security in der Datenbank.
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
 
   deploy:
     needs: build

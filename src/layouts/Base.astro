@@ -2,6 +2,7 @@
 import '../styles/tokens.css';
 import { url, guide, asset } from '../lib/paths';
 import trip from '../data/trip.json';
+import SyncBadge from '../components/SyncBadge.svelte';
 
 interface Props {
   title: string;
@@ -112,6 +113,9 @@ const path = Astro.url.pathname.replace(import.meta.env.BASE_URL, '').replace(/\
         </ul>
       </nav>
 
+      <!-- Startet den Abgleich und zeigt seinen Zustand — auf jeder Seite. -->
+      <SyncBadge client:load />
+
       <a class="bookmark" href={guide()}>
         <span aria-hidden="true">📖</span>
         <span class="bookmark-text">Reiseband</span>
@@ -208,6 +212,10 @@ const path = Astro.url.pathname.replace(import.meta.env.BASE_URL, '').replace(/\
         gap: 10px;
         color: var(--washi);
         padding: 8px 0;
+        min-width: 0;
+        /* Schiebt Abzeichen und Lesezeichen nach rechts, auch wenn die
+           Hauptnavigation auf dem Handy ausgeblendet ist. */
+        margin-right: auto;
         flex: none;
       }
       .brand:hover {

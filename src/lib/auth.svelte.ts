@@ -50,8 +50,18 @@ function nameAusSession(user: { email?: string | null; user_metadata?: Record<st
   return treffer?.name ?? user.email ?? 'unbekannt';
 }
 
-/** Beim Laden der Seite den vorhandenen Anmeldezustand übernehmen. */
+let initGelaufen = false;
+
+/**
+ * Beim Laden der Seite den vorhandenen Anmeldezustand übernehmen.
+ *
+ * Mehrfach aufrufbar: Anmeldemaske und Abzeichen in der Kopfzeile rufen beide
+ * auf, und ein zweiter `onAuthStateChange`-Beobachter würde jede Änderung
+ * doppelt verarbeiten.
+ */
 export async function initAuth() {
+  if (initGelaufen) return;
+  initGelaufen = true;
   const sb = getSupabase();
   if (!sb) {
     auth.status = 'nicht-eingerichtet';

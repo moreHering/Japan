@@ -49,6 +49,11 @@ jobs:
           # Absicherung leistet Row Level Security in der Datenbank.
           PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+          # Vorsorglich: Solange der Node-Cache trifft, läuft gar kein Install.
+          # Sobald sich die Lockfile ändert, zöge Playwright aus den
+          # devDependencies einen Chromium nach — rund 150 MB, die dieser Lauf
+          # nie anfasst. Die Browsertests laufen beim Entwickeln, nicht hier.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
   deploy:
     needs: build

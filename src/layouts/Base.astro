@@ -55,6 +55,13 @@ const nav = [
     match: 'organisation',
     icon: 'M5 4.5h14v15H5zM8.5 9h7M8.5 12.5h7M8.5 16h4',
   },
+  {
+    href: url('freundebuch'),
+    label: 'Freundebuch',
+    short: 'Freunde',
+    match: 'freundebuch',
+    icon: 'M12 20.5S4 15 4 10a4 4 0 0 1 8-2 4 4 0 0 1 8 2c0 5-8 10.5-8 10.5z',
+  },
 ];
 
 // Aktiven Punkt aus dem Pfad ableiten, ohne den base-Präfix.
@@ -142,11 +149,13 @@ const path = Astro.url.pathname.replace(import.meta.env.BASE_URL, '').replace(/\
         <footer>
           <div class="inner">
             <p>
-              Der Reiseplan liegt in diesem Browser. Über <a href={url('organisation')}>Organisation</a>{' '}
-              exportierst du ihn als Datei, um ihn auf ein anderes Gerät zu bringen.
+              Angemeldet gleicht sich der Plan zwischen euren Geräten ab. Über{' '}
+              <a href={url('organisation')}>Organisation</a> gibt es ihn zusätzlich als Datei zum
+              Sichern.
             </p>
             <p class="dim">
-              164 Orte aus dem Reiseband · Karte: <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>
+              164 Orte aus dem Reiseband, dazu eure eigenen · Karte:{' '}
+              <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>
             </p>
           </div>
         </footer>

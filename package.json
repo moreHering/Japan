@@ -13,7 +13,9 @@
     "test": "vitest run",
     "db:dashboard": "node scripts/migration-fuer-dashboard.mjs",
     "test:browser": "node test/browser-orte.mjs",
-    "test:all": "vitest run && node test/browser-orte.mjs"
+    "test:all": "vitest run && node test/browser-orte.mjs",
+    "test:bild": "node test/browser-bild.mjs",
+    "test:buch": "node test/browser-freundebuch.mjs"
   },
   "dependencies": {
     "@astrojs/svelte": "^9.0.1",

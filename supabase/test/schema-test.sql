@@ -174,6 +174,63 @@ begin
   raise notice 'Steckbrief: nur die eigene Seite beschreibbar — bestanden';
 end $$;
 
+-- ------------------------------------------------ Beiträge im Freundebuch ---
+--
+-- Nicht geprüft werden kann hier die Bilderablage: Das `storage`-Schema
+-- gehört Supabase und existiert lokal nicht. Was geprüft wird, ist die
+-- Zeilenebene — wer lesen, schreiben und löschen darf.
+
+do $$
+declare
+  eigene uuid;
+  n integer;
+  fehler text[] := '{}';
+begin
+  insert into public.guestbook_post (text, datum, sticker, created_by)
+  values ('Erster Tag', '2026-09-26', 'sushi', auth.uid())
+  returning id into eigene;
+
+  -- Ein Beitrag auf fremden Namen darf nicht durchgehen, sonst wäre die
+  -- Zuordnung der Beiträge zu Personen wertlos.
+  begin
+    insert into public.guestbook_post (text, datum, created_by)
+    values ('untergeschoben', '2026-09-26', '22222222-2222-2222-2222-222222222222');
+    fehler := fehler || 'Beitrag auf fremden Namen war möglich';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- Den eigenen ändern: ja.
+  update public.guestbook_post set text = 'Erster Tag, nachgebessert' where id = eigene;
+  get diagnostics n = row_count;
+  if n <> 1 then fehler := fehler || 'eigener Beitrag war nicht änderbar'; end if;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Beiträge: eigene änderbar, fremde nicht unterschiebbar — bestanden';
+end $$;
+
+-- Der zweite Reisende sieht den Beitrag, darf ihn aber nicht löschen.
+set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+
+do $$
+declare
+  n integer;
+  fehler text[] := '{}';
+begin
+  select count(*) into n from public.guestbook_post;
+  if n < 1 then fehler := fehler || 'fremder Beitrag war nicht lesbar'; end if;
+
+  delete from public.guestbook_post;
+  get diagnostics n = row_count;
+  if n <> 0 then fehler := fehler || 'fremder Beitrag war löschbar'; end if;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Beiträge: sichtbar für alle, löschbar nur für den Urheber — bestanden';
+end $$;
+
 reset role;
 
 \echo ''

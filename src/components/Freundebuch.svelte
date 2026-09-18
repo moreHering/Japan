@@ -13,6 +13,15 @@
    * über altes Web rechtfertigt keine unbenutzbare Seite.
    */
   import { onMount } from 'svelte';
+  /*
+   * Die Y2K-Optik liegt in einer eigenen Datei, weil die öffentliche
+   * Tagebuch-Ansicht dieselbe braucht. Aus einem Svelte-Stilblock kann man
+   * nichts importieren — er ist komponenten-scoped und existiert nach dem
+   * Compiler nur mit Hash-Klassen. Deshalb hier als Modul-Import: so landet
+   * die Datei einmal im Bündel der Seite, und beide Komponenten greifen auf
+   * dieselben Regeln. Vorbild ist `MapView.svelte` mit `leaflet.css`.
+   */
+  import '../styles/y2k.css';
   import Sticker, { STICKER, type StickerName } from './Sticker.svelte';
   import LoginPanel from './LoginPanel.svelte';
   import { auth, initAuth } from '../lib/auth.svelte';
@@ -453,173 +462,16 @@
 </div>
 
 <style>
-  /* ------------------------------------------------------------ Grundton */
-
-  .y2k {
-    --pink: #ff4fa3;
-    --cyan: #35e0e8;
-    --lila: #7b5cff;
-    --limone: #b6ff5c;
-    --sonne: #ffd84d;
-    --tinte: #2a1440;
-    --papier: #fff3fa;
-
-    font-family: 'DotGothic16', 'Zen Kaku Gothic New', monospace;
-    color: var(--tinte);
-    padding: 4px 0 30px;
-  }
-
-  /* ------------------------------------------------------------- Kopf */
-
-  .kopf {
-    position: relative;
-    text-align: center;
-    border: 4px double var(--lila);
-    border-radius: 10px;
-    background:
-      radial-gradient(circle at 12% 18%, rgba(255, 79, 163, 0.35) 0 22%, transparent 23%),
-      radial-gradient(circle at 88% 30%, rgba(53, 224, 232, 0.35) 0 18%, transparent 19%),
-      linear-gradient(160deg, #fff3fa 0%, #e8e1ff 55%, #d8fbff 100%);
-    padding: 18px 12px 14px;
-    overflow: hidden;
-  }
-
-  /* Stand vorher absolut in der Ecke und lag dabei auf der Überschrift.
-     Jetzt eine eigene Zeile darüber — schwebt weiter, überlappt aber nichts. */
-  .glitzer {
-    display: flex;
-    justify-content: center;
-    gap: 7px;
-    margin-bottom: 8px;
-    animation: schweben 3.2s ease-in-out infinite;
-  }
-
-  @keyframes schweben {
-    0%,
-    100% {
-      transform: translateY(0) rotate(-4deg);
-    }
-    50% {
-      transform: translateY(5px) rotate(4deg);
-    }
-  }
-
-  h1 {
-    margin: 0;
-    line-height: 1.15;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .jp {
-    font-size: 1rem;
-    color: var(--lila);
-    letter-spacing: 0.2em;
-  }
-
-  .lat {
-    font-size: clamp(1.7rem, 9vw, 2.9rem);
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    background: linear-gradient(90deg, var(--pink), var(--lila) 45%, var(--cyan));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    /* Der harte Schatten ist das, was die Schrift „2001" macht. */
-    filter: drop-shadow(2px 2px 0 #fff) drop-shadow(3px 3px 0 var(--tinte));
-  }
-
-  .jahr {
-    font-size: 0.8rem;
-    letter-spacing: 0.45em;
-    color: var(--pink);
-  }
-
-  .laufband {
-    margin: 12px -12px 10px;
-    background: var(--tinte);
-    color: var(--limone);
-    font-size: 0.74rem;
-    padding: 5px 0;
-    overflow: hidden;
-    white-space: nowrap;
-  }
-
-  .lauf {
-    display: inline-block;
-    padding-left: 100%;
-    animation: laufen 22s linear infinite;
-  }
-
-  @keyframes laufen {
-    to {
-      transform: translateX(-100%);
-    }
-  }
-
-  .zaehler {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-  }
-
-  .zlabel,
-  .zhinweis {
-    font-size: 0.58rem;
-    letter-spacing: 0.18em;
-    color: var(--lila);
-  }
-
-  .zhinweis {
-    letter-spacing: 0.02em;
-    opacity: 0.75;
-  }
-
-  .zziffern {
-    display: flex;
-    gap: 2px;
-  }
-
-  .zziffern b {
-    background: #101018;
-    color: var(--limone);
-    font-size: 1.05rem;
-    padding: 2px 5px;
-    border-radius: 2px;
-    border: 1px solid #3a3a55;
-    box-shadow: inset 0 -4px 6px rgba(0, 0, 0, 0.6);
-  }
-
-  /* ------------------------------------------------------------ Kästen */
-
-  .kasten {
-    margin-top: 14px;
-    border: 3px solid var(--lila);
-    border-radius: 8px;
-    background: var(--papier);
-    padding: 13px 14px;
-    box-shadow: 4px 4px 0 var(--cyan);
-  }
-
-  .kasten.warnung {
-    border-color: var(--pink);
-    box-shadow: 4px 4px 0 var(--sonne);
-  }
-
-  .kasten b {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 1rem;
-  }
-
-  .kasten p {
-    margin: 0 0 10px;
-    font-size: 0.85rem;
-    line-height: 1.55;
-  }
+  /*
+   * Hier steht nur noch, was das Bearbeiten betrifft: Steckbriefe, das Formular
+   * für neue Beiträge, der Löschknopf. Alles, was die Gästeansicht ebenso zeigt —
+   * Grundton, Kopf, Kästen, Knöpfe, Polaroids, Fuß und die drei Keyframes — liegt
+   * in `src/styles/y2k.css` und kommt über den Import im `<script>`.
+   *
+   * Die Farbvariablen (`--lila`, `--tinte`, …) kommen von dort und hängen am
+   * `.y2k`-Wrapper dieser Komponente. Sie erben hierher; ein Wurzelelement ohne
+   * `.y2k` würde alle Regeln unten farblos machen.
+   */
 
   /* Die Anmeldemaske kommt aus dem Reiseplaner und bringt ihre eigene
      Gestaltung mit. Hier bekommt sie einen Rahmen, damit sie als bewusst
@@ -629,22 +481,6 @@
     border: 2px dashed var(--lila);
     border-radius: 6px;
     padding: 10px 11px;
-  }
-
-  /* ------------------------------------------------------------- Teile */
-
-  .teil {
-    margin-top: 22px;
-  }
-
-  h2 {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 12px;
-    font-size: 1.25rem;
-    color: var(--lila);
-    text-shadow: 2px 2px 0 var(--sonne);
   }
 
   /* ------------------------------------------------------- Steckbriefe */
@@ -725,8 +561,7 @@
 
   .brief input,
   .neu textarea,
-  .neu input,
-  .neu select {
+  .neu input {
     width: 100%;
     background: #fff;
     border: 2px solid var(--lila);
@@ -737,46 +572,18 @@
        der Bedienbarkeit. */
     font-size: 16px;
     color: var(--tinte);
+    /* 44 px wie `.orttreffer button` und die Tab-Leiste: Ein Datumsfeld und ein
+       Suchfeld sind Tippziele, und mit Polster und Schrift allein kommen sie auf
+       37 px. Das gilt für das Suchfeld doppelt — es steht direkt über einer
+       Trefferliste, und daneben zu tippen wählt einen Ort aus. */
+    min-height: 44px;
   }
 
   .brief input:focus,
-  .neu textarea:focus {
+  .neu textarea:focus,
+  .neu input:focus {
     outline: 3px solid var(--pink);
     outline-offset: 1px;
-  }
-
-  /* ---------------------------------------------------------- Knöpfe */
-
-  .knopf {
-    font-family: inherit;
-    font-size: 0.9rem;
-    min-height: 44px;
-    padding: 0 18px;
-    border: 3px solid var(--tinte);
-    border-radius: 6px;
-    background: linear-gradient(180deg, var(--sonne), #ffb020);
-    color: var(--tinte);
-    cursor: pointer;
-    box-shadow: 3px 3px 0 var(--tinte);
-  }
-
-  .knopf:active {
-    transform: translate(2px, 2px);
-    box-shadow: 1px 1px 0 var(--tinte);
-  }
-
-  .knopf.gross {
-    width: 100%;
-    background: linear-gradient(180deg, var(--cyan), #14b8c0);
-  }
-
-  .knopf.schlicht {
-    background: #fff;
-    box-shadow: 3px 3px 0 rgba(42, 20, 64, 0.35);
-  }
-
-  .knopf[disabled] {
-    opacity: 0.55;
   }
 
   /* ------------------------------------------------------ Neuer Beitrag */
@@ -987,98 +794,8 @@
     color: #b3003c;
   }
 
-  /* ------------------------------------------------------ Bilderstrom */
-
-  .strom {
-    margin-top: 16px;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-    gap: 16px;
-  }
-
-  /*
-   * Der breite untere Rand ist der Polaroid-Steg — er muss weiß sein. Vorher
-   * kam er aus einem 34 px breiten Rahmen in Rahmenfarbe und wurde grau, was
-   * bei Beiträgen ohne Foto wie ein fehlendes Bild aussah. Jetzt ist es
-   * Innenabstand auf weißem Grund.
-   */
-  .polaroid {
-    position: relative;
-    background: #fff;
-    border: 1px solid #d8cfd8;
-    border-radius: 3px;
-    padding: 9px 9px 24px;
-    box-shadow: 3px 5px 0 rgba(42, 20, 64, 0.22);
-    transform: rotate(var(--kipp));
-  }
-
-  /* Ein Zettel ohne Foto braucht keinen Steg — sonst wirkt er wie ein
-     Polaroid, dessen Bild nicht geladen hat. */
-  .polaroid.nurtext {
-    padding-bottom: 10px;
-    background: linear-gradient(180deg, #fffdf2, #fff);
-  }
-
-  .polaroid img {
-    display: block;
-    width: 100%;
-    aspect-ratio: 4 / 3;
-    object-fit: cover;
-    background: #eee;
-  }
-
-  .kein {
-    display: grid;
-    place-items: center;
-    aspect-ratio: 4 / 3;
-    background: #f3eef6;
-    font-size: 0.78rem;
-    color: #8a7f96;
-    text-align: center;
-    padding: 10px;
-  }
-
-  .klebe {
-    position: absolute;
-    top: -14px;
-    right: -10px;
-    z-index: 2;
-    transform: rotate(14deg);
-  }
-
-  .unten {
-    padding: 8px 2px 10px;
-  }
-
-  .unten p {
-    margin: 0 0 6px;
-    font-size: 0.88rem;
-    line-height: 1.45;
-    word-break: break-word;
-  }
-
-  .zeile {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.66rem;
-    color: #6b5f78;
-  }
-
-  .wer {
-    background: var(--k);
-    color: #fff;
-    padding: 2px 7px;
-    border-radius: 999px;
-  }
-
-  .ort {
-    border: 1px solid var(--lila);
-    border-radius: 3px;
-    padding: 1px 5px;
-  }
-
+  /* Der Löschknopf sitzt in `.zeile` am Polaroid; die Zeile selbst kommt aus
+     `y2k.css`. Er bleibt hier, weil die Gästeansicht nichts löschen kann. */
   .weg {
     margin-left: auto;
     background: none;
@@ -1090,65 +807,9 @@
     min-height: 30px;
   }
 
-  .hinweis {
-    grid-column: 1 / -1;
-    text-align: center;
-    font-size: 0.92rem;
-    line-height: 1.7;
-    color: var(--lila);
-  }
-
-  /* -------------------------------------------------------------- Fuß */
-
-  .fuss {
-    margin-top: 26px;
-    text-align: center;
-    border-top: 3px double var(--lila);
-    padding-top: 12px;
-  }
-
-  .bau {
-    font-size: 0.8rem;
-    letter-spacing: 0.1em;
-    color: var(--pink);
-    animation: blinken 1.6s steps(2, end) infinite;
-  }
-
-  @keyframes blinken {
-    50% {
-      opacity: 0.25;
-    }
-  }
-
-  .fuss p {
-    margin: 6px 0 0;
-    font-size: 0.72rem;
-    color: var(--lila);
-    letter-spacing: 0.1em;
-  }
-
-  /* Wer Bewegung abgestellt hat, bekommt keine — Lauftext und Blinken sind
-     Zitat, kein Zweck. */
-  @media (prefers-reduced-motion: reduce) {
-    .lauf,
-    .glitzer,
-    .bau {
-      animation: none;
-    }
-
-    .lauf {
-      padding-left: 0;
-      white-space: normal;
-    }
-  }
-
   @media (max-width: 480px) {
     .reihe {
       flex-wrap: wrap;
-    }
-
-    .polaroid {
-      transform: none; /* gekippte Karten kosten auf schmalem Schirm Breite */
     }
   }
 </style>

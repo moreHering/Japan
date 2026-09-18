@@ -45,6 +45,26 @@
     pickMode?: boolean;
     /** Vorschau-Pin während des Erfassens. */
     pin?: { lat: number; lng: number } | null;
+    /**
+     * Freie Linie aus Koordinaten — für Routen, deren Punkte keine Orte sind.
+     *
+     * `route` kann das nicht: Es schlägt jede Nummer in `places` nach. Die
+     * Stationsmittelpunkte der Reise sind keine Orte und haben keine Nummer,
+     * also gibt es dort nichts nachzuschlagen.
+     */
+    linie?: { punkte: [number, number][]; farbe?: string } | null;
+    /**
+     * Eigene Marker mit eigenem Popup. Unabhängig von `places`.
+     *
+     * Nötig, weil die Orts-Marker in einer `Map<number, …>` liegen — einer je
+     * Ortsnummer. Mehrere Tagebuchbeiträge am selben Ort sind aber mehrere
+     * Marken. Dazu hängt `baueMarker()` unbedingt das Reiseführer-Popup an;
+     * hier bestimmt der Aufrufer den Inhalt.
+     *
+     * `popup` ist fertiges HTML und wird hier **nicht** maskiert, siehe
+     * `applyMarken()`.
+     */
+    marken?: { lat: number; lng: number; text: string; farbe: string; popup?: string }[];
   };
 
   let {
@@ -59,6 +79,8 @@
     onpick,
     pickMode = false,
     pin = null,
+    linie = null,
+    marken = [],
   }: Props = $props();
 
   let host: HTMLDivElement;
@@ -67,9 +89,33 @@
   let markers = new Map<number, any>();
   let routeLine: any = null;
   let pinMarker: any = null;
+  // Freie Marken als Liste, nicht als Map: Zwei Beiträge am selben Ort haben
+  // keinen unterscheidenden Schlüssel, unter dem sie in einer Map lägen.
+  let linienZug: any = null;
+  let markenLayer: any[] = [];
   let ready = $state(false);
 
   const colorOf = (cat: Category) => CATEGORIES.find((c) => c.key === cat)!.color;
+
+  /**
+   * HTML-Maskierung für die Schnipsel, die als `divIcon`-Markup in die Karte
+   * gehen. Leaflet nimmt für ein `divIcon` nur HTML, keinen Textknoten — ohne
+   * das hier würde ein Anführungszeichen in `farbe` oder `text` das
+   * style-Attribut schließen und der Rest als Markup gelten.
+   *
+   * Das Apostroph ist mit dabei, obwohl die Vorlage unten doppelte
+   * Anführungszeichen benutzt: Sonst hängt die Dichtheit der Funktion daran,
+   * welche Anführungszeichen jemand später in der Vorlage schreibt. Vier Zeichen
+   * mehr, dafür trägt sie unabhängig davon. Numerisch als `&#39;`, weil `&apos;`
+   * erst HTML5 kennt — gleiche Wahl wie in `escape()` in `src/lib/tagebuch.ts`.
+   */
+  const maskiere = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
 
   /**
    * Marker als nummerierter Kreis. Orte, die auf genau derselben Koordinate
@@ -236,9 +282,11 @@
       host.addEventListener('touchcancel', () => druckAbbrechen(), { passive: true });
 
       baueMarker();
+      applyMarken();
       ready = true;
       applyVisible();
       applyRoute();
+      applyLinie();
       applySelected();
       applyPin();
     })();
@@ -248,6 +296,10 @@
       map?.remove();
       map = null;
       markers.clear();
+      // `map.remove()` nimmt die Ebenen mit; die Listen hier halten sonst
+      // Marker fest, die an einer nicht mehr existierenden Karte hängen.
+      markenLayer = [];
+      linienZug = null;
     };
   });
 
@@ -338,6 +390,96 @@
     }).addTo(map);
   }
 
+  /**
+   * Linie aus fertigen Koordinaten. Gleiche Strichstärke und Strichelung wie
+   * `applyRoute()`, damit ein Aufruf ohne `farbe` aussieht wie der Tagesplan;
+   * `farbe` ist der einzige Unterschied, den ein Aufrufer setzen kann.
+   */
+  function applyLinie() {
+    if (!map || !L) return;
+    if (linienZug) {
+      map.removeLayer(linienZug);
+      linienZug = null;
+    }
+    // Ein einzelner Punkt ist keine Linie — Leaflet zeichnete dafür nichts,
+    // legte aber eine Ebene an, die beim nächsten Lauf wieder abzuräumen wäre.
+    if (!linie || linie.punkte.length < 2) return;
+    linienZug = L.polyline(linie.punkte, {
+      color: linie.farbe ?? '#16233C',
+      weight: 2,
+      opacity: 0.55,
+      dashArray: '5 6',
+    }).addTo(map);
+  }
+
+  /**
+   * Freie Marken aufbauen — alle weg, alle neu, ohne Abgleich wie in
+   * `baueMarker()`. Der Abgleich dort lebt von der Ortsnummer als Schlüssel;
+   * hier gibt es keinen, und die Listen sind Tagebuchbeiträge, keine 164 Orte.
+   *
+   * **Kein `offsetOf()` hier**, und das ist gemessen entschieden: Deckungsgleiche
+   * Marken verdeckten sich vollständig — Leaflet errechnet den z-Index aus der
+   * Bildschirm-y-Position, die dann für beide gleich ist, und der untere Marker
+   * bekommt keine Zeigerereignisse mehr. Ein geografischer Versatz löst das nicht:
+   * die `0.00016°` von `offsetOf()` sind bei Zoomstufe 15 rund 3,7 Pixel bei 26
+   * Pixel Markerbreite. Stattdessen bündelt `markenFuer()` in
+   * `src/lib/tagebuch.ts` alle Beiträge eines Orts in **eine** Marke mit einem
+   * Popup — hier kommen also nie zwei Marken auf derselben Koordinate an.
+   */
+  function applyMarken() {
+    if (!map || !L) return;
+    for (const marker of markenLayer) map.removeLayer(marker);
+    markenLayer = [];
+
+    for (const marke of marken) {
+      const text = maskiere(marke.text);
+      /*
+       * `farbe` landet in einem style-Attribut, und `maskiere()` schützt nur die
+       * Attributgrenze — innerhalb von `background:` nimmt CSS alles, auch
+       * `url(…)`. Die Farbe kommt aus `profiles.farbe`, und dort steht laut
+       * `0001_init.sql` nur `text not null`, ohne CHECK. Also wird hier geprüft
+       * statt die Verantwortung weitergeschoben: kein Hex-Wert, dann die
+       * Vorgabefarbe. Schreiben darf das Feld ohnehin nur die angemeldete Person
+       * selbst (Policy `profile_aendern`), von außen ist nichts zu erreichen —
+       * eine Prüfung, die von genau einer Policy abhängt, ist aber keine.
+       */
+      const farbe = /^#[0-9a-fA-F]{3,8}$/.test(marke.farbe) ? marke.farbe : '#7b5cff';
+      const size = marke.text.length > 2 ? 30 : 26;
+      const marker = L.marker([marke.lat, marke.lng], {
+        icon: L.divIcon({
+          /*
+           * Eigene Klasse, bewusst nicht `jp-marker`: Der Browsertest der
+           * Gästeseite prüft über diese Klasse, dass dort kein einziger
+           * Reiseführer-Marker steht.
+           */
+          className: 'jp-marke',
+          html: `<span style="background:${farbe}">${text}</span>`,
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+          popupAnchor: [0, -(size / 2)],
+        }),
+        /*
+         * Kein `title`: Der einzige Text, den die Marke kennt, ist die
+         * Reisetagnummer oder `?`. Als Browser-Sprechblase sagt „7" ohne
+         * Zusammenhang nichts, und das Popup nennt Tag, Datum, Ort und Person
+         * vollständig. `baueMarker()` setzt dort Nummer **und** Namen — hier
+         * gibt es keinen Namen zu setzen.
+         */
+        riseOnHover: true,
+      });
+      /*
+       * `popup` geht unmaskiert in die Karte, und das ist die Absicht: Der
+       * Aufrufer baut Absätze, Bild und Links selbst und maskiert die Anteile,
+       * die von Menschen kommen (`escape()` in `src/lib/tagebuch.ts`). Würde
+       * hier maskiert, käme sein Markup als sichtbarer Text an. Wer diese Prop
+       * füllt, haftet für das HTML darin.
+       */
+      if (marke.popup) marker.bindPopup(marke.popup, { maxWidth: 300, minWidth: 220 });
+      marker.addTo(map);
+      markenLayer.push(marker);
+    }
+  }
+
   function applySelected() {
     if (!map || selected == null) return;
     const marker = markers.get(selected);
@@ -353,12 +495,28 @@
     const shown = (visible ?? places.map((p) => p.nr))
       .map((nr) => markers.get(nr))
       .filter(Boolean);
-    if (!shown.length) return;
-    if (shown.length === 1) {
-      map.setView(shown[0].getLatLng(), 14);
+    /*
+     * Die Gästekarte läuft mit `places={[]} visible={[]}`; ohne die Marken
+     * hätte sie nichts zum Einpassen und bliebe auf dem Startzoom über ganz
+     * Japan stehen. Ist beides leer, bleibt der Ausschnitt wie er ist —
+     * `fitBounds` auf einer leeren Menge wirft.
+     *
+     * Die Marken kommen aus der Prop, nicht aus `markenLayer`: Wer `marken`
+     * setzt und im selben Zug `fitVisible()` ruft, wäre sonst eine Runde zu
+     * früh — die Ebenen entstehen erst, wenn der `$effect` gelaufen ist.
+     * Für die Orte bleibt es beim Marker, weil dessen Position bei Nr. 95/96
+     * versetzt ist (`offsetOf`) und der Ausschnitt dem folgen soll.
+     */
+    const punkte = [
+      ...shown.map((m) => m.getLatLng()),
+      ...marken.map((m) => L.latLng(m.lat, m.lng)),
+    ];
+    if (!punkte.length) return;
+    if (punkte.length === 1) {
+      map.setView(punkte[0], 14);
       return;
     }
-    map.fitBounds(L.featureGroup(shown).getBounds(), { padding: [36, 36], maxZoom: 15 });
+    map.fitBounds(L.latLngBounds(punkte), { padding: [36, 36], maxZoom: 15 });
   }
 
   export function flyTo(target: [number, number], z = 12) {
@@ -399,6 +557,29 @@
   $effect(() => {
     void selected;
     if (ready) applySelected();
+  });
+
+  $effect(() => {
+    // Der Effekt läuft, wenn der Aufrufer ein neues `linie`-Objekt liefert. Er
+    // läuft **nicht**, wenn jemand die Punkte in einer weitergegebenen Liste
+    // austauscht: Ein gewöhnliches Array ist kein `$state`, das Lesen von
+    // `.length` legt keine Abhängigkeit an. Heute trägt das, weil
+    // `stationsRoute()` neue Tupel aus `stations.json` baut und sich nie ändert.
+    // Wer die Linie bewegen will, muss ein neues Objekt übergeben.
+    void linie;
+    if (ready) applyLinie();
+  });
+
+  $effect(() => {
+    // Gelesen wird die Prop selbst, und das genügt: Svelte übersetzt
+    // `marken={markenFuer(…)}` beim Aufrufer zu einem Getter über dessen
+    // reaktiven Zustand — ändert sich `buch.beitraege`, läuft dieser Effekt und
+    // baut alle Marken neu. Ein Schlüsselstring über die Felder wäre hier
+    // wirkungslos: `marken` ist ein gewöhnliches Array, das Lesen von `m.lat`
+    // legt keine Abhängigkeit an. Er stand hier und wurde verworfen, weil der
+    // Kommentar daneben einen Schutz behauptete, den es nicht gab.
+    void marken;
+    if (ready) applyMarken();
   });
 </script>
 
@@ -506,6 +687,37 @@
     box-shadow:
       0 0 0 2px rgba(198, 64, 43, 0.55),
       0 1px 4px rgba(13, 22, 38, 0.45);
+  }
+
+  /*
+   * Freie Marken. Eigene Klasse statt `.jp-marker`, damit an der Gästeseite
+   * nachweisbar kein Reiseführer-Marker hängt.
+   *
+   * `--util` kommt aus `tokens.css` und damit über `Base.astro`. Der Rückfall
+   * steht trotzdem da: Eine Gästeseite mit eigenem Gerüst ohne diese Tokens
+   * hätte hier eine ungültige Angabe, und die Beschriftung erbte die Schrift
+   * der Seite — im 26 px kleinen Kreis ist das schnell unlesbar.
+   */
+  :global(.jp-marke) {
+    background: none !important;
+    border: none !important;
+  }
+
+  :global(.jp-marke span) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    color: #fff;
+    font-family: var(--util, 'Helvetica Neue', sans-serif);
+    font-weight: 700;
+    font-size: 0.7rem;
+    line-height: 1;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(13, 22, 38, 0.45);
+    cursor: pointer;
   }
 
   :global(.jp-pin-neu) {

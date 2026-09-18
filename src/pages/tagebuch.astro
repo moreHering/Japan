@@ -1,0 +1,39 @@
+---
+/**
+ * Das Reisetagebuch für die Gäste.
+ *
+ * Eigene Adresse, **nicht** aus der App verlinkt und mit `noindex` im Kopf (siehe
+ * `Gast.astro`). Wer den Link hat, liest; gefunden werden soll die Seite nicht.
+ *
+ * Ehrlich dazu: Geheim ist sie damit nicht, nur unauffällig. Der
+ * Supabase-Schlüssel steckt im JavaScript und ist für jeden Besucher lesbar — die
+ * Begründung und was daran unwiderruflich ist, steht im Kopf von
+ * `supabase/migrations/0008_oeffentlich.sql`.
+ *
+ * `client:only="svelte"`, nicht `client:load`: Die Komponente holt ihre Daten
+ * selbst und bringt Leaflet mit, das kein serverseitiges Rendern verträgt.
+ */
+import Gast from '../layouts/Gast.astro';
+import Tagebuch from '../components/Tagebuch.svelte';
+---
+
+<Gast title="Reisetagebuch">
+  <Tagebuch client:only="svelte" />
+</Gast>
+
+<!--
+  Der Karo-Hintergrund der alten Privathomepages. Als seitenlokales `is:global`,
+  weil es die `body`-Regel aus `tokens.css` überschreiben muss — dasselbe erprobte
+  Muster wie in `freundebuch.astro`.
+-->
+<style is:global>
+  body.gastseite {
+    background:
+      radial-gradient(circle at 20% 0%, rgba(255, 79, 163, 0.18), transparent 45%),
+      radial-gradient(circle at 80% 12%, rgba(53, 224, 232, 0.18), transparent 40%),
+      /* Karo wie die Kachelhintergründe der alten Homepages */
+      repeating-linear-gradient(0deg, rgba(123, 92, 255, 0.07) 0 1px, transparent 1px 22px),
+      repeating-linear-gradient(90deg, rgba(123, 92, 255, 0.07) 0 1px, transparent 1px 22px),
+      #f4eefb;
+  }
+</style>

@@ -179,6 +179,18 @@ stehen eure Unterkünfte — deshalb schreibt ein Beitrag den Ortsnamen und die
 Koordinate bei sich mit, statt dort nachzuschlagen. Orte, über die niemand
 schreibt, bleiben privat.
 
+**Die Umkehrung davon musst du kennen:** Wählst du beim Schreiben eines Beitrags
+*eure Unterkunft* als Ort, dann stehen deren Name und Koordinate ab da im Beitrag —
+und damit auf der Gästekarte, mit einem Marker. Die Tabelle bleibt dicht, dieser
+eine Ort nicht. Wer das nicht will, lässt beim Beitrag das Ortsfeld leer.
+
+Auf der Karte steht je **Ort** ein Marker, nicht je Beitrag: Mehrere Einträge an
+derselben Stelle kommen in ein Popup, und die Zahl im Kreis sagt, wie viele
+(`2·3` heißt „Tag 2, drei Einträge"). Das ist nicht Kosmetik — zwei Marker auf
+derselben Koordinate verdecken einander vollständig, und der untere wäre nicht
+anklickbar. Ein paar Meter Versatz löst das nicht (bei normaler Zoomstufe sind das
+weniger als ein Pixel) und würde einen Ort anzeigen, an dem nichts ist.
+
 ### Zwei Dinge, an die du denken musst
 
 **Ein neues Feld im Steckbrief ist sofort öffentlich.** Die Fragenliste steht in

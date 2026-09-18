@@ -219,7 +219,18 @@ await seite.locator('.ortgewaehlt').tap();
 await seite.waitForTimeout(300);
 pruefe(await ortfeld.isVisible(), 'ein Tipp darauf löst die Wahl wieder');
 
-// Alle Tippziele im Formular groß genug für einen Finger.
+/*
+ * Alle Tippziele im Formular groß genug für einen Finger.
+ *
+ * Diese Prüfung hat sich bezahlt: Beim Herauslösen der Y2K-Regeln habe ich einen
+ * als tot gemeldeten Selektor `.neu select` entfernt — er stand aber in einer
+ * gemeinsamen Selektorliste mit `.neu textarea` und `.neu input`, und mit dem
+ * Block waren Rahmen, Polster und die **16-px-Schrift gegen den iOS-Zoom** weg.
+ * Sichtbar wurde es allein daran, dass Datums- und Suchfeld auf 32 px fielen.
+ *
+ * Ein struktureller Test hätte das nicht gefunden: Die verstümmelte Regel war
+ * gültiges CSS, sie hing nur am falschen Deklarationsblock.
+ */
 const zuKlein = await seite.evaluate(() =>
   [...document.querySelectorAll('form.neu button, form.neu label.datei, form.neu input')]
     .filter((e) => e.offsetParent !== null)

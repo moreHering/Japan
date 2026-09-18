@@ -108,6 +108,34 @@ Eine neue Tabelle in `public` bekommt in Supabase automatisch Vorgabe-Rechte fü
 `anon`. Der Migrationsworkflow prüft deshalb bei jedem Lauf generisch über den
 Systemkatalog, dass es bei genau drei lesbaren Tabellen bleibt, und bricht sonst ab.
 
+**Die dritte Schranke steckt im Auslieferungsartefakt:** Auf `/tagebuch/` gibt es
+kein `input`, kein `textarea`, kein `form` und keinen Löschknopf, und die Seite
+startet weder Anmeldung noch Abgleich (kein `SyncBadge`, kein Import von
+`store.svelte`). Selbst bei einer falsch gesetzten Policy hätte ein Gast keine
+Oberfläche. `test/browser-tagebuch.mjs` prüft genau das, und jede dieser
+Zusicherungen ist gegengeprobt.
+
+### Das gemeinsame Stylesheet `src/styles/y2k.css`
+
+Freundebuch und Tagebuch teilen die Y2K-Optik, deshalb steht sie in einer Datei —
+und damit **global, ohne Svelte-Hash**. Jeder Selektor beginnt mit `.y2k`; das
+schützt vor fremden *Seiten*, aber nicht vor fremden *Komponenten* im selben Baum.
+
+Genau das ist beim Herauslösen passiert: `.y2k .zeile`, `.y2k .hinweis` und
+`.y2k .kasten b` griffen in `LoginPanel.svelte` hinein, das dieselben generischen
+Namen benutzt und selbst stylt. Solange die Regeln im Komponenten-`<style>`
+standen, endete ihre Reichweite am Hash. Diese vier sind deshalb an ihre Behälter
+gebunden (`.y2k .unten > .zeile`, `.y2k .teil > .hinweis` und so fort). Eine neue
+`.hinweis`-Stelle in einem anderen Behälter braucht einen Eintrag in der
+Selektorliste — `test/y2k-css.test.ts` erzwingt, dass keine Regel eine Klasse einer
+eingebetteten Komponente als Nachfahre trifft.
+
+Und eine Warnung aus Erfahrung: Ein als „tot" gemeldeter Selektor kann in einer
+gemeinsamen Selektorliste stehen. Das Löschen von `.neu select` hat den
+Deklarationsblock von `.neu textarea, .neu input` mitgenommen — Rahmen, Polster und
+die 16-px-Schrift gegen den iOS-Zoom waren weg, und gültiges CSS blieb es trotzdem.
+Gefunden hat es `npm run test:suche` an der Höhe der Tippziele.
+
 ## Entwicklung
 
 ```bash
@@ -126,11 +154,26 @@ npm run db:test   # Schema und Zugriffsregeln gegen lokalen Postgres, mit Gegenp
 npm run db:workflow   # die psql-Schritte des Migrationsworkflows gegen lokal
 npm run db:regionen   # die Regionensuche des Workflows, ohne Netz
 npm run test:all  # vitest plus die Browsertests (Dev-Server muss laufen)
+
+# einzeln, wenn nur eine Ansicht betroffen ist:
+npm run test:browser     # Orte und Karte
+npm run test:suche       # Suche gegen die Filter, Bildwahl
+npm run test:korrekturen # Orte bearbeiten und ausblenden
+npm run test:band        # das Reiseband auf der Startseite
+npm run test:buch        # Freundebuch, angemeldet
+npm run test:tagebuch    # die öffentliche Gästeansicht
 ```
 
 Die Browsertests laufen mit Playwright im iPhone-13-Format gegen den Dev-Server.
 Sie prüfen, was nur ein Browser zeigt: Querscrollen, Größe der Tippziele,
 Leaflet überhaupt.
+
+Zwei Eigenheiten des Dev-Servers, über die man dabei stolpert: Er hängt eine
+`astro-dev-toolbar` in die Seite, und darin stecken Eingabefelder und eine
+Auswahlliste. Playwrights Selektoren durchstoßen Shadow-Grenzen und finden sie —
+Prüfungen auf „kein `input` auf der Seite" laufen deshalb über
+`document.querySelectorAll`. Und `MapView` setzt `zoomControl: !L.Browser.mobile`:
+im iPhone-Profil gibt es keine Zoomknöpfe.
 
 **Ein Muster, das sich durch alle Prüfungen zieht: zu jeder Reparatur gehört eine
 Gegenprobe.** Erst wird die Reparatur wieder entfernt und geschaut, ob die Prüfung
@@ -145,6 +188,21 @@ Tokenspalten in `auth.users`, ein `auth.uid()`, das nur eine der beiden
 Claimformen las, ein fehlendes storage-Schema samt Löschschutz, und
 Vorgabe-Privilegien für `anon`, die es lokal nicht gab. Der Kopf der Datei führt
 diese Liste; wer dort etwas nachbildet, bildet es streng nach.
+
+**Eine Gegenprobe kann selbst blind sein**, und das ist hier mehrfach vorgekommen:
+
+- Wer nur den Exitcode ansieht, hält jeden Fehlschlag für einen Treffer. Ein
+  `--reporter=basic` (das es in vitest 5 nicht gibt) ließ den Lauf abstürzen, bevor
+  eine Prüfung lief — die Gegenprobe meldete fünfmal Erfolg, ohne etwas zu prüfen.
+  Gegenproben suchen deshalb nach dem **Namen** der fehlgeschlagenen Prüfung.
+- Die Testdaten müssen die Zusicherung auf die Probe stellen. Die Prüfung „im Popup
+  steckt kein rohes Markup" blieb grün, als die Maskierung entfernt war — in den
+  Daten stand kein Markup. Jetzt trägt ein Beitrag ein `<script>` im Text und ein
+  `<b>` im Ortsnamen.
+- Die Erwartung darf nicht die Eingabereihenfolge sein. „Personen absteigend
+  sortiert" blieb ohne `sort()` grün, weil die erwartete Liste schon die Eingabe war.
+- Das Loch muss wirklich eines sein. Zweimal habe ich eine Zeile geändert, die im
+  geprüften Pfad gar nicht lief, und daraus geschlossen, die Prüfung sei blind.
 
 Astro 7 mit Svelte-5-Islands, Leaflet mit OpenStreetMap-Kacheln (kein API-Schlüssel
 nötig). Die Karte wird ausschließlich mit `client:only="svelte"` eingebunden, weil

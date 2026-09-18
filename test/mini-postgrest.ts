@@ -34,6 +34,7 @@ const SCHLUESSEL: Record<string, string[]> = {
   plan_flags: ['art', 'schluessel'],
   expenses: ['id'],
   places_custom: ['nr'],
+  places_patch: ['nr'],
 };
 
 const SPALTEN: Record<string, string[]> = {
@@ -58,6 +59,26 @@ const SPALTEN: Record<string, string[]> = {
     'created_at',
     'created_by',
     'updated_at',
+    'schlagworte',
+  ],
+  places_patch: [
+    'nr',
+    'name',
+    'kategorie',
+    'station',
+    'area',
+    'lat',
+    'lng',
+    'beschreibung',
+    'from_book',
+    'closed_day',
+    'needs_booking',
+    'cash_only',
+    'unterkunft',
+    'versteckt',
+    'schlagworte',
+    'updated_at',
+    'updated_by',
   ],
 };
 
@@ -74,6 +95,7 @@ export class Ablage {
     plan_flags: [],
     expenses: [],
     places_custom: [],
+    places_patch: [],
   };
 
   /** Nächster Wert der Nummernsequenz. Zählt auch nach Löschungen weiter. */

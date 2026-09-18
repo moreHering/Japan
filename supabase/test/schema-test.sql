@@ -231,6 +231,121 @@ begin
   raise notice 'Beiträge: sichtbar für alle, löschbar nur für den Urheber — bestanden';
 end $$;
 
+-- ------------------------------------------ Korrekturen und Schlagworte ---
+--
+-- Der Kern der Korrekturtabelle ist die NULL-Bedeutung: NULL heißt „nicht
+-- korrigiert". Nur dadurch lässt sich eine Korrektur **zurücknehmen** und der
+-- Buchwert kommt wieder zum Vorschein. Ginge das verloren, wäre der Buchwert
+-- nach der ersten Änderung für immer weg — und niemand würde es merken, weil
+-- die App einfach den letzten Stand zeigt.
+
+set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+
+do $$
+declare
+  n      integer;
+  wert   text;
+  fehler text[] := '{}';
+begin
+  -- Eine Korrektur an Nr. 47 (To-ji), die falsch unter „Arashiyama" stand.
+  insert into public.places_patch (nr, lat, lng, schlagworte, updated_by)
+  values (47, 34.9805, 135.7477, array['stimmt geprüft'], auth.uid());
+
+  -- Nur die gesetzten Spalten dürfen belegt sein. Der Name wurde nicht
+  -- angefasst, also muss er NULL bleiben.
+  select name into wert from public.places_patch where nr = 47;
+  if wert is not null then
+    fehler := fehler || 'nicht korrigierte Spalte war nicht NULL';
+  end if;
+
+  -- Zurücknehmen: Spalte auf NULL, Buchwert gilt wieder.
+  update public.places_patch set lat = null, lng = null where nr = 47;
+  select count(*) into n from public.places_patch
+   where nr = 47 and lat is null and lng is null;
+  if n <> 1 then fehler := fehler || 'Korrektur ließ sich nicht zurücknehmen'; end if;
+
+  -- Ausblenden statt Löschen. Die Nummer bleibt belegt.
+  insert into public.places_patch (nr, versteckt, updated_by)
+  values (34, true, auth.uid());
+  select count(*) into n from public.places_patch where nr = 34 and versteckt;
+  if n <> 1 then fehler := fehler || 'Ausblenden ging nicht'; end if;
+
+  -- Schlagworte: leeres Array als Vorgabe, nicht NULL — sonst müsste beim
+  -- Lesen überall unterschieden werden.
+  select count(*) into n from public.places_patch where nr = 34 and schlagworte = '{}';
+  if n <> 1 then fehler := fehler || 'Schlagworte kamen nicht als leeres Array'; end if;
+
+  -- Über den GIN-Index suchbar.
+  update public.places_patch set schlagworte = array['regentag', 'frühstück'] where nr = 34;
+  select count(*) into n from public.places_patch where schlagworte @> array['regentag'];
+  if n <> 1 then fehler := fehler || 'Suche nach einem Schlagwort fand nichts'; end if;
+
+  -- Eine Nummer darf nur eine Korrektur haben, sonst gäbe es zwei Wahrheiten.
+  begin
+    insert into public.places_patch (nr) values (47);
+    fehler := fehler || 'zwei Korrekturen zur selben Nummer waren möglich';
+  exception when unique_violation then null;
+  end;
+
+  -- Eine unsinnige Kategorie muss auffallen, bevor sie in der Karte landet.
+  begin
+    insert into public.places_patch (nr, kategorie) values (99, 'quatsch');
+    fehler := fehler || 'unsinnige Kategorie ging durch';
+  exception when check_violation then null;
+  end;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Korrekturen: NULL heißt unkorrigiert, Ausblenden und Schlagworte gehen — bestanden';
+end $$;
+
+-- Der zweite Reisende muss die Korrektur sehen und selbst korrigieren dürfen:
+-- Wer unterwegs merkt, dass ein Ort nicht stimmt, soll das richten können, egal
+-- wer den Eintrag angelegt hat.
+set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+
+do $$
+declare
+  n      integer;
+  fehler text[] := '{}';
+begin
+  select count(*) into n from public.places_patch where nr = 47;
+  if n <> 1 then fehler := fehler || 'fremde Korrektur war nicht sichtbar'; end if;
+
+  update public.places_patch set name = 'To-ji' where nr = 47;
+  get diagnostics n = row_count;
+  if n <> 1 then fehler := fehler || 'fremde Korrektur war nicht änderbar'; end if;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Korrekturen: alle drei sehen und ändern sie — bestanden';
+end $$;
+
+-- Ohne Profil: nichts.
+set request.jwt.claim.sub = '99999999-9999-9999-9999-999999999999';
+
+do $$
+declare
+  n      integer;
+  fehler text[] := '{}';
+begin
+  select count(*) into n from public.places_patch;
+  if n <> 0 then fehler := fehler || 'Fremder konnte Korrekturen lesen'; end if;
+
+  begin
+    insert into public.places_patch (nr, name) values (1, 'übernommen');
+    fehler := fehler || 'Fremder konnte eine Korrektur schreiben';
+  exception when insufficient_privilege then null;
+  end;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Korrekturen: ohne Profil kein Zugriff — bestanden';
+end $$;
+
 -- --------------------------------------------------- Anmeldung möglich? ---
 --
 -- Der Grund, warum es diese Prüfung gibt: Nach dem ersten Migrationslauf

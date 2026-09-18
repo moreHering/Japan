@@ -27,6 +27,15 @@ import {
   ortLoeschen,
   istPlanbar,
   vorlaeufigeOrte,
+  ortEntfernen,
+  ortVerstecken,
+  schlagworteSetzen,
+  korrekturZuruecknehmen,
+  sichtbareOrte,
+  versteckteOrte,
+  alleSchlagworte,
+  istKorrigiert,
+  schlagworteVon,
 } from '../src/lib/store.svelte';
 import { ABSEITS } from '../src/lib/places';
 import { auth } from '../src/lib/auth.svelte';
@@ -613,5 +622,214 @@ describe('Nicht auf der Route', () => {
     expect(istPlanbar(1)).toBe(true);
     expect(istPlanbar(164)).toBe(true);
     expect(istPlanbar(999)).toBe(false);
+  });
+});
+
+// ============================================================ Korrekturen ===
+//
+// Der schwierige Teil sind nicht die Korrekturen selbst, sondern ihre
+// **Rücknahme**: In der Datenbank ist NULL zweideutig — „nicht korrigiert" und
+// „ausdrücklich geleert" sehen gleich aus. Wird das verwechselt, löscht jede
+// beliebige Korrektur den Schließtag eines Ortes aus dem Reiseband. Ein Museum,
+// das geschlossen ist und offen aussieht, kostet unterwegs einen halben Tag.
+
+describe('Korrekturen an festen Orten', () => {
+  it('überschreibt nur das korrigierte Feld, der Rest bleibt wie im Buch', async () => {
+    const vorher = sichtbareOrte().find((p) => p.nr === 47)!;
+    expect(vorher).toBeDefined();
+
+    ortAendern(47, { lat: 34.9805, lng: 135.7477 });
+    const nachher = sichtbareOrte().find((p) => p.nr === 47)!;
+
+    expect(nachher.lat).toBeCloseTo(34.9805, 4);
+    expect(nachher.name).toBe(vorher.name);
+    expect(nachher.descriptionHtml).toBe(vorher.descriptionHtml);
+    expect(nachher.station).toBe(vorher.station);
+    expect(istKorrigiert(47)).toBe(true);
+  });
+
+  it('nimmt den Google-Maps-Verweis weg, wenn die Koordinate korrigiert wurde', async () => {
+    // Sonst führt die Navigation vor Ort weiter zur falschen Stelle — und genau
+    // dafür wurde die Koordinate ja korrigiert.
+    const mitId = sichtbareOrte().find((p) => p.placeId)!;
+    expect(mitId).toBeDefined();
+    ortAendern(mitId.nr, { lat: 35.0, lng: 135.0 });
+    expect(sichtbareOrte().find((p) => p.nr === mitId.nr)!.placeId).toBeNull();
+  });
+
+  it('macht eine Korrektur rückgängig und der Buchwert steht wieder da', async () => {
+    const vorher = sichtbareOrte().find((p) => p.nr === 47)!;
+    ortAendern(47, { name: 'Falscher Name' });
+    expect(sichtbareOrte().find((p) => p.nr === 47)!.name).toBe('Falscher Name');
+
+    korrekturZuruecknehmen(47, 'name');
+    expect(sichtbareOrte().find((p) => p.nr === 47)!.name).toBe(vorher.name);
+    expect(istKorrigiert(47)).toBe(false);
+  });
+
+  it('räumt eine inhaltslose Korrektur ganz weg statt eine leere Zeile zu behalten', async () => {
+    ortAendern(47, { name: 'Irgendwas' });
+    expect(plan.korrekturen['47']).toBeDefined();
+    korrekturZuruecknehmen(47, 'name');
+    expect(plan.korrekturen['47']).toBeUndefined();
+  });
+
+  it('überträgt eine Korrektur und ihre Rücknahme in die Ablage', async () => {
+    ortAendern(47, { lat: 34.9805, lng: 135.7477 });
+    await abgleichen();
+    expect(ablage.tabellen.places_patch).toHaveLength(1);
+    expect(ablage.tabellen.places_patch[0]).toMatchObject({ nr: 47, lat: 34.9805 });
+
+    korrekturZuruecknehmen(47);
+    await abgleichen();
+    // Zurückgenommen heißt: Zeile weg, nicht Zeile mit alten Werten.
+    expect(ablage.tabellen.places_patch).toHaveLength(0);
+  });
+
+  it('unterscheidet „nicht korrigiert" von „ausdrücklich kein Schließtag"', async () => {
+    // Der Ort hat im Buch einen Schließtag. Eine Korrektur an der Koordinate
+    // darf ihn nicht mitnehmen.
+    const mitTag = sichtbareOrte().find((p) => p.closedDay)!;
+    expect(mitTag).toBeDefined();
+    ortAendern(mitTag.nr, { lat: 35.1, lng: 135.1 });
+    expect(sichtbareOrte().find((p) => p.nr === mitTag.nr)!.closedDay).toBe(mitTag.closedDay);
+
+    // Jetzt ausdrücklich leeren — das muss wirken und den Abgleich überleben.
+    ortAendern(mitTag.nr, { closedDay: null });
+    expect(sichtbareOrte().find((p) => p.nr === mitTag.nr)!.closedDay).toBeNull();
+
+    await abgleichen();
+    const zeile = ablage.tabellen.places_patch.find((z) => z.nr === mitTag.nr)!;
+    expect(zeile.closed_day).toBe('');
+
+    // Und nach dem Holen vom anderen Gerät ist er noch geleert.
+    uebernehmeFremdstand({});
+    expect(sichtbareOrte().find((p) => p.nr === mitTag.nr)!.closedDay).toBe(mitTag.closedDay);
+    await abgleichen();
+    expect(sichtbareOrte().find((p) => p.nr === mitTag.nr)!.closedDay).toBeNull();
+  });
+
+  it('kann ein falsches Buchzeichen entfernen', async () => {
+    // 72 der 📖-Zuordnungen sind über Namensabgleich entstanden und ungeprüft.
+    const mitBuch = sichtbareOrte().find((p) => p.book)!;
+    expect(mitBuch).toBeDefined();
+    ortAendern(mitBuch.nr, { book: null });
+    expect(sichtbareOrte().find((p) => p.nr === mitBuch.nr)!.book).toBeUndefined();
+
+    await abgleichen();
+    expect(ablage.tabellen.places_patch.find((z) => z.nr === mitBuch.nr)!.from_book).toBe(false);
+
+    uebernehmeFremdstand({});
+    await abgleichen();
+    expect(sichtbareOrte().find((p) => p.nr === mitBuch.nr)!.book).toBeUndefined();
+  });
+});
+
+describe('Ausblenden statt löschen', () => {
+  it('nimmt einen festen Ort aus der Liste, behält aber seine Nummer', async () => {
+    const anzahl = sichtbareOrte().length;
+    ortEntfernen(47);
+    expect(sichtbareOrte()).toHaveLength(anzahl - 1);
+    expect(sichtbareOrte().some((p) => p.nr === 47)).toBe(false);
+    // Die Nummer steht im gedruckten Band — sie darf nicht frei werden.
+    expect(versteckteOrte().some((p) => p.nr === 47)).toBe(true);
+  });
+
+  it('blendet ihn wieder ein', async () => {
+    ortEntfernen(47);
+    ortVerstecken(47, false);
+    expect(sichtbareOrte().some((p) => p.nr === 47)).toBe(true);
+    expect(plan.korrekturen['47']).toBeUndefined();
+  });
+
+  it('nimmt einen ausgeblendeten Ort von seinem Reisetag', async () => {
+    addToDay('2026-09-28', 47);
+    expect(plan.days['2026-09-28'].placeNrs).toContain(47);
+    ortEntfernen(47);
+    expect(plan.days['2026-09-28']?.placeNrs ?? []).not.toContain(47);
+  });
+
+  it('löscht einen eigenen Ort wirklich, statt ihn nur auszublenden', async () => {
+    const nr = ortAnlegen({
+      name: 'Airbnb Kanazawa',
+      category: 'hotel',
+      station: 'kanazawa',
+      stationLabel: 'Kanazawa',
+      area: 'zentrum',
+      lat: 36.56,
+      lng: 136.65,
+      unterkunft: true,
+    });
+    ortEntfernen(nr);
+    expect(plan.customPlaces).toHaveLength(0);
+    expect(versteckteOrte().some((p) => p.nr === nr)).toBe(false);
+  });
+});
+
+describe('Schlagworte', () => {
+  it('hängen an festen und an eigenen Orten', async () => {
+    schlagworteSetzen(47, ['regentag', 'früh da sein']);
+    expect(schlagworteVon(47)).toEqual(['regentag', 'früh da sein']);
+
+    const nr = ortAnlegen({
+      name: 'Hoshino Coffee',
+      category: 'essen',
+      station: 'tokio',
+      stationLabel: 'Tokio',
+      area: 'zentrum',
+      lat: 35.68,
+      lng: 139.76,
+    });
+    schlagworteSetzen(nr, ['frühstück']);
+    expect(schlagworteVon(nr)).toEqual(['frühstück']);
+    expect(alleSchlagworte()).toEqual(['frühstück', 'regentag', 'früh da sein'].sort((a, b) => a.localeCompare(b, 'de')));
+  });
+
+  it('werfen Doppelte und Leerzeichen weg', async () => {
+    schlagworteSetzen(47, ['  regentag ', 'regentag', '', '   ']);
+    expect(schlagworteVon(47)).toEqual(['regentag']);
+  });
+
+  it('zählen nicht als Korrektur am Buchwert', async () => {
+    // Sonst würde „alles zurücksetzen" die eigenen Schlagworte mitreißen.
+    schlagworteSetzen(47, ['regentag']);
+    expect(istKorrigiert(47)).toBe(false);
+    ortAendern(47, { name: 'Neu' });
+    korrekturZuruecknehmen(47);
+    expect(schlagworteVon(47)).toEqual(['regentag']);
+  });
+
+  it('überleben den Abgleich', async () => {
+    schlagworteSetzen(47, ['regentag', 'teuer']);
+    await abgleichen();
+    expect(ablage.tabellen.places_patch[0].schlagworte).toEqual(['regentag', 'teuer']);
+
+    uebernehmeFremdstand({});
+    expect(schlagworteVon(47)).toEqual([]);
+    await abgleichen();
+    expect(schlagworteVon(47)).toEqual(['regentag', 'teuer']);
+  });
+
+  it('wandern mit, wenn ein eigener Ort seine echte Nummer bekommt', async () => {
+    // Ohne Netz bekommt ein neuer Ort eine negative Nummer. Bliebe das
+    // Schlagwort daran hängen, wäre es nach dem ersten Abgleich verloren.
+    const nr = ortAnlegen({
+      name: 'Airbnb Takayama',
+      category: 'hotel',
+      station: 'takayama',
+      stationLabel: 'Takayama',
+      area: 'zentrum',
+      lat: 36.14,
+      lng: 137.25,
+      unterkunft: true,
+    });
+    expect(nr).toBeLessThan(0);
+    schlagworteSetzen(nr, ['unsere buchung']);
+
+    await abgleichen();
+    const echte = plan.customPlaces[0].nr;
+    expect(echte).toBeGreaterThan(0);
+    expect(schlagworteVon(echte)).toEqual(['unsere buchung']);
+    expect(schlagworteVon(nr)).toEqual([]);
   });
 });

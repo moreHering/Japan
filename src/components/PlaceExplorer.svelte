@@ -39,17 +39,28 @@
     plan,
     placesOfDay,
     unplacePlace,
+    sichtbareOrte,
+    versteckteOrte,
+    alleSchlagworte,
+    schlagworteVon,
+    istKorrigiert,
+    ortVerstecken,
   } from '../lib/store.svelte';
 
   type Props = { places: Place[] };
   let { places }: Props = $props();
 
   /**
-   * Feste Orte aus dem Build plus die selbst ergänzten aus dem Plan. Alle
-   * Filter arbeiten danach auf einer Liste — sie müssen nicht wissen, woher
-   * ein Ort kommt.
+   * Alle Orte, wie sie die App zeigen soll: feste und eigene, mit angewandten
+   * Korrekturen, ausgeblendete heraus. Die Filter arbeiten danach auf einer
+   * Liste und müssen nicht wissen, woher ein Ort kommt oder ob er korrigiert
+   * wurde.
+   *
+   * Die Prop `places` bleibt für den Astro-Build erhalten, wird hier aber nicht
+   * mehr gelesen — Korrekturen stecken im Plan, nicht im Build.
    */
-  let alle = $derived<Place[]>([...places, ...plan.customPlaces]);
+  let alle = $derived<Place[]>(sichtbareOrte());
+  let versteckt = $derived<Place[]>(versteckteOrte());
 
   const days: TripDay[] = buildDays();
 
@@ -87,18 +98,33 @@
   let mapRef = $state<MapView | null>(null);
 
   /** Erfassung eigener Orte. */
+  /** Gesetzte Schlagwortfilter. Mehrere bedeuten „alle davon". */
+  let wortFilter = $state<Set<string>>(new Set());
+  let verstecktOffen = $state(false);
   let pin = $state<{ lat: number; lng: number } | null>(null);
   let pickMode = $state(false);
   let formOffen = $state(false);
-  let bearbeiten = $state<EigenerOrt | null>(null);
+  let bearbeiten = $state<Place | null>(null);
+  /** Vorbelegung für einen neuen Ort — z. B. „das ist eine Unterkunft". */
+  let vorlage = $state<{ category: Category; unterkunft: boolean; station: string } | null>(null);
 
   /** Trifft ein Ort den Suchbegriff? Name, Nummer oder Beschreibungstext. */
   function trifft(p: Place, q: string) {
     return (
       p.name.toLowerCase().includes(q) ||
       String(p.nr) === q ||
-      plainText(p.descriptionHtml).toLowerCase().includes(q)
+      plainText(p.descriptionHtml).toLowerCase().includes(q) ||
+      // Auch die eigenen Schlagworte: Wer „Regentag" tippt, will die Orte, die
+      // er selbst so markiert hat, und nicht erst den Filter finden müssen.
+      schlagworteVon(p.nr).some((w) => w.toLowerCase().includes(q))
     );
+  }
+
+  function wortUmschalten(w: string) {
+    const s = new Set(wortFilter);
+    if (s.has(w)) s.delete(w);
+    else s.add(w);
+    wortFilter = s;
   }
 
   /**
@@ -117,6 +143,10 @@
     const q = query.trim().toLowerCase();
     if (q) return alle.filter((p) => trifft(p, q));
 
+    // Schlagworte wirken zusammen mit den übrigen Filtern, nicht statt ihnen:
+    // „Frühstück" **und** „Tokio" ist die sinnvolle Frage, nicht eine von beiden.
+    const worte = [...wortFilter];
+
     const amTag = tagFilter ? new Set(placesOfDay(tagFilter)) : null;
     const geplant = nurGeplant
       ? new Set(Object.values(plan.days).flatMap((d) => d.placeNrs))
@@ -131,6 +161,10 @@
       if (onlyBook && !p.book) return false;
       if (onlyOpen && p.closedDay) return false;
       if (hideDone && isDone(p.nr)) return false;
+      if (worte.length) {
+        const eigene = schlagworteVon(p.nr);
+        if (!worte.every((w) => eigene.includes(w))) return false;
+      }
       return true;
     });
   });
@@ -169,12 +203,14 @@
       (onlyOpen ? 1 : 0) +
       (hideDone ? 1 : 0) +
       (nurGeplant ? 1 : 0) +
-      (tagFilter ? 1 : 0),
+      (tagFilter ? 1 : 0) +
+      wortFilter.size,
   );
 
   function filterZuruecksetzen() {
     query = '';
     station = 'alle';
+    wortFilter = new Set();
     cats = new Set(CATEGORIES.map((c) => c.key));
     onlyTips = onlyBook = onlyOpen = hideDone = nurGeplant = false;
     tagFilter = null;
@@ -234,7 +270,25 @@
     mobileView = 'karte';
   }
 
-  function bearbeitenStarten(ort: EigenerOrt) {
+  /**
+   * Formular für eine Unterkunft öffnen, ohne Umweg über die Karte.
+   *
+   * Der Pin startet in der Mitte der gewählten Station. Das ist **kein**
+   * brauchbarer Ort, sondern nur ein Startwert — deshalb verlangt das Formular
+   * beim Speichern eine Bestätigung, wenn die Koordinate nicht in Japan liegt,
+   * und der eingefügte Maps-Link ist der eigentlich gemeinte Weg.
+   */
+  function unterkunftEintragen() {
+    const s = stations.find((x) => x.slug === station) ?? stations[0];
+    pin = { lat: s.center[0], lng: s.center[1] };
+    bearbeiten = null;
+    vorlage = { category: 'hotel' as Category, unterkunft: true, station: s.slug };
+    formOffen = true;
+    mobileView = 'liste';
+  }
+
+  function bearbeitenStarten(ort: Place) {
+    vorlage = null;
     bearbeiten = ort;
     pin = { lat: ort.lat, lng: ort.lng };
     formOffen = true;
@@ -289,6 +343,21 @@
     </button>
 
     <span class="count"><b>{filtered.length}</b> von {alle.length}</span>
+
+    <!--
+      Beide Knöpfe stehen hier und nicht in der Filterzeile: Die klappt auf dem
+      Handy zu, und dann wäre „Unterkunft eintragen" verborgen — obwohl es eine
+      Hauptaktion ist — und „ausgeblendet" der einzige Weg zurück zu einem Ort,
+      den man weggetippt hat. Ein Weg zurück, den man nicht findet, ist keiner.
+    -->
+    <button class="btn small primary" onclick={unterkunftEintragen} title="Hotel oder Airbnb eintragen">
+      ✚ Unterkunft
+    </button>
+    {#if versteckt.length}
+      <button class="btn small ghost" onclick={() => (verstecktOffen = !verstecktOffen)}>
+        {versteckt.length} ausgeblendet
+      </button>
+    {/if}
 
     {#if sucheAktiv}
       <!-- Sonst sieht es aus wie ein Fehler, wenn die Haken nichts tun. -->
@@ -385,6 +454,21 @@
     </label>
   </div>
 
+  {#if alleSchlagworte().length}
+    <div class="row cats" class:zu={!filterOffen}>
+      <span class="reihentitel">Schlagworte</span>
+      {#each alleSchlagworte() as w (w)}
+        <button
+          class="chip plain"
+          class:on={wortFilter.has(w)}
+          onclick={() => wortUmschalten(w)}
+          aria-pressed={wortFilter.has(w)}
+          disabled={Boolean(tagFilter)}>{w}</button
+        >
+      {/each}
+    </div>
+  {/if}
+
   <div class="row status" class:zu={!filterOffen}>
     {#if eigeneAnzahl}
       <span class="count dim">{eigeneAnzahl} selbst ergänzt</span>
@@ -408,12 +492,38 @@
   </div>
 </div>
 
+{#if verstecktOffen && versteckt.length}
+  <div class="versteckliste">
+    <div class="kopf">
+      <h2>Ausgeblendete Orte</h2>
+      <p>
+        Die Nummern bleiben belegt — sie stehen im gedruckten Reiseband und
+        werden nie neu vergeben.
+      </p>
+      <button class="btn small ghost" onclick={() => (verstecktOffen = false)}>schließen</button>
+    </div>
+    <ul>
+      {#each versteckt as p (p.nr)}
+        <li>
+          <span class="nr">{p.nr}</span>
+          <span class="name">{p.name}</span>
+          <span class="wo">{p.stationLabel}</span>
+          <button class="btn small" onclick={() => ortVerstecken(p.nr, false)}>
+            wieder einblenden
+          </button>
+        </li>
+      {/each}
+    </ul>
+  </div>
+{/if}
+
 {#if formOffen && pin}
   <div class="erfassen">
     <OrtFormular
       lat={pin.lat}
       lng={pin.lng}
       ort={bearbeiten}
+      {vorlage}
       onfertig={(nr) => {
         erfassenSchliessen();
         if (nr !== null) {
@@ -454,10 +564,26 @@
       </h2>
       {#each group as place (place.nr)}
         <PlaceCard {place} active={selected === place.nr} onselect={select}>
-          {#if istEigen(place)}
-            <button class="btn small ghost" onclick={() => bearbeitenStarten(place)}>
-              bearbeiten
-            </button>
+          <!-- Jeder Ort ist bearbeitbar, auch die aus dem Reiseband: Eine
+               falsche Koordinate oder ein falsches 📖 muss sich vor Ort richten
+               lassen, nicht erst nach der Reise. -->
+          <button class="btn small ghost" onclick={() => bearbeitenStarten(place)}>
+            bearbeiten
+          </button>
+          {#if schlagworteVon(place.nr).length}
+            <span class="worte">
+              {#each schlagworteVon(place.nr) as w (w)}
+                <button
+                  class="wortchip"
+                  class:on={wortFilter.has(w)}
+                  onclick={() => wortUmschalten(w)}
+                  title={wortFilter.has(w) ? 'Filter aufheben' : 'danach filtern'}>{w}</button
+                >
+              {/each}
+            </span>
+          {/if}
+          {#if istKorrigiert(place.nr)}
+            <span class="korrigiert" title="weicht vom gedruckten Reiseband ab">geändert</span>
           {/if}
           {#if dayOfPlace(place.nr)}
             <button class="btn small" onclick={() => unplacePlace(place.nr)}>
@@ -518,6 +644,101 @@
     flex-wrap: wrap;
     gap: 7px;
     align-items: center;
+  }
+
+  .reihentitel {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ai-40);
+    align-self: center;
+    flex: none;
+  }
+
+  /* Schlagworte an der Ortskarte: gleich Anzeige und Filtergriff. */
+  .worte {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .wortchip {
+    min-height: 32px;
+    padding: 0 8px;
+    border: 1px dashed var(--line);
+    border-radius: 999px;
+    background: transparent;
+    font: inherit;
+    font-size: 0.7rem;
+    color: var(--ai-60);
+    cursor: pointer;
+  }
+  .wortchip.on {
+    background: var(--ai);
+    border-style: solid;
+    border-color: var(--ai);
+    color: var(--washi);
+  }
+
+  .korrigiert {
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--shu);
+    align-self: center;
+  }
+
+  .versteckliste {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--washi-2);
+    padding: 12px 14px;
+    margin: 0 0 12px;
+  }
+  .versteckliste .kopf {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .versteckliste h2 {
+    font-size: 0.95rem;
+    margin: 0;
+  }
+  .versteckliste .kopf p {
+    margin: 0;
+    font-size: 0.74rem;
+    color: var(--ai-60);
+    flex: 1 1 200px;
+  }
+  .versteckliste ul {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .versteckliste li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+  }
+  .versteckliste .nr {
+    font-variant-numeric: tabular-nums;
+    color: var(--kin);
+    min-width: 2.2em;
+  }
+  .versteckliste .name {
+    font-weight: 600;
+  }
+  .versteckliste .wo {
+    color: var(--ai-40);
+    font-size: 0.74rem;
+  }
+  .versteckliste li .btn {
+    margin-left: auto;
   }
 
   .suchhinweis {

@@ -16,8 +16,21 @@ Deshalb steht hier jede Ableitung einzeln, zum Nachprüfen.
 - **Die 📖-Liste unten** wird gerade gegen das Buch geprüft. Auffällig:
   Nr. 47 To-ji unter Erlebnis 26 „Arashiyama" — To-ji liegt rund 8 km
   südlich davon.
-- **Eure Unterkünfte** in Kanazawa, Takayama und Hakone trägst du selbst
-  über die Erfassungsmaske ein, mit dem Haken „hier schlafen wir".
+
+  **Das brauchst du mir nicht mehr zu schicken.** Seit dem Umbau lässt sich
+  jeder Ort in der App bearbeiten, auch die 164 aus dem Reiseband: Haken
+  „📖 aus dem Reiseführer" weg, fertig. Was vom Buch abweicht, steht im
+  Formular mit dem Buchwert daneben, und „zurück zum Buchwert" nimmt alles
+  wieder zurück. Korrekturen gehen über den Abgleich an alle drei Geräte.
+- **Eure Unterkünfte** in Kanazawa, Takayama und Hakone trägst du selbst ein —
+  in den Orten der Knopf **✚ Unterkunft**. Koordinaten musst du nicht abtippen:
+  Im Feld *Adresse einfügen* genügt der Google-Maps-Link aus der
+  Buchungsbestätigung. Kurzlinks (`maps.app.goo.gl`) gehen **nicht** — die
+  enthalten keine Koordinate; einmal in Maps öffnen und die lange Adresse
+  kopieren.
+- **Ein Ort, den es nicht gibt**, muss nicht in der Liste stehenbleiben:
+  bearbeiten → *ausblenden*. Die Nummer bleibt belegt, weil sie im gedruckten
+  Band steht; über „N ausgeblendet" holst du ihn zurück.
 
 Korrekturen trage ich in die kuratierten Dateien ein
 (`data/source/buch-erlebnisse.json`, `data/source/unterkunft.json`); danach

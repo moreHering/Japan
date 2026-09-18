@@ -15,39 +15,166 @@
     CATEGORIES,
     STATIONSWAHL,
     ABSEITS,
+    istEigen,
+    placeByNr,
     stationLabelOf,
     type Category,
-    type EigenerOrt,
+    type Place,
   } from '../lib/places';
-  import { ortAnlegen, ortAendern, ortLoeschen } from '../lib/store.svelte';
+  import {
+    ortAnlegen,
+    ortAendern,
+    ortEntfernen,
+    schlagworteSetzen,
+    schlagworteVon,
+    alleSchlagworte,
+    istKorrigiert,
+    korrekturZuruecknehmen,
+  } from '../lib/store.svelte';
   import { auth } from '../lib/auth.svelte';
   import { WEEKDAYS } from '../lib/trip';
+  import { lese, inJapan } from '../lib/koordinaten';
 
   type Props = {
     /** Koordinate aus der Karte. */
     lat: number;
     lng: number;
-    /** Gesetzt, wenn ein bestehender Ort bearbeitet wird. */
-    ort?: EigenerOrt | null;
+    /**
+     * Gesetzt, wenn ein bestehender Ort bearbeitet wird — fest oder eigen.
+     * Feste Orte bekommen eine Korrektur obendrauf, eigene werden direkt
+     * geändert. Diese Maske muss den Unterschied nur anzeigen, nicht verwalten.
+     */
+    ort?: Place | null;
     onfertig?: (nr: number | null) => void;
     onabbruch?: () => void;
     /** Erneut eine Stelle auf der Karte wählen. */
     onneuwaehlen?: () => void;
+    /**
+     * Vorbelegung für einen neuen Ort. Kommt vom Knopf „✚ Unterkunft": Dann
+     * sind Art und Haken schon richtig gesetzt, und es bleibt Name und Adresse.
+     */
+    vorlage?: { category: Category; unterkunft: boolean; station: string } | null;
   };
 
-  let { lat, lng, ort = null, onfertig, onabbruch, onneuwaehlen }: Props = $props();
+  let {
+    lat,
+    lng,
+    ort = null,
+    onfertig,
+    onabbruch,
+    onneuwaehlen,
+    vorlage = null,
+  }: Props = $props();
+
+  /** Eigener Ort oder einer aus dem gedruckten Reiseband? */
+  let eigen = $derived(!ort || istEigen(ort));
+  /** Der unkorrigierte Stand aus dem Buch — für „zurück zum Buchwert". */
+  let ausDemBuch = $derived(ort && !istEigen(ort) ? placeByNr(ort.nr) : undefined);
+  let korrigiert = $derived(ort ? istKorrigiert(ort.nr) : false);
+
+  /**
+   * Was weicht vom Reiseband ab, und wie stand es dort?
+   *
+   * Ohne das weiß man nach drei Tagen nicht mehr, was man selbst geändert hat
+   * und was aus dem Buch kommt — und traut am Ende keinem der beiden.
+   */
+  let abweichungen = $derived.by(() => {
+    if (!ort || !ausDemBuch) return [] as { feld: string; imBuch: string }[]
+    const b = ausDemBuch;
+    const liste: { feld: string; imBuch: string }[] = [];
+    if (ort.name !== b.name) liste.push({ feld: 'Name', imBuch: b.name });
+    if (ort.category !== b.category) {
+      liste.push({ feld: 'Art', imBuch: CATEGORIES.find((c) => c.key === b.category)?.short ?? b.category });
+    }
+    if (ort.station !== b.station) liste.push({ feld: 'Station', imBuch: stationLabelOf(b.station) });
+    if (Math.abs(ort.lat - b.lat) > 1e-6 || Math.abs(ort.lng - b.lng) > 1e-6) {
+      liste.push({ feld: 'Koordinate', imBuch: `${b.lat.toFixed(5)}, ${b.lng.toFixed(5)}` });
+    }
+    if (ort.closedDay !== b.closedDay) {
+      liste.push({ feld: 'geschlossen', imBuch: b.closedDay ?? 'kein Schließtag' });
+    }
+    if (Boolean(ort.book) !== Boolean(b.book)) {
+      liste.push({ feld: '📖', imBuch: b.book ? `Erlebnis ${b.book}` : 'nicht im Buch' });
+    }
+    if (ort.needsBooking !== b.needsBooking) {
+      liste.push({ feld: 'Reservierung', imBuch: b.needsBooking ? 'nötig' : 'nicht nötig' });
+    }
+    if (ort.cashOnly !== b.cashOnly) {
+      liste.push({ feld: 'Bargeld', imBuch: b.cashOnly ? 'nur Bargeld' : 'Karte geht' });
+    }
+    if (ort.descriptionHtml !== b.descriptionHtml) liste.push({ feld: 'Notiz', imBuch: 'geändert' });
+    return liste;
+  });
 
   let name = $state(ort?.name ?? '');
-  let category = $state<Category>(ort?.category ?? 'kultur');
-  let station = $state(ort?.station ?? STATIONSWAHL[0].slug);
+  let category = $state<Category>(ort?.category ?? vorlage?.category ?? 'kultur');
+  let station = $state(ort?.station ?? vorlage?.station ?? STATIONSWAHL[0].slug);
   let area = $state<'zentrum' | 'ausflug'>(ort?.area ?? 'zentrum');
   let beschreibung = $state(ort?.descriptionHtml ?? '');
   let ausBuch = $state(Boolean(ort?.book));
-  let unterkunft = $state(ort?.uebernachtung === 'gebucht');
+  let unterkunft = $state(ort ? ort.uebernachtung === 'gebucht' : (vorlage?.unterkunft ?? false));
   let closedDay = $state(ort?.closedDay ?? '');
   let needsBooking = $state(ort?.needsBooking ?? false);
   let cashOnly = $state(ort?.cashOnly ?? false);
   let fehler = $state<string | null>(null);
+
+  // --- Schlagworte
+  let worte = $state<string[]>(ort ? [...schlagworteVon(ort.nr)] : []);
+  let neuesWort = $state('');
+  /** Schon vergebene Wörter, die hier noch fehlen — als Vorschlag. */
+  let vorschlaege = $derived(alleSchlagworte().filter((w) => !worte.includes(w)).slice(0, 8));
+
+  function wortDazu(w: string) {
+    const sauber = w.trim();
+    if (!sauber || worte.includes(sauber)) {
+      neuesWort = '';
+      return;
+    }
+    worte = [...worte, sauber];
+    neuesWort = '';
+  }
+  function wortWeg(w: string) {
+    worte = worte.filter((x) => x !== w);
+  }
+
+  // --- Koordinate aus eingefügtem Text
+  let einfuegen = $state('');
+  let einfuegeMeldung = $state<string | null>(null);
+  let einfuegeArt = $state<'ok' | 'warn' | 'fehler'>('ok');
+
+  /**
+   * Erkennt die Koordinate selbst, statt sie abtippen zu lassen.
+   *
+   * Dafür ist das Feld da: Eine Unterkunft lässt sich nicht auf der Karte
+   * antippen, wenn man nicht weiß, wo sie liegt — aber der Maps-Link steht in
+   * der Buchungsbestätigung.
+   */
+  function uebernehmen() {
+    const f = lese(einfuegen);
+    if (f.art === 'kurzlink') {
+      einfuegeArt = 'fehler';
+      einfuegeMeldung = f.rat;
+      return;
+    }
+    if (f.art === 'nichts') {
+      einfuegeArt = 'fehler';
+      einfuegeMeldung =
+        'Darin steckt keine Koordinate. Erkannt werden Google-Maps-Links, ein Zahlenpaar wie 35.6895, 139.6917 und Angaben in Grad und Minuten.';
+      return;
+    }
+    breite = f.lat.toFixed(6);
+    laenge = f.lng.toFixed(6);
+    einfuegen = '';
+    // Verdrehte Werte sind der häufigste Tippfehler, und ein Pin im Nichts
+    // fällt erst auf, wenn man davorsteht.
+    if (!inJapan(f.lat, f.lng)) {
+      einfuegeArt = 'warn';
+      einfuegeMeldung = `Übernommen (${f.quelle}) — liegt aber nicht in Japan. Breite und Länge vertauscht?`;
+      return;
+    }
+    einfuegeArt = f.quelle.includes('prüfen') ? 'warn' : 'ok';
+    einfuegeMeldung = `Übernommen: ${f.quelle}.`;
+  }
 
   // Beim Bearbeiten bleibt die gespeicherte Koordinate, solange keine neue
   // gewählt wurde.
@@ -88,6 +215,34 @@
       return;
     }
 
+    // Der Startpin liegt in der Mitte der Station — brauchbar zum Anschauen,
+    // nicht als Ort. Ohne diese Rückfrage landete ein Hotel bei „Unterkunft
+    // eintragen" auf dem Bahnhofsvorplatz, und auf der Reise sucht man dann
+    // eine Adresse, die es nicht gibt.
+    if (!inJapan(la, lo) && !confirm(`${la.toFixed(5)}, ${lo.toFixed(5)} liegt nicht in Japan. Trotzdem so speichern?`)) {
+      return;
+    }
+
+    /**
+     * Das 📖 braucht drei Zustände, der Haken hat zwei.
+     *
+     * Bei einem festen Ort heißt „Haken wie vorher" → nicht anfassen
+     * (`undefined`), „Haken weg" → ausdrücklich `null`. Würde stattdessen
+     * `undefined` gesendet, bliebe ein falsches 📖 stehen — und 72 der
+     * Zuordnungen sind über Namensabgleich entstanden, also genau der Fall,
+     * um den es geht. Und `'—'` statt des vorhandenen Werts würde die
+     * Erlebnisnummer aus dem Buch durch einen Strich ersetzen.
+     */
+    const buchWert = eigen
+      ? ausBuch
+        ? '—'
+        : undefined
+      : ausBuch === Boolean(ort?.book)
+        ? undefined
+        : ausBuch
+          ? (ort?.book ?? '—')
+          : null;
+
     const daten = {
       name: sauber,
       category,
@@ -98,7 +253,7 @@
       lng: lo,
       descriptionHtml: beschreibung.trim(),
       unterkunft,
-      book: ausBuch ? '—' : undefined,
+      book: buchWert,
       bookTitle: ausBuch ? 'Aus dem Reiseführer' : undefined,
       closedDay: closedDay || null,
       needsBooking,
@@ -107,23 +262,44 @@
 
     if (ort) {
       ortAendern(ort.nr, daten);
+      schlagworteSetzen(ort.nr, worte);
       onfertig?.(ort.nr);
       return;
     }
     try {
-      onfertig?.(ortAnlegen(daten, auth.userId));
+      const nr = ortAnlegen(daten, auth.userId);
+      if (worte.length) schlagworteSetzen(nr, worte);
+      onfertig?.(nr);
     } catch (e) {
       fehler = e instanceof Error ? e.message : 'Der Ort konnte nicht angelegt werden.';
     }
   }
 
-  function loeschen() {
+  /**
+   * Ort weg.
+   *
+   * Bei einem eigenen heißt das löschen. Bei einem festen ausblenden: Seine
+   * Nummer steht im gedruckten Reiseband und wird nie neu vergeben, sonst zeigte
+   * das Buch später auf etwas anderes. Die Rückfrage sagt, was passiert.
+   */
+  function entfernen() {
     if (!ort) return;
-    if (!confirm(`„${ort.name}" wirklich löschen? Der Ort verschwindet auch bei den anderen.`)) {
+    const frage = eigen
+      ? `„${ort.name}" wirklich löschen? Der Ort verschwindet auch bei den anderen.`
+      : `„${ort.name}" ausblenden? Nr. ${ort.nr} verschwindet aus Liste, Karte und Tagesplanung — die Nummer bleibt belegt, weil sie im gedruckten Reiseband steht. Umkehrbar.`;
+    if (!confirm(frage)) return;
+    ortEntfernen(ort.nr);
+    onfertig?.(null);
+  }
+
+  /** Alle Korrekturen zurück — der Stand aus dem Reiseband gilt wieder. */
+  function zurueckZumBuch() {
+    if (!ort || eigen) return;
+    if (!confirm(`Alle Änderungen an Nr. ${ort.nr} zurücknehmen? Es gilt wieder der Stand aus dem Reiseband. Schlagworte bleiben.`)) {
       return;
     }
-    ortLoeschen(ort.nr);
-    onfertig?.(null);
+    korrekturZuruecknehmen(ort.nr);
+    onfertig?.(ort.nr);
   }
 </script>
 
@@ -131,10 +307,27 @@
   <div class="kopf">
     <h2>{ort ? 'Ort bearbeiten' : 'Neuer Ort'}</h2>
     {#if ort}
-      <span class="nr">{ort.vorlaeufig ? 'Nummer folgt' : `Nr. ${ort.nr}`}</span>
+      <span class="nr">
+        {istEigen(ort) && ort.vorlaeufig ? 'Nummer folgt' : `Nr. ${ort.nr}`}
+      </span>
+      {#if !eigen}
+        <!-- Sichtbar machen, woran man gerade schraubt: an einem Eintrag aus
+             dem gedruckten Band, nicht an einem eigenen. -->
+        <span class="herkunft" class:geaendert={korrigiert}>
+          {korrigiert ? 'vom Reiseband abweichend' : 'aus dem Reiseband'}
+        </span>
+      {/if}
     {/if}
     <button type="button" class="zu" onclick={onabbruch} aria-label="schließen">×</button>
   </div>
+
+  {#if abweichungen.length}
+    <ul class="abweichungen">
+      {#each abweichungen as a (a.feld)}
+        <li><b>{a.feld}</b> geändert · im Buch: {a.imBuch}</li>
+      {/each}
+    </ul>
+  {/if}
 
   <label class="feld">
     <span>Name</span>
@@ -189,6 +382,35 @@
     ></textarea>
   </label>
 
+  <!--
+    Der wichtigste Weg für Unterkünfte: Link aus der Buchungsbestätigung
+    einfügen. Eine Adresse, die man nicht kennt, lässt sich auf der Karte nicht
+    antippen — der Link steht dagegen in jeder Bestätigung.
+  -->
+  <div class="feld einfuegefeld">
+    <span>Adresse einfügen</span>
+    <div class="zeile">
+      <input
+        type="text"
+        bind:value={einfuegen}
+        placeholder="Google-Maps-Link oder 35.6895, 139.6917"
+        autocomplete="off"
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            uebernehmen();
+          }
+        }}
+      />
+      <button type="button" class="btn small" onclick={uebernehmen} disabled={!einfuegen.trim()}>
+        lesen
+      </button>
+    </div>
+    {#if einfuegeMeldung}
+      <p class="einfuegemeldung {einfuegeArt}">{einfuegeMeldung}</p>
+    {/if}
+  </div>
+
   <div class="koordinaten">
     <label class="feld klein">
       <span>Breite</span>
@@ -233,13 +455,59 @@
     </label>
   </div>
 
+  <div class="feld schlagwortfeld">
+    <span>Schlagworte</span>
+    {#if worte.length}
+      <div class="wortreihe">
+        {#each worte as w (w)}
+          <button type="button" class="wort" onclick={() => wortWeg(w)} title="entfernen">
+            {w}<span class="x">✕</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+    <div class="zeile">
+      <input
+        type="text"
+        bind:value={neuesWort}
+        placeholder="z. B. Frühstück, Regentag, teuer"
+        autocomplete="off"
+        onkeydown={(e) => {
+          if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            wortDazu(neuesWort);
+          }
+        }}
+      />
+      <button type="button" class="btn small" onclick={() => wortDazu(neuesWort)} disabled={!neuesWort.trim()}>
+        dazu
+      </button>
+    </div>
+    {#if vorschlaege.length}
+      <!-- Schon vergebene Wörter anbieten, damit nicht „Frühstück" und
+           „fruehstueck" nebeneinander entstehen und der Filter zerfällt. -->
+      <div class="wortreihe vorschlag">
+        {#each vorschlaege as w (w)}
+          <button type="button" class="wort leer" onclick={() => wortDazu(w)}>+ {w}</button>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
   {#if fehler}
     <p class="fehler">{fehler}</p>
   {/if}
 
   <div class="knoepfe">
     {#if ort}
-      <button type="button" class="btn small ghost danger" onclick={loeschen}>löschen</button>
+      <button type="button" class="btn small ghost danger" onclick={entfernen}>
+        {eigen ? 'löschen' : 'ausblenden'}
+      </button>
+      {#if korrigiert}
+        <button type="button" class="btn small ghost" onclick={zurueckZumBuch}>
+          zurück zum Buchwert
+        </button>
+      {/if}
     {/if}
     <span class="spacer"></span>
     <button type="button" class="btn small ghost" onclick={onabbruch}>abbrechen</button>
@@ -272,6 +540,99 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--kin);
+  }
+
+  .herkunft {
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--ai);
+    opacity: 0.75;
+  }
+  .herkunft.geaendert {
+    border-color: var(--shu);
+    color: var(--shu);
+    opacity: 1;
+  }
+
+  .abweichungen {
+    list-style: none;
+    margin: 0;
+    padding: 8px 10px;
+    border-left: 3px solid var(--shu);
+    background: rgba(198, 64, 43, 0.06);
+    font-size: 0.76rem;
+    line-height: 1.5;
+  }
+
+  /* Einfügefeld und Schlagworte teilen sich die Zeilenform. */
+  .einfuegefeld .zeile,
+  .schlagwortfeld .zeile {
+    display: flex;
+    gap: 6px;
+  }
+  .einfuegefeld .zeile input,
+  .schlagwortfeld .zeile input {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .einfuegefeld .zeile .btn,
+  .schlagwortfeld .zeile .btn {
+    flex: none;
+    min-height: 44px;
+  }
+
+  .einfuegemeldung {
+    margin: 6px 0 0;
+    font-size: 0.74rem;
+    line-height: 1.45;
+  }
+  .einfuegemeldung.ok {
+    color: var(--matcha);
+  }
+  .einfuegemeldung.warn {
+    color: var(--kin);
+  }
+  .einfuegemeldung.fehler {
+    color: var(--shu);
+  }
+
+  .wortreihe {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .wortreihe.vorschlag {
+    margin: 6px 0 0;
+  }
+  /* 44 px hoch, weil darunter kein Finger trifft. */
+  .wort {
+    min-height: 44px;
+    padding: 0 10px;
+    border: 1px solid var(--ai);
+    border-radius: 999px;
+    background: var(--ai);
+    color: var(--washi);
+    font: inherit;
+    font-size: 0.76rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .wort .x {
+    opacity: 0.7;
+    font-size: 0.68rem;
+  }
+  .wort.leer {
+    background: transparent;
+    color: var(--ai);
+    border-style: dashed;
+    opacity: 0.8;
   }
 
   .zu {
@@ -388,6 +749,20 @@
     display: flex;
     gap: 7px;
     align-items: center;
+    flex-wrap: wrap;
+  }
+  /*
+   * 44 px, nicht die 38 der allgemeinen Knopfgröße.
+   *
+   * Hier stehen jetzt bis zu vier Knöpfe nebeneinander, darunter „ausblenden"
+   * und „zurück zum Buchwert" — beides Dinge, die man nicht versehentlich
+   * treffen will und die man mit einem Daumen im Zug treffen muss. Unter 44 px
+   * geht beides schief.
+   */
+  .knoepfe .btn,
+  /* Auch „auf Karte wählen" — der steht in der Koordinatenzeile, nicht hier. */
+  .koordinaten .btn {
+    min-height: 44px;
   }
 
   .spacer {

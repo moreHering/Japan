@@ -48,6 +48,7 @@ import {
   hatInhalt,
   nummerErsetzen,
   type Aenderung,
+  type Korrektur,
   type PlanState,
 } from './store.svelte';
 import { ABSEITS, stationLabelOf, type Category, type EigenerOrt } from './places';
@@ -119,6 +120,9 @@ function schluessel(a: Aenderung): string {
     case 'ort':
     case 'ort-weg':
       return `ort:${a.nr}`;
+    case 'korrektur':
+    case 'korrektur-weg':
+      return `korrektur:${a.nr}`;
     case 'alles':
       return 'alles';
   }
@@ -202,7 +206,13 @@ function nummerInWarteschlange(alt: number, neu: number) {
     if (a.art === 'marke' && a.typ === 'done' && a.schluessel === String(alt)) {
       e.a = { ...a, schluessel: String(neu) };
       geändert = true;
-    } else if ((a.art === 'ort' || a.art === 'ort-weg') && a.nr === alt) {
+    } else if (
+      (a.art === 'ort' ||
+        a.art === 'ort-weg' ||
+        a.art === 'korrektur' ||
+        a.art === 'korrektur-weg') &&
+      a.nr === alt
+    ) {
       e.a = { ...a, nr: neu };
       geändert = true;
     }
@@ -349,6 +359,25 @@ async function sendeEine(sb: SB, a: Aenderung, wer: string) {
       return;
     }
 
+    case 'korrektur': {
+      const k = plan.korrekturen[String(a.nr)];
+      // Gleich wieder zurückgenommen — der Löschvorgang hat den Eintrag ersetzt.
+      if (!k) return;
+      const { error } = await sb
+        .from('places_patch')
+        .upsert(zeileAusKorrektur(k, wer), { onConflict: 'nr' });
+      if (error) throw error;
+      return;
+    }
+
+    case 'korrektur-weg': {
+      // Eine vorläufige Nummer stand nie in der Ablage.
+      if (a.nr < 0) return;
+      const { error } = await sb.from('places_patch').delete().eq('nr', a.nr);
+      if (error) throw error;
+      return;
+    }
+
     case 'alles': {
       await sendeAlles(sb, wer);
       return;
@@ -357,6 +386,48 @@ async function sendeEine(sb: SB, a: Aenderung, wer: string) {
 }
 
 /** Ein eigener Ort als Datenbankzeile. Ohne `nr`, wenn die Sequenz sie vergibt. */
+/**
+ * Eine Korrekturzeile für die Ablage.
+ *
+ * `undefined` muss hier zu `null` werden: PostgREST lässt fehlende Felder beim
+ * Upsert unverändert stehen, ein `null` setzt sie zurück. Genau das ist
+ * gemeint — wer eine Korrektur zurücknimmt, will den Buchwert wiederhaben, und
+ * würde das Feld einfach weggelassen, bliebe die alte Korrektur stehen.
+ */
+function zeileAusKorrektur(k: Korrektur, wer: string) {
+  const oderNull = <T>(v: T | null | undefined): T | null => (v === undefined ? null : v);
+  return {
+    nr: k.nr,
+    name: oderNull(k.name),
+    kategorie: oderNull(k.category),
+    station: oderNull(k.station),
+    area: oderNull(k.area),
+    lat: oderNull(k.lat),
+    lng: oderNull(k.lng),
+    beschreibung: oderNull(k.descriptionHtml),
+    // Diese zwei Felder brauchen drei Zustände, die Datenbank kennt aber nur
+    // zwei: NULL und einen Wert. „Nicht korrigiert" und „ausdrücklich geleert"
+    // wären beides NULL — und dann löschte jede beliebige Korrektur den
+    // Schließtag oder das 📖 aus dem Buch, ohne dass es auffällt.
+    //
+    // Deshalb der Leerstring als dritter Zustand bei closed_day, und bei
+    // from_book das ausdrückliche `false`:
+    //
+    //     NULL  → nicht korrigiert, der Buchwert gilt
+    //     ''    → korrigiert auf „kein Schließtag"
+    //     'Mi'  → korrigiert auf Mittwoch
+    from_book: k.book === undefined ? null : k.book !== null,
+    closed_day: k.closedDay === undefined ? null : (k.closedDay ?? ''),
+    needs_booking: oderNull(k.needsBooking),
+    cash_only: oderNull(k.cashOnly),
+    unterkunft: oderNull(k.unterkunft),
+    versteckt: k.versteckt,
+    schlagworte: k.schlagworte,
+    updated_at: new Date().toISOString(),
+    updated_by: wer,
+  };
+}
+
 function zeileAusOrt(ort: EigenerOrt, wer: string, mitNr: boolean) {
   return {
     ...(mitNr ? { nr: ort.nr } : {}),
@@ -455,6 +526,28 @@ async function sendeAlles(sb: SB, wer: string) {
     if (error) throw error;
   }
 
+  {
+    // Korrekturen: Was hier fehlt, ist zurückgenommen worden und muss weg.
+    const bleiben = Object.values(plan.korrekturen)
+      .map((k) => k.nr)
+      .filter((nr) => nr > 0);
+    let weg = sb.from('places_patch').delete().gt('nr', 0);
+    if (bleiben.length) weg = weg.not('nr', 'in', `(${bleiben.join(',')})`);
+    const { error } = await weg;
+    if (error) throw error;
+  }
+  {
+    const zeilen = Object.values(plan.korrekturen)
+      .filter((k) => k.nr > 0)
+      .map((k) => zeileAusKorrektur(k, wer));
+    if (zeilen.length) {
+      const { error } = await sb
+        .from('places_patch')
+        .upsert(zeilen as never, { onConflict: 'nr' });
+      if (error) throw error;
+    }
+  }
+
   for (const [tabelle, zeilen] of [
     ['plan_days', tage],
     ['plan_notes', notizen],
@@ -470,7 +563,7 @@ async function sendeAlles(sb: SB, wer: string) {
 // ------------------------------------------------------------------- Holen ---
 
 async function holeStand(sb: SB): Promise<{ stand: Partial<PlanState>; leer: boolean }> {
-  const [tage, notizen, marken, ausgaben, orte] = await Promise.all([
+  const [tage, notizen, marken, ausgaben, orte, korrekturen] = await Promise.all([
     sb.from('plan_days').select('datum, place_nr, position').order('position'),
     sb.from('plan_notes').select('datum, notiz'),
     sb.from('plan_flags').select('art, schluessel, wert'),
@@ -483,8 +576,14 @@ async function holeStand(sb: SB): Promise<{ stand: Partial<PlanState>; leer: boo
         'nr, name, kategorie, station, area, lat, lng, beschreibung, from_book, closed_day, needs_booking, cash_only, unterkunft, created_by',
       )
       .order('nr'),
+    sb
+      .from('places_patch')
+      .select(
+        'nr, name, kategorie, station, area, lat, lng, beschreibung, from_book, closed_day, needs_booking, cash_only, unterkunft, versteckt, schlagworte',
+      )
+      .order('nr'),
   ]);
-  for (const r of [tage, notizen, marken, ausgaben, orte]) if (r.error) throw r.error;
+  for (const r of [tage, notizen, marken, ausgaben, orte, korrekturen]) if (r.error) throw r.error;
 
   const days: PlanState['days'] = {};
   for (const z of tage.data ?? []) {
@@ -544,15 +643,65 @@ async function holeStand(sb: SB): Promise<{ stand: Partial<PlanState>; leer: boo
     uebernachtung: z.unterkunft ? ('gebucht' as const) : undefined,
   }));
 
+  /**
+   * Korrekturen zurück in die Form des Stores.
+   *
+   * `null` aus der Datenbank heißt „nicht korrigiert" und muss zu `undefined`
+   * werden — im Store bedeutet nur `undefined` das. Bei `closed_day` ist das
+   * anders: Dort ist `null` ein echter Wert („ausdrücklich kein Schließtag"),
+   * und ihn zu verschlucken hieße, einen falschen Schließtag aus dem Buch
+   * wieder aufleben zu lassen. Die Unterscheidung lässt sich über PostgREST
+   * nicht herausbekommen, deshalb gilt hier: gesetzt bleibt gesetzt.
+   */
+  const korrekturenStand: PlanState['korrekturen'] = {};
+  for (const z of korrekturen.data ?? []) {
+    const k: Korrektur = {
+      nr: z.nr,
+      versteckt: Boolean(z.versteckt),
+      schlagworte: Array.isArray(z.schlagworte) ? z.schlagworte.filter(Boolean) : [],
+    };
+    if (z.name != null) k.name = z.name;
+    if (z.kategorie != null) k.category = z.kategorie as Category;
+    if (z.station != null) k.station = z.station;
+    if (z.area != null) k.area = z.area === 'ausflug' ? 'ausflug' : 'zentrum';
+    if (z.lat != null && z.lng != null) {
+      k.lat = z.lat;
+      k.lng = z.lng;
+    }
+    if (z.beschreibung != null) k.descriptionHtml = z.beschreibung;
+    // `null` heißt unkorrigiert, `false` heißt „ausdrücklich nicht aus dem Buch".
+    if (z.from_book != null) k.book = z.from_book ? '—' : null;
+    if (z.needs_booking != null) k.needsBooking = Boolean(z.needs_booking);
+    if (z.cash_only != null) k.cashOnly = Boolean(z.cash_only);
+    if (z.unterkunft != null) k.unterkunft = Boolean(z.unterkunft);
+    // Leerstring heißt „korrigiert auf keinen Schließtag", `null` heißt
+    // unkorrigiert. Ohne diese Unterscheidung nähme jede Korrektur dem Ort
+    // seinen Schließtag aus dem Buch — und ein geschlossenes Museum, das offen
+    // aussieht, kostet unterwegs einen halben Tag.
+    if (z.closed_day === '') k.closedDay = null;
+    else if (z.closed_day != null) k.closedDay = z.closed_day;
+    korrekturenStand[String(z.nr)] = k;
+  }
+
   const leer =
     !(tage.data ?? []).length &&
     !(notizen.data ?? []).length &&
     !(marken.data ?? []).length &&
     !expenses.length &&
-    !customPlaces.length;
+    !customPlaces.length &&
+    !Object.keys(korrekturenStand).length;
 
   return {
-    stand: { days, done, bookings, packing, packingExtra, expenses, customPlaces },
+    stand: {
+      days,
+      done,
+      bookings,
+      packing,
+      packingExtra,
+      expenses,
+      customPlaces,
+      korrekturen: korrekturenStand,
+    },
     leer,
   };
 }

@@ -257,3 +257,57 @@ jobs:
 
           echo ""
           echo "Alle Tabellen haben Row Level Security."
+
+      # Wenn die Anmeldung scheitert, liegt es fast nie an den Tabellen,
+      # sondern an `auth.users`. GoTrue liest einige Spalten in Go-Strings ein
+      # und stolpert über NULL — Konten, die per SQL entstanden sind, haben
+      # genau dort oft nichts stehen. Diese Ausgabe zeigt es, statt raten zu
+      # lassen.
+      - name: Konten durchleuchten
+        if: always()
+        env:
+          ZIEL: ${{ steps.verbindung.outputs.ziel }}
+        run: |
+          set -uo pipefail
+          [ -n "${ZIEL:-}" ] || { echo "Keine Verbindung — übersprungen."; exit 0; }
+
+          echo "Spalten in auth.users, die NULL sind:"
+          psql "$ZIEL" -c "
+            select u.email,
+                   u.aud, u.role,
+                   u.email_confirmed_at is not null as bestaetigt,
+                   u.encrypted_password is not null as passwort_da,
+                   u.banned_until is null           as nicht_gesperrt,
+                   u.deleted_at is null             as nicht_geloescht
+              from auth.users u
+             where u.email like '%@japan2026.local'
+             order by u.email;"
+
+          echo "Textspalten, die GoTrue nicht NULL sein dürfen:"
+          psql "$ZIEL" -c \
+            "select a.attname as spalte, count(*) filter (where x.ist_null) as mit_null
+                from pg_attribute a
+                join pg_class c on c.oid = a.attrelid
+                join pg_namespace n on n.oid = c.relnamespace
+               cross join lateral (
+                 select exists (
+                   select 1 from auth.users u
+                    where u.email like '%@japan2026.local'
+                      and (to_jsonb(u) ->> a.attname) is null
+                 ) as ist_null
+               ) x
+               where n.nspname = 'auth' and c.relname = 'users'
+                 and a.attnum > 0 and not a.attisdropped
+                 and format_type(a.atttypid, null) like '%char%'
+               group by a.attname
+              having count(*) filter (where x.ist_null) > 0
+               order by a.attname;"
+
+          echo "Identities:"
+          psql "$ZIEL" -c "
+            select i.provider, i.provider_id is not null as provider_id_da,
+                   i.identity_data ->> 'email' as email
+              from auth.identities i
+              join auth.users u on u.id = i.user_id
+             where u.email like '%@japan2026.local'
+             order by 3;"

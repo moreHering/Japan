@@ -457,6 +457,10 @@ for (const p of places) byStation[p.stationLabel] = (byStation[p.stationLabel] ?
  * ohne Nummer". Letztere haben keine Koordinaten, stehen deshalb nicht in
  * places.json und wären sonst ersatzlos verloren.
  */
+/** Die sechs Kapitel, die eine Station der Route sind — sie tragen ihren
+ *  japanischen Namen im Kopf, die übrigen fünf nicht. */
+const STATION_CHAPTERS = ['osaka', 'kyoto', 'kanazawa', 'takayama', 'hakone', 'tokio'];
+
 const CHAPTER_IDS = [
   'einladung', 'prolog', 'route', 'ankunft', 'osaka', 'kyoto',
   'kanazawa', 'takayama', 'hakone', 'tokio', 'epilog',
@@ -666,7 +670,69 @@ text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
 
   const out = resolve(root, 'public/reiseband.html');
   writeFileSync(out, html, 'utf8');
-  return { added, ...stats };
+
+  // Die Kapitelübersicht für die Startseite entsteht **aus** dem Band, nicht
+  // daneben. Von Hand gepflegt wäre sie nach der ersten Textänderung falsch,
+  // und eine Kapitelliste, die auf etwas anderes zeigt als sie behauptet, ist
+  // schlimmer als keine.
+  const kapitel = leseKapitel(html);
+  if (kapitel.length !== CHAPTER_IDS.length) {
+    fail(`${kapitel.length} Kapitelköpfe gefunden statt ${CHAPTER_IDS.length}`);
+  }
+  // Ohne diese Prüfung lieferte ein falscher Klassenname stillschweigend leere
+  // Felder — die Kapitelliste sah dann nur etwas kahl aus, statt aufzufallen.
+  const ohneTitel = kapitel.filter((k) => !k.titel || !k.rubrik);
+  if (ohneTitel.length) {
+    fail(`Kapitel ohne Titel oder Rubrik: ${ohneTitel.map((k) => k.id).join(', ')}`);
+  }
+  const stationen = kapitel.filter((k) => STATION_CHAPTERS.includes(k.id));
+  const ohneJp = stationen.filter((k) => !k.jp);
+  if (ohneJp.length) {
+    fail(`Stationskapitel ohne japanischen Namen: ${ohneJp.map((k) => k.id).join(', ')}`);
+  }
+  writeFileSync(
+    resolve(root, 'src/data/chapters.json'),
+    `${JSON.stringify(kapitel, null, 2)}\n`,
+    'utf8',
+  );
+
+  return { added, ...stats, kapitel: kapitel.length };
+}
+
+/**
+ * Liest je Kapitel Rubrik, Titel und japanischen Schriftzug aus der Lesefassung.
+ *
+ * Bewusst **nicht** der erste Absatz als Einleitung: Bei sechs der elf Kapitel
+ * ist das eine Bildunterschrift („Dōtonbori bei Nacht — der Glico-Mann läuft
+ * seit 1935"), die als Kapitelbeschreibung in die Irre führt. Was der Band
+ * selbst als Kopf führt, stimmt dagegen immer.
+ */
+function leseKapitel(html) {
+  const sauber = (s) =>
+    s
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const kapitel = [];
+  const abschnitt = /<section class="chapter[^"]*" id="([^"]+)"[^>]*>([\s\S]{0,1200})/g;
+  let m;
+  while ((m = abschnitt.exec(html)) !== null) {
+    const [, id, kopf] = m;
+    const titel = kopf.match(/<h2[^>]*>([\s\S]*?)<\/h2>/);
+    if (!titel) fail(`Kapitel "${id}" hat keine Überschrift`);
+    const rubrik = kopf.match(/class="eyebrow"[^>]*>([\s\S]*?)</);
+    // `jpname`, nicht `jp` — die erste Fassung suchte mit Wortgrenze und fand
+    // deshalb nichts, ohne zu murren. Die Prüfung unten fängt das jetzt ab.
+    const jp = kopf.match(/class="jpname"[^>]*>([\s\S]*?)</);
+    kapitel.push({
+      id,
+      rubrik: rubrik ? sauber(rubrik[1]) : '',
+      titel: sauber(titel[1]),
+      jp: jp ? sauber(jp[1]) : '',
+    });
+  }
+  return kapitel;
 }
 
 const guide = writeGuide();
@@ -699,4 +765,5 @@ console.log(`    · ${guide.added} Kapitelanker ergänzt`);
 console.log(`    · ${guide.rows} Ortszeilen entfernt (stehen im Planer)`);
 console.log(`    · ${guide.tables} Tabellen und ${guide.cats} Kategorieüberschriften aufgelöst`);
 console.log(`    · ${guide.blocks} Blockköpfe durch Planer-Verweis ersetzt`);
-console.log(`    · ${guide.kept} nummernlose Einträge behalten\n`);
+console.log(`    · ${guide.kept} nummernlose Einträge behalten`);
+console.log(`    · ${guide.kapitel} Kapitel nach src/data/chapters.json\n`);

@@ -1,0 +1,68 @@
+[
+  {
+    "id": "einladung",
+    "rubrik": "Bevor es losgeht",
+    "titel": "Einladung, kein Programm",
+    "jp": ""
+  },
+  {
+    "id": "prolog",
+    "rubrik": "Prolog",
+    "titel": "Ihr reist rückwärts durch die Zeit",
+    "jp": ""
+  },
+  {
+    "id": "route",
+    "rubrik": "Die Route",
+    "titel": "Sechs Stationen, neunzehn Nächte",
+    "jp": ""
+  },
+  {
+    "id": "ankunft",
+    "rubrik": "Zwischenkapitel · Die ersten 48 Stunden",
+    "titel": "Ankommen — und sofort alles anders",
+    "jp": ""
+  },
+  {
+    "id": "osaka",
+    "rubrik": "Kapitel Eins · Die Gegenwart",
+    "titel": "Osaka — die Stadt, die isst",
+    "jp": "大阪 · Ōsaka"
+  },
+  {
+    "id": "kyoto",
+    "rubrik": "Kapitel Zwei · Das klassische Japan",
+    "titel": "Kyoto — die Schule der Form",
+    "jp": "京都 · Kyōto"
+  },
+  {
+    "id": "kanazawa",
+    "rubrik": "Kapitel Drei · Edo-Zeit I",
+    "titel": "Kanazawa — Kunst statt Krieg",
+    "jp": "金沢 · „Goldsumpf\""
+  },
+  {
+    "id": "takayama",
+    "rubrik": "Kapitel Vier · Edo-Zeit II",
+    "titel": "Takayama — das Reich des Holzes",
+    "jp": "高山 · Hida-Takayama"
+  },
+  {
+    "id": "hakone",
+    "rubrik": "Kapitel Fünf · Edo-Zeit III — die Straße",
+    "titel": "Hakone — die Straße nach Edo",
+    "jp": "箱根 · Hakone"
+  },
+  {
+    "id": "tokio",
+    "rubrik": "Kapitel Sechs · Das Finale",
+    "titel": "Tokio — die Stadt ohne Gedächtnis, die nichts vergisst",
+    "jp": "東京 · Tōkyō, „östliche Hauptstadt\""
+  },
+  {
+    "id": "epilog",
+    "rubrik": "Epilog",
+    "titel": "Was ihr mitnehmt",
+    "jp": ""
+  }
+]

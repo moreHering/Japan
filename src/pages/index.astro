@@ -4,6 +4,7 @@ import TripStatus from '../components/TripStatus.svelte';
 import { places, alleOrte, CATEGORIES } from '../lib/places';
 import { legs, stations, trip, formatDay } from '../lib/trip';
 import { url, guide, asset } from '../lib/paths';
+import chapters from '../data/chapters.json';
 
 /** Orte je Station, getrennt nach Zentrum und Ausflügen. */
 const countsOf = (slug: string) => ({
@@ -23,6 +24,24 @@ const bookingPlaces = places.filter((p) => p.needsBooking).length;
 const closedPlaces = places.filter((p) => p.closedDay).length;
 /** Manche Orte haben beides — deshalb zählen, nicht addieren. */
 const trickyPlaces = places.filter((p) => p.needsBooking || p.closedDay).length;
+
+/**
+ * Die elf Kapitel des Reisebands, für den Leseblock unten.
+ *
+ * `chapters.json` erzeugt `npm run data` aus der Lesefassung selbst — von Hand
+ * gepflegt wäre die Liste nach der ersten Textänderung falsch, und eine
+ * Kapitelübersicht, die auf etwas anderes zeigt als sie behauptet, ist
+ * schlimmer als keine.
+ *
+ * Die sechs Stationskapitel bekommen ihre harten Zahlen dazu: Nächte, Datum,
+ * Ortsanzahl. Das steht in stations.json und nicht im Band.
+ */
+const kapitel = chapters.map((k) => {
+  const s = stations.find((x) => x.slug === k.id);
+  if (!s) return { ...k, station: null, orte: 0 };
+  const c = countsOf(s.slug);
+  return { ...k, station: s, orte: c.zentrum + c.ausflug };
+});
 
 /** Anker im Reiseband — vom Konvertierungsskript gesetzt. */
 const chapterOf: Record<string, string> = {
@@ -170,6 +189,53 @@ const chapterOf: Record<string, string> = {
         </p>
       </div>
     </div>
+  </section>
+
+  <!-- ---------------------------------------------------------- Der Reiseband -->
+  <!--
+    Der Band war nur über das kleine 📖 oben rechts und ein „Kapitel lesen" an
+    jeder Station erreichbar — beides Textlinks, die man nicht sieht, wenn man
+    nicht danach sucht. Hier stehen alle elf Kapitel, mit Rubrik und Titel wie
+    im Band selbst.
+
+    Bewusst als Verweis und nicht als eingebauter Text: Die Erzählung hat rund
+    143.000 Zeichen. Auf der Startseite wäre das eine Seite, die auf dem Handy
+    über Mobilfunk unnötig groß lädt — unterwegs der falsche Moment dafür.
+  -->
+  <section class="section leseband">
+    <div class="eyebrow">Zum Lesen</div>
+    <h2>Der Reiseband, elf Kapitel</h2>
+    <p class="bandlead">
+      Warum diese Route diese Route ist — die Erzählung dahinter. Die Ortslisten
+      stehen nicht mehr darin, die sind hier im Planer; der Band erzählt.
+      <a href={guide()}>Von vorn lesen →</a>
+    </p>
+
+    <ol class="kapitel">
+      {
+        kapitel.map((k) => (
+          <li class={k.station ? 'kap station' : 'kap'}>
+            <a href={guide(k.id)}>
+              <span class="kaprubrik">{k.rubrik}</span>
+              <span class="kaptitel">{k.titel}</span>
+              {k.jp && <span class="kapjp">{k.jp}</span>}
+              {k.station && (
+                <span class="kapfakten">
+                  {k.station.nights} {k.station.nights === 1 ? 'Nacht' : 'Nächte'} ·{' '}
+                  {formatDay(k.station.from)}–{formatDay(k.station.to)} · {k.orte} Orte
+                </span>
+              )}
+            </a>
+          </li>
+        ))
+      }
+    </ol>
+
+    <p class="bandfuss">
+      Sieben Empfehlungen ohne Nummer stehen nur im Band — Gion ehrlich, Nijō-jō,
+      Tsukiji-Außenmarkt, 21st Century Museum, Shinhotaka-Seilbahn, Igelcafé,
+      Round1. Sie haben keine Koordinate und liegen deshalb nicht auf der Karte.
+    </p>
   </section>
 
   <style>
@@ -339,6 +405,100 @@ const chapterOf: Record<string, string> = {
       gap: 14px;
       font-family: var(--util);
       font-size: 0.74rem;
+    }
+
+    /* -------------------------------------------------------------- Reiseband */
+
+    .bandlead {
+      max-width: 62ch;
+      margin: 0 0 18px;
+      color: var(--ai-60);
+      line-height: 1.6;
+    }
+    .bandlead a {
+      color: var(--shu);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .kapitel {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+      /* Zwei Spalten, sobald Platz ist. Auf dem Handy eine — elf Kapitel
+         nebeneinander gequetscht liest niemand. */
+      grid-template-columns: 1fr;
+      counter-reset: kap;
+    }
+    @media (min-width: 720px) {
+      .kapitel {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .kap a {
+      display: block;
+      /* 52 px hoch durch das Innenmaß — jedes Kapitel ist ein Tippziel. */
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--washi);
+      text-decoration: none;
+      color: inherit;
+      transition:
+        border-color 0.15s,
+        background 0.15s;
+    }
+    .kap a:hover,
+    .kap a:focus-visible {
+      border-color: var(--shu);
+      background: #fff;
+    }
+    /* Die sechs Stationskapitel sind der Kern — sie bekommen die Zinnoberkante. */
+    .kap.station a {
+      border-left: 3px solid var(--shu);
+    }
+
+    .kaprubrik {
+      display: block;
+      font-family: var(--util);
+      font-size: 0.66rem;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--kin);
+    }
+    .kaptitel {
+      display: block;
+      font-family: var(--disp);
+      font-size: 1rem;
+      line-height: 1.3;
+      margin-top: 3px;
+    }
+    .kapjp {
+      display: block;
+      font-family: var(--jp);
+      font-size: 0.8rem;
+      color: var(--ai-40);
+      margin-top: 2px;
+    }
+    .kapfakten {
+      display: block;
+      font-size: 0.72rem;
+      color: var(--ai-60);
+      margin-top: 5px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bandfuss {
+      max-width: 62ch;
+      margin: 16px 0 0;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      color: var(--ai-60);
+      border-left: 2px solid var(--line);
+      padding-left: 12px;
     }
 
     /* ----------------------------------------------------------------- Etappen */

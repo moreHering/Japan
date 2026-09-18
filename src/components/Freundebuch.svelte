@@ -25,7 +25,7 @@
     beitragLoeschen,
     person,
   } from '../lib/freundebuch.svelte';
-  import { places } from '../lib/places';
+  import { places, plainText } from '../lib/places';
   import { plan } from '../lib/store.svelte';
   import { formatFull, trip } from '../lib/trip';
   import { groesse } from '../lib/bild';
@@ -63,14 +63,62 @@
   /** Alle Orte für die Zuordnung eines Beitrags — feste und eigene. */
   let orte = $derived([...places, ...plan.customPlaces].sort((a, b) => a.nr - b.nr));
 
+  // ------------------------------------------------------------ Ortssuche ---
+  let ortSuche = $state('');
+  const ORT_TREFFER_MAX = 8;
+
+  let gewaehlterOrt = $derived(neuOrt ? (orte.find((o) => String(o.nr) === neuOrt) ?? null) : null);
+
+  /**
+   * Treffer nach Name, Nummer oder Stichwort aus dem Beschreibungstext. Die
+   * Liste bleibt kurz: Acht Vorschläge passen auf ein Handy, mehr wäre wieder
+   * das Scrollen, das hier gerade abgeschafft wird.
+   */
+  let alleOrtTreffer = $derived.by(() => {
+    const q = ortSuche.trim().toLowerCase();
+    if (!q) return [];
+    return orte.filter(
+      (o) =>
+        o.name.toLowerCase().includes(q) ||
+        String(o.nr) === q ||
+        plainText(o.descriptionHtml).toLowerCase().includes(q),
+    );
+  });
+  let ortTreffer = $derived(alleOrtTreffer.slice(0, ORT_TREFFER_MAX));
+  let ortMehr = $derived(Math.max(0, alleOrtTreffer.length - ORT_TREFFER_MAX));
+
+  function ortWaehlen(nr: number) {
+    neuOrt = String(nr);
+    ortSuche = '';
+  }
+  function ortLoesen() {
+    neuOrt = '';
+    ortSuche = '';
+  }
+
   let meinBrief = $derived(auth.userId ? (buch.steckbriefe[auth.userId] ?? {}) : {});
 
   async function dateiGewaehlt(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
     const f = input.files?.[0] ?? null;
+    if (!f) return; // Abbruch im Dateidialog darf die Auswahl nicht löschen
     if (vorschau) URL.revokeObjectURL(vorschau);
     neuDatei = f;
-    vorschau = f ? URL.createObjectURL(f) : null;
+    vorschau = URL.createObjectURL(f);
+  }
+
+  /**
+   * Bild wieder wegnehmen, ohne den halb geschriebenen Text zu verlieren.
+   * Die beiden Eingabefelder müssen dabei geleert werden: Sonst löst dieselbe
+   * Datei danach kein `change` mehr aus und lässt sich nicht erneut wählen.
+   */
+  function bildVerwerfen() {
+    if (vorschau) URL.revokeObjectURL(vorschau);
+    vorschau = null;
+    neuDatei = null;
+    for (const el of document.querySelectorAll<HTMLInputElement>('.bildwahl input[type=file]')) {
+      el.value = '';
+    }
   }
 
   async function absenden(e: Event) {
@@ -88,6 +136,7 @@
 
     neuText = '';
     neuOrt = '';
+    ortSuche = '';
     neuDatei = null;
     if (vorschau) URL.revokeObjectURL(vorschau);
     vorschau = null;
@@ -216,13 +265,34 @@
         </button>
       {:else}
         <form class="neu" onsubmit={absenden}>
-          <label class="datei">
-            <input type="file" accept="image/*" capture="environment" onchange={dateiGewaehlt} />
-            <span>{neuDatei ? neuDatei.name : '📷 Foto wählen oder aufnehmen'}</span>
-          </label>
+          <!--
+            Zwei getrennte Felder, und das ist kein Schmuck: `capture` zwingt
+            das Handy in die Kamera und sperrt die Aufnahmen aus. Genau das war
+            hier der Fehler — ein bereits geschossenes Foto ließ sich nicht
+            hinzufügen. Ohne `capture` bietet iOS beides an, Android je nach
+            Hersteller nur eins. Also beide Wege ausschreiben.
+          -->
+          <div class="bildwahl">
+            <label class="datei">
+              <input type="file" accept="image/*" onchange={dateiGewaehlt} />
+              <span>🖼️ Aus den Aufnahmen</span>
+            </label>
+            <label class="datei">
+              <input type="file" accept="image/*" capture="environment" onchange={dateiGewaehlt} />
+              <span>📷 Jetzt aufnehmen</span>
+            </label>
+          </div>
 
           {#if vorschau}
-            <img class="vorschau" src={vorschau} alt="Vorschau" />
+            <div class="vorschaurahmen">
+              <img class="vorschau" src={vorschau} alt="Vorschau" />
+              <button type="button" class="bildweg" onclick={bildVerwerfen} title="Bild wieder wegnehmen"
+                >✕ Bild weg</button
+              >
+            </div>
+            {#if neuDatei}
+              <p class="mini">{neuDatei.name} · {groesse(neuDatei.size)}</p>
+            {/if}
           {/if}
 
           <textarea bind:value={neuText} rows="2" placeholder="Was war da los?" maxlength="500"
@@ -235,14 +305,43 @@
             </label>
             <label class="wachsend">
               <span class="mini">Ort</span>
-              <select bind:value={neuOrt}>
-                <option value="">— keiner —</option>
-                {#each orte as o (o.nr)}
-                  <option value={String(o.nr)}>{o.nr > 0 ? `${o.nr} · ` : ''}{o.name}</option>
-                {/each}
-              </select>
+              <!--
+                Vorher ein <select> mit allen 164 Orten. Auf dem Handy heißt das:
+                durch eine Liste scrollen, die keinen Anfang und kein Ende hat.
+                Jetzt tippt man drei Buchstaben und nimmt den Treffer.
+              -->
+              {#if gewaehlterOrt}
+                <button type="button" class="ortgewaehlt" onclick={ortLoesen}>
+                  {gewaehlterOrt.nr > 0 ? `${gewaehlterOrt.nr} · ` : ''}{gewaehlterOrt.name}
+                  <span class="x">✕</span>
+                </button>
+              {:else}
+                <input
+                  type="search"
+                  bind:value={ortSuche}
+                  placeholder="Ort suchen — oder leer lassen"
+                  autocomplete="off"
+                />
+              {/if}
             </label>
           </div>
+
+          {#if !gewaehlterOrt && ortTreffer.length}
+            <ul class="orttreffer">
+              {#each ortTreffer as o (o.nr)}
+                <li>
+                  <button type="button" onclick={() => ortWaehlen(o.nr)}>
+                    {o.nr > 0 ? `${o.nr} · ` : ''}{o.name}
+                  </button>
+                </li>
+              {/each}
+              {#if ortMehr > 0}
+                <li class="mehr">… und {ortMehr} weitere — genauer tippen</li>
+              {/if}
+            </ul>
+          {:else if !gewaehlterOrt && ortSuche.trim()}
+            <p class="mini">Kein Ort gefunden. Der Beitrag geht auch ohne.</p>
+          {/if}
 
           <div class="stickerwahl">
             <span class="mini">Aufkleber</span>
@@ -700,12 +799,107 @@
     display: none;
   }
 
+  /* Zwei Knöpfe nebeneinander, auf schmalen Geräten untereinander. */
+  .bildwahl {
+    display: flex;
+    gap: 8px;
+  }
+  .bildwahl .datei {
+    flex: 1 1 0;
+    padding: 14px 8px;
+  }
+  @media (max-width: 380px) {
+    .bildwahl {
+      flex-direction: column;
+    }
+  }
+
+  .ortgewaehlt {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 10px;
+    border: 3px solid var(--tinte);
+    border-radius: 6px;
+    background: var(--sonne);
+    color: var(--tinte);
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .ortgewaehlt .x {
+    font-weight: 700;
+    flex: none;
+  }
+
+  .orttreffer {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 3px solid var(--lila);
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .orttreffer li + li {
+    border-top: 1px dashed var(--lila);
+  }
+  .orttreffer button {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: left;
+    color: var(--tinte);
+    cursor: pointer;
+  }
+  .orttreffer button:active {
+    background: var(--sonne);
+  }
+  .orttreffer .mehr {
+    padding: 8px 12px;
+    font-size: 0.72rem;
+    color: #6b5a8a;
+  }
+
+  .vorschaurahmen {
+    position: relative;
+  }
   .vorschau {
     width: 100%;
     max-height: 260px;
     object-fit: cover;
     border: 3px solid var(--tinte);
     border-radius: 6px;
+    display: block;
+  }
+  /* Über dem Bild, aber mit 44 px Höhe — darunter trifft kein Finger. */
+  .bildweg {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 3px solid var(--tinte);
+    border-radius: 6px;
+    background: var(--pink);
+    color: var(--tinte);
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--tinte);
+  }
+  .bildweg:active {
+    transform: translate(2px, 2px);
+    box-shadow: none;
   }
 
   .reihe {

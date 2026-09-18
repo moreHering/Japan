@@ -84,23 +84,13 @@ end $$;
 
 -- ------------------------------------------------- Aufräumen beim Löschen ---
 
--- Wird ein Beitrag gelöscht, bleibt sonst das Bild in der Ablage liegen und
--- zählt gegen das Freikontingent, ohne dass es noch jemand sieht.
-create or replace function public.freundebuch_bild_loeschen()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if old.bild_pfad is not null and to_regclass('storage.objects') is not null then
-    delete from storage.objects
-     where bucket_id = 'freundebuch' and name = old.bild_pfad;
-  end if;
-  return old;
-end $$;
-
-drop trigger if exists guestbook_post_bild_weg on public.guestbook_post;
-create trigger guestbook_post_bild_weg
-  after delete on public.guestbook_post
-  for each row execute function public.freundebuch_bild_loeschen();
+-- Hier stand ein Trigger, der beim Löschen eines Beitrags die Bildzeile aus
+-- `storage.objects` entfernen sollte. Das geht nicht, und zwar aus gutem Grund:
+-- Supabase hat dort einen eigenen Schutz (`storage.protect_delete`), der
+-- direktes Löschen verbietet, weil eine gelöschte Metadatenzeile die Datei im
+-- Objektspeicher nur verwaisen ließe statt sie zu entfernen. Der Trigger brach
+-- also ab und riss das Löschen des Beitrags mit.
+--
+-- Das Aufräumen läuft jetzt in der App über die Storage-API: erst die Datei
+-- entfernen, dann die Zeile. 0006 räumt den Trigger dort weg, wo er schon
+-- angelegt wurde.

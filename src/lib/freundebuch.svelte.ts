@@ -228,16 +228,44 @@ export async function beitragAnlegen(neu: NeuerBeitrag) {
   }
 }
 
+/**
+ * Beitrag löschen — erst die Datei, dann die Zeile.
+ *
+ * Das lief vorher über einen Trigger in der Datenbank, und zwar gar nicht:
+ * Supabase verbietet direktes DELETE auf `storage.objects`
+ * („Direct deletion from storage tables is not allowed"), weil eine gelöschte
+ * Metadatenzeile die Datei im Objektspeicher nur verwaisen ließe. Der Trigger
+ * brach ab und riss das Löschen des Beitrags mit. 0006 hat ihn entfernt.
+ *
+ * Die Reihenfolge ist Absicht. **Datei zuerst:** Bricht sie ab, bleibt der
+ * Beitrag stehen, der Fehler ist sichtbar und der Versuch wiederholbar.
+ * Umgekehrt wäre die Zeile weg, der Pfad damit verloren, und die Datei würde
+ * unbemerkt für immer gegen das Freikontingent zählen.
+ */
 export async function beitragLoeschen(id: string) {
   const sb = getSupabase();
   if (!sb) return false;
-  // Das Bild räumt ein Trigger in der Datenbank ab — sonst bliebe es liegen,
-  // wenn der Browser zwischen beiden Schritten geschlossen wird.
+  buch.fehler = null;
+
+  const pfad = buch.beitraege.find((b) => b.id === id)?.bildPfad ?? null;
+
+  if (pfad) {
+    const { error } = await sb.storage.from(BUCKET).remove([pfad]);
+    if (error) {
+      buch.fehler = deute(error);
+      return false;
+    }
+  }
+
   const { error } = await sb.from('guestbook_post').delete().eq('id', id);
   if (error) {
+    // Die Datei ist weg, die Zeile nicht. Das ist der einzige unschöne
+    // Zwischenstand, und er ist sichtbar statt still: Der Beitrag zeigt dann
+    // „Bild lässt sich gerade nicht laden", und ein zweiter Versuch räumt ihn ab.
     buch.fehler = deute(error);
     return false;
   }
+
   buch.beitraege = buch.beitraege.filter((b) => b.id !== id);
   return true;
 }

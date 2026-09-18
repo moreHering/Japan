@@ -92,8 +92,31 @@
   let formOffen = $state(false);
   let bearbeiten = $state<EigenerOrt | null>(null);
 
+  /** Trifft ein Ort den Suchbegriff? Name, Nummer oder Beschreibungstext. */
+  function trifft(p: Place, q: string) {
+    return (
+      p.name.toLowerCase().includes(q) ||
+      String(p.nr) === q ||
+      plainText(p.descriptionHtml).toLowerCase().includes(q)
+    );
+  }
+
+  /**
+   * Suche schlägt Filter.
+   *
+   * Vorher stand die Suche am Ende der Filterkette und war damit wirkungslos,
+   * sobald irgendetwas anderes eingeschränkt hat: Wer bei geöffnetem Tagesfilter
+   * „Ghibli" tippte, bekam nichts — der Tagesfilter hatte schon vorher
+   * entschieden. Auf der Reise ist das der Moment, in dem man die App zuschlägt.
+   *
+   * Die Filter sind zum Blättern da, die Suche zum Finden. Liegt ein Suchbegriff
+   * an, gilt er über alle Orte; die Leiste sagt das ausdrücklich, damit die
+   * stummgeschalteten Haken nicht wie ein Fehler wirken.
+   */
   let filtered = $derived.by(() => {
     const q = query.trim().toLowerCase();
+    if (q) return alle.filter((p) => trifft(p, q));
+
     const amTag = tagFilter ? new Set(placesOfDay(tagFilter)) : null;
     const geplant = nurGeplant
       ? new Set(Object.values(plan.days).flatMap((d) => d.placeNrs))
@@ -108,14 +131,11 @@
       if (onlyBook && !p.book) return false;
       if (onlyOpen && p.closedDay) return false;
       if (hideDone && isDone(p.nr)) return false;
-      if (!q) return true;
-      return (
-        p.name.toLowerCase().includes(q) ||
-        String(p.nr) === q ||
-        plainText(p.descriptionHtml).toLowerCase().includes(q)
-      );
+      return true;
     });
   });
+
+  let sucheAktiv = $derived(query.trim().length > 0);
 
   let visibleNrs = $derived(filtered.map((p) => p.nr));
 
@@ -259,7 +279,8 @@
   <div class="row schnell">
     <button
       class="btn small filterknopf"
-      class:primary={aktiveFilter > 0}
+      class:primary={aktiveFilter > 0 && !sucheAktiv}
+      class:stumm={sucheAktiv}
       onclick={() => (filterOffen = !filterOffen)}
       aria-expanded={filterOffen}
     >
@@ -268,6 +289,13 @@
     </button>
 
     <span class="count"><b>{filtered.length}</b> von {alle.length}</span>
+
+    {#if sucheAktiv}
+      <!-- Sonst sieht es aus wie ein Fehler, wenn die Haken nichts tun. -->
+      <button class="btn small suchhinweis" onclick={() => (query = '')}>
+        Suche über alle Orte — Filter pausiert ✕
+      </button>
+    {/if}
 
     <span class="spacer"></span>
 
@@ -492,6 +520,15 @@
     align-items: center;
   }
 
+  .suchhinweis {
+    background: var(--shu);
+    color: #fff;
+    border-color: var(--shu);
+    font-size: 0.72rem;
+  }
+  .filterknopf.stumm {
+    opacity: 0.45;
+  }
   .search {
     flex: 1;
     min-width: 190px;

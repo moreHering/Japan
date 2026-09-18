@@ -14,6 +14,7 @@
     categoryOf,
     istAbseits,
     istEigen,
+    plainText,
     type Category,
     type Place,
   } from '../lib/places';
@@ -57,19 +58,38 @@
 
   let current = $derived(days.find((d) => d.date === openDay)!);
 
-  /** Vorschläge: standardmäßig nur die Station des geöffneten Tages. */
+  /**
+   * Vorschläge: standardmäßig nur die Station des geöffneten Tages.
+   *
+   * Sobald gesucht wird, gilt die Suche über alle Stationen. Vorher stand die
+   * Stationsgrenze **vor** der Suche: Wer an einem Osaka-Tag nach „Ghibli"
+   * suchte, bekam nichts, obwohl der Ort existiert — man musste erst wissen,
+   * dass es dafür den Haken „alle Stationen" gibt. Wer den Namen tippt, will
+   * genau diesen Ort, nicht eine Lektion über Filter.
+   *
+   * Die Suche greift auch auf den Beschreibungstext zu, nicht nur auf den Namen:
+   * „Affen" findet Jigokudani, „Teppanyaki" das Restaurant im 31. Stock.
+   */
   let pool = $derived.by(() => {
     const q = poolQuery.trim().toLowerCase();
     return alle
       .filter((p) => {
-        if (dayOfPlace(p.nr)) return false;
+        if (dayOfPlace(p.nr)) return false; // schon verplant
+        if (q) {
+          return (
+            p.name.toLowerCase().includes(q) ||
+            String(p.nr) === q ||
+            plainText(p.descriptionHtml).toLowerCase().includes(q)
+          );
+        }
         if (!poolCats.has(p.category)) return false;
         if (!poolAll && p.station !== current.station.slug) return false;
-        if (!q) return true;
-        return p.name.toLowerCase().includes(q) || String(p.nr) === q;
+        return true;
       })
       .sort((a, b) => a.nr - b.nr);
   });
+
+  let poolSuche = $derived(poolQuery.trim().length > 0);
 
   let currentPlaces = $derived(
     placesOfDay(openDay)
@@ -330,26 +350,40 @@
     <aside class="pool">
       <div class="poolhead">
         <div class="eyebrow">Vorschläge</div>
-        <input type="search" bind:value={poolQuery} placeholder="Ort suchen …" autocomplete="off" />
+        <input
+          type="search"
+          bind:value={poolQuery}
+          placeholder="Ort suchen — Name, Nummer, Stichwort"
+          autocomplete="off"
+        />
 
-        <label class="allswitch">
-          <input type="checkbox" bind:checked={poolAll} />
-          alle Stationen statt nur {current.station.name}
-        </label>
+        {#if poolSuche}
+          <!-- Station und Kategorien sind jetzt außer Kraft. Das muss dastehen,
+               sonst wirkt der stumme Haken wie ein Fehler. -->
+          <p class="suchhinweis">
+            Suche über alle Stationen
+            <button type="button" onclick={() => (poolQuery = '')}>zurück zum Filter ✕</button>
+          </p>
+        {:else}
+          <label class="allswitch">
+            <input type="checkbox" bind:checked={poolAll} />
+            alle Stationen statt nur {current.station.name}
+          </label>
 
-        <div class="poolcats">
-          {#each CATEGORIES as c (c.key)}
-            <button
-              class="chip"
-              class:on={poolCats.has(c.key)}
-              style={`--chip:${c.color}`}
-              onclick={() => togglePoolCat(c.key)}
-              aria-pressed={poolCats.has(c.key)}
-            >
-              <i></i>{c.short}
-            </button>
-          {/each}
-        </div>
+          <div class="poolcats">
+            {#each CATEGORIES as c (c.key)}
+              <button
+                class="chip"
+                class:on={poolCats.has(c.key)}
+                style={`--chip:${c.color}`}
+                onclick={() => togglePoolCat(c.key)}
+                aria-pressed={poolCats.has(c.key)}
+              >
+                <i></i>{c.short}
+              </button>
+            {/each}
+          </div>
+        {/if}
 
         <p class="poolcount">{pool.length} noch nicht eingeplant · {totalPlanned} insgesamt verplant</p>
       </div>
@@ -796,6 +830,26 @@
     opacity: 1;
   }
 
+  .suchhinweis {
+    margin: 0;
+    font-size: 0.74rem;
+    color: var(--shu);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .suchhinweis button {
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--shu);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--shu);
+    font: inherit;
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
   .poolcount {
     font-family: var(--util);
     font-size: 0.68rem;

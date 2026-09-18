@@ -90,3 +90,69 @@ end $$;
 
 grant usage on schema public, auth to authenticated, anon;
 grant select on auth.users to authenticated;
+
+-- ---------------------------------------------------------------- storage ---
+--
+-- Warum das hier steht: Dreimal hintereinander war dieser Stub freundlicher als
+-- Supabase, und jedes Mal ging eine Reparatur erst in der Produktion auf.
+--
+--   1. Die Tokenspalten in auth.users fehlten      → Anmeldefehler
+--   2. auth.uid() las nur eine der beiden Claimformen → falsch negative Probe
+--   3. storage fehlte ganz                          → Löschen ging nicht
+--
+-- Der dritte Fall: Supabase schützt `storage.objects` mit einem eigenen Trigger
+-- gegen direktes DELETE, weil eine gelöschte Metadatenzeile die Datei im
+-- Objektspeicher nur verwaisen ließe. Ein Trigger in 0003, der genau das tat,
+-- brach deshalb ab und riss das Löschen des Beitrags mit. Lokal fiel das nicht
+-- auf: ohne storage-Schema übersprang der Trigger seinen Rumpf klaglos.
+--
+-- Also wird der Schutz hier nachgebildet — knapp, aber mit derselben Wirkung
+-- und derselben Meldung. Eine Migration, die direkt in storage.objects löscht,
+-- fällt ab jetzt lokal auf.
+
+create schema if not exists storage;
+
+create table if not exists storage.buckets (
+  id               text primary key,
+  name             text not null,
+  public           boolean not null default false,
+  file_size_limit  bigint,
+  allowed_mime_types text[],
+  created_at       timestamptz not null default now()
+);
+
+create table if not exists storage.objects (
+  id         uuid primary key default gen_random_uuid(),
+  bucket_id  text references storage.buckets (id),
+  name       text,
+  owner      uuid,
+  owner_id   text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  metadata   jsonb
+);
+
+alter table storage.objects enable row level security;
+
+-- Der Schutz aus Supabase, im Wortlaut der echten Meldung.
+create or replace function storage.protect_delete()
+returns trigger
+language plpgsql
+as $$
+begin
+  raise exception 'Direct deletion from storage tables is not allowed. Use the Storage API instead.'
+    using hint = 'This prevents accidental data loss from orphaned objects.';
+end $$;
+
+-- `for each statement`, nicht `for each row` — und das ist der Punkt, an dem
+-- die Nachbildung erst scharf wird: Die Probe löscht einen Pfad, zu dem gar
+-- keine Zeile existiert. Ein Zeilentrigger feuert dann nie und der Schutz wäre
+-- wirkungslos. In der Produktion feuerte er trotzdem, also sitzt er dort auf
+-- der Anweisung. Mit `for each row` lief die Gegenprobe hier durch, obwohl sie
+-- in Supabase abbrach.
+drop trigger if exists protect_delete on storage.objects;
+create trigger protect_delete
+  before delete on storage.objects
+  for each statement execute function storage.protect_delete();
+
+grant usage on schema storage to authenticated, anon;

@@ -21,7 +21,25 @@ export function asset(path: string): string {
   return `${BASE}${path.replace(/^\/+/, '')}`;
 }
 
-/** Kapitel im Reiseband: `guide('kyoto')` → `/Japan/reiseband.html#kyoto` */
+/**
+ * Kapitel im Reiseband **auf der Startseite**: `kapitel('kyoto')` → `/Japan/#kyoto`
+ *
+ * Seit der Band vollständig auf der Startseite steht, ist das der Weg zum Text.
+ * Innerhalb der Startseite genügt `#kyoto`; von anderen Seiten braucht es den
+ * vollen Pfad, sonst sucht der Browser den Anker auf der aktuellen Seite.
+ */
+export function kapitel(anchor?: string): string {
+  return `${BASE}${anchor ? `#${anchor}` : ''}`;
+}
+
+/**
+ * Die eigenständige Lesefassung als Datei: `guide('kyoto')` →
+ * `/Japan/reiseband.html#kyoto`
+ *
+ * Bleibt für den Ausdruck und als geschlossenes Dokument. Für das Lesen in der
+ * App ist `kapitel()` der Weg — sonst landet man in einer zweiten Kopie
+ * desselben Texts und wundert sich, warum die Navigation fehlt.
+ */
 export function guide(anchor?: string): string {
   return `${asset('reiseband.html')}${anchor ? `#${anchor}` : ''}`;
 }

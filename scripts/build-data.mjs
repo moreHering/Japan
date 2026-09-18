@@ -13,6 +13,7 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { scope } from './css-scope.mjs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -675,6 +676,10 @@ text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
   // daneben. Von Hand gepflegt wäre sie nach der ersten Textänderung falsch,
   // und eine Kapitelliste, die auf etwas anderes zeigt als sie behauptet, ist
   // schlimmer als keine.
+  // Der Text selbst, für die Startseite. Der Band liegt dort nicht mehr hinter
+  // einem Link, sondern wird gelesen.
+  const lese = schreibeLesefassung(html);
+
   const kapitel = leseKapitel(html);
   if (kapitel.length !== CHAPTER_IDS.length) {
     fail(`${kapitel.length} Kapitelköpfe gefunden statt ${CHAPTER_IDS.length}`);
@@ -696,7 +701,86 @@ text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
     'utf8',
   );
 
-  return { added, ...stats, kapitel: kapitel.length };
+  return { added, ...stats, kapitel: kapitel.length, lese };
+}
+
+/** Der Container, an den das Stylesheet des Bandes gebunden wird. */
+const BAND_CONTAINER = '.bandtext';
+
+/**
+ * Zerlegt die Lesefassung in Inhalt und Stil, damit die Startseite sie einbetten
+ * kann.
+ *
+ * Zwei Dinge müssen dabei passieren, und beide sind nicht offensichtlich:
+ *
+ * 1. **Das Stylesheet wird an einen Container gebunden** (`css-scope.mjs`). Es
+ *    führt `:root`, `html`, `body`, `.eyebrow` und `.wrap` — Namen, die die App
+ *    selbst benutzt. Unverändert eingebunden würde es die ganze Anwendung
+ *    umlackieren.
+ * 2. **Der Rückweg-Knopf fällt raus.** „← Zum Reiseplaner" ist auf der
+ *    Startseite des Planers Unsinn.
+ */
+function schreibeLesefassung(html) {
+  const roh = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+  if (!roh.trim()) fail('Kein Stylesheet im Reiseband gefunden');
+
+  const stil = scope(roh, BAND_CONTAINER);
+  // Eine ungebundene Regel würde in die App durchschlagen. Lieber hier
+  // abbrechen als im Browser suchen.
+  const offen = [...stil.matchAll(/(?:^|\n)([^@\s][^{}\n]*)\{/g)]
+    .map((m) => m[1].trim())
+    .filter((s) => !s.startsWith(BAND_CONTAINER));
+  if (offen.length) {
+    fail(`${offen.length} Regel(n) ohne Container: ${offen.slice(0, 3).join(' | ')}`);
+  }
+
+  const koerper = html.match(/<body[^>]*>([\s\S]*)<\/body>/);
+  if (!koerper) fail('Kein <body> im Reiseband gefunden');
+
+  let inhalt = koerper[1]
+    // Der Rückweg gehört zum eigenständigen Dokument, nicht hierher.
+    .replace(/<a class="app-back"[\s\S]*?<\/a>/g, '')
+    // Skripte werden von `set:html` ohnehin nicht ausgeführt; sie stünden nur
+    // als toter Ballast in der Seite.
+    .replace(/<script[\s\S]*?<\/script>/g, '')
+    .trim();
+
+  // Die Bilder liegen bei Wikimedia. `loading="lazy"` steht nicht überall im
+  // Original — auf der Startseite zählt es mehr, weil jetzt neun Bilder unter
+  // dem ersten Bildschirm hängen.
+  inhalt = inhalt.replace(/<img (?![^>]*loading=)/g, '<img loading="lazy" decoding="async" ');
+
+  // Tabellen in einen eigenen Scrollrahmen.
+  //
+  // Gemessen bei 390 px Breite: `table.data` ist 532 px breit, `table.facts`
+  // 346 px mit Einzug. Beide schieben die **ganze Seite** zur Seite, und
+  // Querscrollen auf der Startseite ist genau das, was einem als Erstes auffällt.
+  //
+  // Der Rahmen scrollt statt der Seite. Absichtlich nicht die Tabelle
+  // schrumpfen: Eine Probier-Tabelle mit vier Zeichen pro Spalte liest niemand,
+  // ein Wischen zur Seite ist zumutbar.
+  const tabellen = (inhalt.match(/<table\b/g) ?? []).length;
+  inhalt = inhalt
+    .replace(/<table\b/g, '<div class="bandtabelle"><table')
+    .replace(/<\/table>/g, '</table></div>');
+  const rahmen = (inhalt.match(/<div class="bandtabelle">/g) ?? []).length;
+  if (rahmen !== tabellen) {
+    fail(`${rahmen} Tabellenrahmen für ${tabellen} Tabellen — Auszeichnung unerwartet`);
+  }
+
+  mkdirSync(resolve(root, 'src/data'), { recursive: true });
+  writeFileSync(resolve(root, 'src/data/reiseband-inhalt.html'), `${inhalt}\n`, 'utf8');
+  // Kennung am Anfang, damit der Browsertest genau diesen Block findet. Ohne sie
+  // fischte er auch das Stylesheet der App heraus — das führt `:root`, `html`
+  // und `body` ebenfalls, und die Prüfung meldete 92 „ungebundene" Regeln, die
+  // gar nicht zum Band gehören.
+  writeFileSync(
+    resolve(root, 'src/data/reiseband-stil.css'),
+    `/* reiseband-stil */\n${stil}\n`,
+    'utf8',
+  );
+
+  return { zeichen: inhalt.length, regeln: stil.split('\n').length };
 }
 
 /**
@@ -766,4 +850,7 @@ console.log(`    · ${guide.rows} Ortszeilen entfernt (stehen im Planer)`);
 console.log(`    · ${guide.tables} Tabellen und ${guide.cats} Kategorieüberschriften aufgelöst`);
 console.log(`    · ${guide.blocks} Blockköpfe durch Planer-Verweis ersetzt`);
 console.log(`    · ${guide.kept} nummernlose Einträge behalten`);
-console.log(`    · ${guide.kapitel} Kapitel nach src/data/chapters.json\n`);
+console.log(`    · ${guide.kapitel} Kapitel nach src/data/chapters.json`);
+console.log(
+  `    · Lesefassung für die Startseite: ${Math.round(guide.lese.zeichen / 1024)} kB Text, ${guide.lese.regeln} CSS-Regeln gebunden\n`,
+);

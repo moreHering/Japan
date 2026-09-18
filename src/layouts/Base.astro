@@ -1,6 +1,6 @@
 ---
 import '../styles/tokens.css';
-import { url, guide, asset } from '../lib/paths';
+import { url, asset } from '../lib/paths';
 import trip from '../data/trip.json';
 import SyncBadge from '../components/SyncBadge.svelte';
 
@@ -116,7 +116,12 @@ const path = Astro.url.pathname.replace(import.meta.env.BASE_URL, '').replace(/\
       <!-- Startet den Abgleich und zeigt seinen Zustand — auf jeder Seite. -->
       <SyncBadge client:load />
 
-      <a class="bookmark" href={guide()}>
+      <!--
+        Führt zur Startseite, nicht mehr zur Datei reiseband.html: Der Text steht
+        jetzt dort. Auf die Datei zu zeigen hieße, in einer zweiten Kopie
+        desselben Texts zu landen — ohne Navigation und ohne Tageszählung.
+      -->
+      <a class="bookmark" href={url('')}>
         <span aria-hidden="true">📖</span>
         <span class="bookmark-text">Reiseband</span>
       </a>

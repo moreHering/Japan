@@ -5,6 +5,10 @@ import { places, alleOrte, CATEGORIES } from '../lib/places';
 import { legs, stations, trip, formatDay } from '../lib/trip';
 import { url, guide, asset } from '../lib/paths';
 import chapters from '../data/chapters.json';
+// Beide Dateien erzeugt `npm run data` aus der Lesefassung. Als Rohtext geladen,
+// damit der Band hier im Planer gelesen wird und nicht nur verlinkt ist.
+import bandInhalt from '../data/reiseband-inhalt.html?raw';
+import bandStil from '../data/reiseband-stil.css?raw';
 
 /** Orte je Station, getrennt nach Zentrum und Ausflügen. */
 const countsOf = (slug: string) => ({
@@ -55,20 +59,51 @@ const chapterOf: Record<string, string> = {
 ---
 
 <Base title="Übersicht">
-  <section class="hero">
-    <div class="herotext">
-      <div class="cover-eyebrow">Der Reiseplaner · {trip.title}</div>
-      <h1>Die Route<br /><span class="accent">als Geschichte</span></h1>
-      <div class="jp-title">旅の物語</div>
-      <p class="sub">
-        Sechs Stationen, {trip.nights} Nächte, {places.length} Orte. Der Reiseband erzählt,
-        warum sie sich lohnen — hier entscheidest du, wann.
-      </p>
-    </div>
-    <div class="bigk" aria-hidden="true">旅</div>
-  </section>
-
+  <!--
+    Hier stand ein Hero-Block mit Titel, japanischem Schriftzug und dem großen
+    旅. Er ist weg, weil der Band **seine eigene Titelseite** mitbringt — mit
+    genau denselben Elementen, von dort hatte ich sie ursprünglich abgeschaut.
+    Zweimal derselbe Deckel kostete 298 px, bevor überhaupt ein Satz kam.
+  -->
   <TripStatus client:only="svelte" />
+
+  <!--
+    Der Reiseband, vollständig und direkt lesbar.
+
+    Vorher stand hier eine Kachelliste, die man erst anklicken musste, um zum
+    Text zu kommen — ein Umweg, für den es keinen Grund gab. Die 137 kB Text
+    sind gzip-komprimiert etwa 59 kB; das ist weniger als ein einzelnes Foto,
+    meine frühere Warnung davor war übertrieben.
+
+    Die Sprungmarken darüber sind bewusst eine schmale Zeile und keine Kacheln:
+    Bei elf Kapiteln braucht man einen Weg, mittendrin anzufangen — aber der Text
+    ist die Hauptsache und beginnt direkt darunter.
+  -->
+  <nav class="bandsprung" aria-label="Kapitel">
+    <span class="bandsprung-titel">Kapitel</span>
+    {
+      kapitel.map((k) => (
+        <a href={`#${k.id}`}>{k.station ? k.station.name : k.rubrik.split(' · ')[0]}</a>
+      ))
+    }
+  </nav>
+
+  <div class="bandtext" set:html={bandInhalt} />
+
+  <p class="banddruck">
+    <!--
+      Steht hinter dem Text, nicht davor: Eine Fußnote, die 80 px Vorlauf kostet,
+      bevor der erste Satz kommt, ist an der falschen Stelle.
+
+      Die Datei reiseband.html bleibt ein geschlossenes Dokument zum Ausdrucken
+      oder Weitergeben, mit den Seitenrändern, die hier wegfallen. Ohne diesen
+      Verweis wäre sie von nirgends mehr erreichbar.
+    -->
+    Zum Ausdrucken oder Weitergeben:
+    <a href={guide()}>der Band als eigenes Dokument</a>. Die sieben Empfehlungen
+    ohne Nummer stehen nur darin und nicht auf der Karte — Gion ehrlich, Nijō-jō,
+    Tsukiji-Außenmarkt, 21st Century Museum, Shinhotaka-Seilbahn, Igelcafé, Round1.
+  </p>
 
   <!-- ------------------------------------------------------------ Stationen -->
   <section class="section">
@@ -109,7 +144,7 @@ const chapterOf: Record<string, string> = {
                 <p class="sstay">{s.stay}</p>
                 <div class="slinks">
                   <a href={`${url('orte')}?station=${s.slug}`}>Orte ansehen</a>
-                  <a href={guide(chapterOf[s.slug])}>Kapitel lesen</a>
+                  <a href={`#${chapterOf[s.slug]}`}>Kapitel lesen</a>
                 </div>
               </div>
             </article>
@@ -191,54 +226,100 @@ const chapterOf: Record<string, string> = {
     </div>
   </section>
 
-  <!-- ---------------------------------------------------------- Der Reiseband -->
   <!--
-    Der Band war nur über das kleine 📖 oben rechts und ein „Kapitel lesen" an
-    jeder Station erreichbar — beides Textlinks, die man nicht sieht, wenn man
-    nicht danach sucht. Hier stehen alle elf Kapitel, mit Rubrik und Titel wie
-    im Band selbst.
+    Das Stylesheet des Bandes, an `.bandtext` gebunden. Muss `is:global` sein:
+    Astro bindet Stile sonst an Elemente, die es selbst erzeugt hat — der Inhalt
+    kommt hier über `set:html` und wäre damit unformatiert.
 
-    Bewusst als Verweis und nicht als eingebauter Text: Die Erzählung hat rund
-    143.000 Zeichen. Auf der Startseite wäre das eine Seite, die auf dem Handy
-    über Mobilfunk unnötig groß lädt — unterwegs der falsche Moment dafür.
+    Gebunden wird beim Erzeugen (`scripts/css-scope.mjs`), nicht hier: Das CSS
+    führt `:root`, `html`, `body`, `.eyebrow` und `.wrap`, und unverändert
+    eingebunden würde es die ganze Anwendung umlackieren. `npm run data` bricht
+    ab, wenn eine Regel ohne Container übrig bleibt.
   -->
-  <section class="section leseband">
-    <div class="eyebrow">Zum Lesen</div>
-    <h2>Der Reiseband, elf Kapitel</h2>
-    <p class="bandlead">
-      Warum diese Route diese Route ist — die Erzählung dahinter. Die Ortslisten
-      stehen nicht mehr darin, die sind hier im Planer; der Band erzählt.
-      <a href={guide()}>Von vorn lesen →</a>
-    </p>
-
-    <ol class="kapitel">
-      {
-        kapitel.map((k) => (
-          <li class={k.station ? 'kap station' : 'kap'}>
-            <a href={guide(k.id)}>
-              <span class="kaprubrik">{k.rubrik}</span>
-              <span class="kaptitel">{k.titel}</span>
-              {k.jp && <span class="kapjp">{k.jp}</span>}
-              {k.station && (
-                <span class="kapfakten">
-                  {k.station.nights} {k.station.nights === 1 ? 'Nacht' : 'Nächte'} ·{' '}
-                  {formatDay(k.station.from)}–{formatDay(k.station.to)} · {k.orte} Orte
-                </span>
-              )}
-            </a>
-          </li>
-        ))
-      }
-    </ol>
-
-    <p class="bandfuss">
-      Sieben Empfehlungen ohne Nummer stehen nur im Band — Gion ehrlich, Nijō-jō,
-      Tsukiji-Außenmarkt, 21st Century Museum, Shinhotaka-Seilbahn, Igelcafé,
-      Round1. Sie haben keine Koordinate und liegen deshalb nicht auf der Karte.
-    </p>
-  </section>
+  <style is:global set:html={bandStil}></style>
 
   <style>
+    /* ------------------------------------------------------- Kapitelsprünge */
+
+    /*
+     * Eine Zeile, seitlich wischbar — nicht umbrechend.
+     *
+     * Umbrechend waren es 144 px, also ein Fünftel des Bildschirms, nur für
+     * Sprungmarken. Der Text ist die Hauptsache; die Marken sind der Notausgang
+     * für „ich will bei Kyoto weiterlesen".
+     */
+    .bandsprung {
+      display: flex;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      gap: 12px;
+      align-items: center;
+      margin: 14px 0 6px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .bandsprung::-webkit-scrollbar {
+      display: none;
+    }
+    .bandsprung > * {
+      flex: none;
+      white-space: nowrap;
+    }
+    .bandsprung-titel {
+      font-family: var(--util);
+      font-size: 0.66rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ai-40);
+    }
+    .bandsprung a {
+      font-family: var(--util);
+      font-size: 0.78rem;
+      color: var(--ai-60);
+      text-decoration: none;
+      border-bottom: 1px solid var(--line);
+      /* Schmale Zeile, aber ein Finger muss die Marke treffen. */
+      padding: 9px 2px;
+    }
+    .bandsprung a:hover,
+    .bandsprung a:focus-visible {
+      color: var(--shu);
+      border-color: var(--shu);
+    }
+
+    /* --------------------------------------------------------- Der Bandtext */
+
+    .banddruck {
+      margin: 10px 0 22px;
+      font-size: 0.78rem;
+      line-height: 1.6;
+      color: var(--ai-60);
+    }
+    .banddruck a {
+      color: var(--shu);
+    }
+
+    .bandtext {
+      /* Der Band bringt seine eigene Breite und Typografie mit; hier wird nur
+         dafür gesorgt, dass er nicht aus der Seite läuft. */
+      max-width: 100%;
+      overflow-wrap: break-word;
+    }
+    /* Die Anker sitzen an den Kapiteln. Ohne Abstand verschwindet die
+       Überschrift beim Sprung unter die feste Kopfzeile. */
+    .bandtext :global(section[id]) {
+      scroll-margin-top: 70px;
+    }
+    /* Der Scrollrahmen um jede Tabelle — sonst schiebt die breiteste die ganze
+       Seite zur Seite. Gesetzt wird er beim Erzeugen der Lesefassung. */
+    .bandtext :global(.bandtabelle) {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+    }
+
     /* ------------------------------------------------------------------ Hero */
 
     .hero {

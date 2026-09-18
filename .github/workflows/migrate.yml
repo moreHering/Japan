@@ -12,18 +12,20 @@ name: Datenbank migrieren
 #
 # GitHub-Runner haben freies Netz. Deshalb läuft es hier.
 #
-# ## Was gebraucht wird
+# ## Was gebraucht wird — eines von beidem
 #
-# **Der einfache Weg:** ein einziges Secret `SUPABASE_DB_URL` — der vollständige
-# Connection String aus dem Dashboard unter *Project Settings → Database →
-# Connection string → URI* (Session-Pooler wählen, damit es über IPv4 geht).
-# Darin stehen Host, Port, Benutzer, Passwort und Datenbank; nichts muss
-# geraten werden.
+# **`SUPABASE_DB_PASSWORD`** — nur das Datenbankpasswort. Alles andere sucht
+# der Workflow selbst: Er probiert die Pooler der bekannten Regionen durch, bis
+# das Projekt antwortet. Eine falsche Region meldet sofort "Tenant or user not
+# found", das kostet kaum Zeit. Die gefundene Region meldet der Lauf, damit sie
+# sich als Variable SUPABASE_REGION festschreiben lässt.
 #
-# **Der alte Weg** bleibt als Rückfallebene: `SUPABASE_DB_PASSWORD` plus die
-# Variablen SUPABASE_REGION und SUPABASE_PROJECT_REF. Der setzt voraus, dass
-# Supabase seine Adressen weiter nach demselben Muster bildet — genau das ist
-# eine Annahme, die man sich sparen kann.
+# **`SUPABASE_DB_URL`** — der vollständige Connection String, falls er zur Hand
+# ist. Dann entfällt die Suche. Wo er im Dashboard steht, hängt von dessen
+# Fassung ab; gesucht ist die Form
+#   postgresql://postgres.<ref>:<passwort>@…pooler.supabase.com:5432/postgres
+# also der **Session-Pooler**, nicht die direkte Verbindung: Letztere gibt es
+# nur über IPv6, und das haben GitHub-Runner nicht.
 
 on:
   push:
@@ -85,9 +87,9 @@ jobs:
           if [ -z "$DB_URL" ] && [ -z "$DB_PASSWORD" ]; then
             echo "::error::Weder SUPABASE_DB_URL noch SUPABASE_DB_PASSWORD kommen an."
             echo ""
-            echo "Gebraucht wird eines von beiden — am einfachsten SUPABASE_DB_URL:"
-            echo "  Supabase → Project Settings → Database → Connection string → URI"
-            echo "  (Session pooler wählen), vollständig kopieren."
+            echo "Gebraucht wird eines von beiden. Am wenigsten Arbeit macht"
+            echo "SUPABASE_DB_PASSWORD — nur das Datenbankpasswort, den Rest"
+            echo "sucht dieser Workflow selbst."
             echo ""
             echo "Kommt ein gesetztes Secret hier leer an, liegt es fast immer an:"
             echo "  1. Es steht unter 'Environment secrets' statt unter"
@@ -110,23 +112,89 @@ jobs:
       - name: Verbindung aufbauen
         id: verbindung
         run: |
-          set -euo pipefail
+          set -uo pipefail
+
+          # Das Passwort muss in die URL umkodiert werden: Zeichen wie @ : /
+          # würden den String sonst zerlegen und die Verbindung scheitern
+          # lassen, ohne dass der Grund erkennbar wäre.
+          kodiere() {
+            python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+          }
+
+          versuche() {
+            # Gibt 0 zurück, wenn die Verbindung steht. Die Ausgabe von psql
+            # wandert in eine Datei, damit das Passwort nicht im Protokoll
+            # landen kann, falls psql es je zurückgäbe.
+            psql "$1" -v ON_ERROR_STOP=1 -tAc "select 1" > /tmp/probe.txt 2>&1
+          }
 
           if [ -n "$DB_URL" ]; then
             ZIEL="$DB_URL"
+            echo "::add-mask::$ZIEL"
             echo "Verbindung über den hinterlegten Connection String."
+            if ! versuche "$ZIEL"; then
+              echo "::error::Der hinterlegte Connection String funktioniert nicht."
+              sed 's/postgres[^ ]*@/***@/g' /tmp/probe.txt
+              exit 1
+            fi
           else
-            # Rückfallweg: Adressen nach dem bekannten Muster zusammensetzen.
-            # Der Session-Pooler ist der einzige Weg mit IPv4 — die direkte
-            # Adresse db.<ref>.supabase.co löst nur auf IPv6 auf.
-            ZIEL="postgresql://postgres.${PROJECT_REF}:${DB_PASSWORD}@aws-0-${REGION}.pooler.supabase.com:5432/postgres?sslmode=require"
-            echo "Verbindung zusammengesetzt: aws-0-${REGION}.pooler.supabase.com als postgres.${PROJECT_REF}"
+            # Ohne fertigen String: Adresse selbst zusammensetzen. Die Region
+            # steht nicht fest — statt sie zu raten, wird sie gesucht. Ein
+            # Pooler in der falschen Region antwortet sofort mit
+            # "Tenant or user not found", das kostet also kaum Zeit.
+            PW=$(kodiere "$DB_PASSWORD")
+            REGIONEN="$REGION eu-central-1 eu-central-2 eu-west-1 eu-west-2 eu-west-3 eu-north-1 \
+                      us-east-1 us-east-2 us-west-1 us-west-2 ca-central-1 sa-east-1 \
+                      ap-northeast-1 ap-northeast-2 ap-south-1 ap-southeast-1 ap-southeast-2"
+
+            echo "Suche den Pooler des Projekts ${PROJECT_REF} …"
+            GEFUNDEN=""
+            PROBIERT=""
+            for r in $REGIONEN; do
+              case " $PROBIERT " in *" $r "*) continue;; esac
+              PROBIERT="$PROBIERT $r"
+
+              KANDIDAT="postgresql://postgres.${PROJECT_REF}:${PW}@aws-0-${r}.pooler.supabase.com:5432/postgres?sslmode=require&connect_timeout=8"
+              echo "::add-mask::$KANDIDAT"
+
+              if versuche "$KANDIDAT"; then
+                echo "  $r  ✓"
+                GEFUNDEN="$r"
+                ZIEL="$KANDIDAT"
+                break
+              fi
+
+              GRUND=$(head -1 /tmp/probe.txt | sed 's/postgres[^ ]*@/***@/g')
+              case "$GRUND" in
+                *"Tenant or user not found"*) echo "  $r  — dort liegt das Projekt nicht";;
+                *"password authentication failed"*|*"Wrong password"*)
+                  echo "  $r  — Projekt gefunden, aber das Passwort stimmt nicht."
+                  echo "::error::Region $r ist richtig, das Passwort nicht. Neu setzen und das Secret ersetzen."
+                  exit 1;;
+                *) echo "  $r  — $GRUND";;
+              esac
+            done
+
+            if [ -z "$GEFUNDEN" ]; then
+              echo "::error::In keiner der geprüften Regionen antwortet das Projekt ${PROJECT_REF}."
+              echo ""
+              echo "Mögliche Gründe:"
+              echo "  · Die Projekt-Referenz stimmt nicht. Sie steht in der Adresse"
+              echo "    des Dashboards: dashboard/project/<HIER>."
+              echo "  · Das Projekt ist pausiert — dann im Dashboard aufwecken."
+              echo "  · Supabase hat das Adressschema geändert. Dann hilft nur der"
+              echo "    vollständige Connection String als SUPABASE_DB_URL."
+              exit 1
+            fi
+
+            echo ""
+            echo "Region gefunden: $GEFUNDEN"
+            if [ "$GEFUNDEN" != "$REGION" ]; then
+              echo "::notice::Region ist $GEFUNDEN. Als Repository-Variable SUPABASE_REGION eintragen, dann entfällt die Suche."
+            fi
           fi
 
-          # Der String enthält das Passwort und darf nirgends in der Ausgabe
-          # landen. Als Ausgabe eines Schritts wird er von GitHub maskiert,
-          # weil er aus einem Secret stammt bzw. eines enthält.
-          echo "::add-mask::$ZIEL"
+          set -e
           echo "ziel=$ZIEL" >> "$GITHUB_OUTPUT"
 
           psql "$ZIEL" -v ON_ERROR_STOP=1 -tAc \

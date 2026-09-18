@@ -17,7 +17,8 @@
     "test:bild": "node test/browser-bild.mjs",
     "test:buch": "node test/browser-freundebuch.mjs",
     "pruefliste": "node scripts/pruefliste.mjs",
-    "db:workflow": "supabase/test/workflow-probe.sh"
+    "db:workflow": "supabase/test/workflow-probe.sh",
+    "db:regionen": "supabase/test/regionssuche-probe.sh"
   },
   "dependencies": {
     "@astrojs/svelte": "^9.0.1",

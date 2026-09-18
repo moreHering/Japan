@@ -144,6 +144,63 @@ Passwort ersetzt werden.
 
 ---
 
+---
+
+## Was jetzt öffentlich ist — und was das heißt
+
+Seit Migration 0008 liest **jeder**, der die Adresse `/Japan/tagebuch/` kennt:
+
+- alle Beiträge im Freundebuch, mit Text, Datum, Ort und Foto
+- alle drei Steckbriefe, also auch den peinlichsten Moment
+- Namen und Farben der drei Konten
+
+Das war die Entscheidung, und sie ist bewusst getroffen. Trotzdem gehört gesagt,
+was daran nicht mehr rückholbar ist:
+
+**Der Supabase-Schlüssel steckt im JavaScript der Seite.** „Für Gäste lesbar" heißt
+deshalb *weltweit* lesbar, nicht „lesbar für wen du den Link schickst". Wer den
+Schlüssel ausliest, fragt die Datenbank direkt. Der Schutz besteht allein darin,
+dass die Adresse nicht verlinkt ist und die Bildpfade nicht zu raten sind.
+
+**`noindex` ist eine Bitte, kein Schloss.** Es gilt für gutwillige Suchmaschinen.
+Eine `robots.txt` kann ich für diese Seite gar nicht setzen — die müsste unter
+`morehering.github.io/robots.txt` liegen, also in deinem Benutzer-Repository, nicht
+in diesem. Und Messenger holen sich beim Verschicken eines Links die Seite samt
+erstem Bild, ohne nach `robots` zu fragen: Sobald der Link in einer WhatsApp-Gruppe
+steht, hat WhatsApp eine Kopie.
+
+**Löschen holt nichts zurück.** Ein Bild, dessen Link einmal jemand hatte, ist
+kopierbar. Ein späteres Abschalten entfernt das Original, nicht die Kopien.
+
+### Was dicht bleibt
+
+Plan, Ausgaben, selbst angelegte Orte und Ortskorrekturen. In `places_custom`
+stehen eure Unterkünfte — deshalb schreibt ein Beitrag den Ortsnamen und die
+Koordinate bei sich mit, statt dort nachzuschlagen. Orte, über die niemand
+schreibt, bleiben privat.
+
+### Zwei Dinge, an die du denken musst
+
+**Ein neues Feld im Steckbrief ist sofort öffentlich.** Die Fragenliste steht in
+`src/lib/freundebuch.svelte.ts`; was dort hinzukommt, steht nach dem nächsten
+Eintrag draußen.
+
+**Eine vierte Person in `profiles` ist sofort öffentlich.** Name und Farbe.
+
+Und für mich: Kommt eine neue Tabelle in die Datenbank, gibt Supabase der Rolle
+`anon` dafür automatisch Rechte. Der Migrationsworkflow prüft deshalb bei jedem Lauf
+generisch, dass es bei genau drei lesbaren Tabellen bleibt, und bricht sonst mit
+einem Fehler ab. Verlass dich nicht darauf, dass mir das auffällt — verlass dich
+darauf, dass der Lauf rot wird.
+
+### Wenn du es zurücknehmen willst
+
+Sag es, dann hebe ich die Freigabe auf: drei Policies löschen, die Leserechte
+widerrufen, die Bilderablage wieder auf privat. Ab dem Moment ist nichts Neues mehr
+lesbar. Was bis dahin abgerufen wurde, bleibt bei dem, der es abgerufen hat.
+
+---
+
 ## Der Weg ganz ohne GitHub
 
 `npm run db:dashboard` erzeugt aus den Migrationen eine Fassung ohne

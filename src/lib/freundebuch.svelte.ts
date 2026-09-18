@@ -33,9 +33,23 @@ export type Beitrag = {
   text: string;
   datum: string;
   ortNr: number | null;
+  /**
+   * Ortsangabe, wie sie beim Anlegen des Beitrags galt.
+   *
+   * Wird mitgeschrieben statt nachgeschlagen, weil `ortNr` ab 165 auf
+   * `places_custom` zeigt — und das bleibt für Gäste dicht, dort stehen die
+   * Unterkünfte. Nebeneffekt, der gefällt: Der Eintrag behält den Namen, den der
+   * Ort damals hatte.
+   *
+   * `null` bei Beiträgen, die vor Migration 0008 entstanden sind; dann greift
+   * der Rückfall über `placeByNr(ortNr)` für die festen 164.
+   */
+  ortName: string | null;
+  ortLat: number | null;
+  ortLng: number | null;
   sticker: string | null;
   bildPfad: string | null;
-  /** Zeitlich begrenzter Link, beim Laden erzeugt. */
+  /** Für Gäste ein öffentlicher, sonst ein zeitlich begrenzter Link. */
   bildUrl: string | null;
   autorId: string;
   erstellt: string;
@@ -59,7 +73,7 @@ export const buch = $state({
 
 const BUCKET = 'freundebuch';
 
-function deute(e: unknown): string {
+function deute(e: unknown, fuerGaeste = false): string {
   const o = (e ?? {}) as { code?: string; message?: string };
   const msg = (o.message ?? '').toLowerCase();
   if (o.code === '42P01' || msg.includes('schema cache')) {
@@ -69,23 +83,38 @@ function deute(e: unknown): string {
     return 'Die Bilderablage fehlt — Migration 0003 ist noch nicht gelaufen.';
   }
   if (o.code === '42501' || msg.includes('row-level security') || msg.includes('violates')) {
-    return 'Dieses Konto ist nicht als Reisender eingetragen.';
+    // Für einen Gast wäre „dieses Konto" eine falsche Fährte — er hat keins.
+    // Genau diese Meldung kommt an, wenn die Freigabe aus 0008 fehlt.
+    return fuerGaeste
+      ? 'Das Tagebuch ist gerade nicht lesbar — die Freigabe in der Datenbank fehlt noch.'
+      : 'Dieses Konto ist nicht als Reisender eingetragen.';
   }
   if (msg.includes('fetch') || msg.includes('network')) {
-    return 'Keine Verbindung. Das Freundebuch braucht Netz.';
+    return fuerGaeste
+      ? 'Keine Verbindung. Das Tagebuch braucht Netz.'
+      : 'Keine Verbindung. Das Freundebuch braucht Netz.';
   }
   return o.message ?? 'Unbekannter Fehler.';
 }
 
 // ------------------------------------------------------------------ Laden ---
 
-export async function ladeFreundebuch() {
+/**
+ * Lädt Personen, Steckbriefe und Beiträge.
+ *
+ * `oeffentlich: true` ist der Weg der Gästeansicht unter /Japan/tagebuch/: kein
+ * Anmeldezwang, und die Bilder kommen über öffentliche statt signierte Links.
+ * Ohne die Option verhält sich alles wie zuvor — die bestehenden Aufrufe bleiben
+ * unverändert.
+ */
+export async function ladeFreundebuch(opt: { oeffentlich?: boolean } = {}) {
+  const gast = opt.oeffentlich === true;
   const sb = getSupabase();
   if (!sb) {
     buch.status = 'aus';
     return;
   }
-  if (!auth.userId) {
+  if (!auth.userId && !gast) {
     buch.status = 'abgemeldet';
     return;
   }
@@ -98,7 +127,9 @@ export async function ladeFreundebuch() {
       sb.from('guestbook_profile').select('user_id, feld, wert'),
       sb
         .from('guestbook_post')
-        .select('id, text, datum, ort_nr, sticker, bild_pfad, created_by, created_at')
+        .select(
+          'id, text, datum, ort_nr, ort_name, ort_lat, ort_lng, sticker, bild_pfad, created_by, created_at',
+        )
         .order('datum', { ascending: false })
         .order('created_at', { ascending: false }),
     ]);
@@ -119,7 +150,29 @@ export async function ladeFreundebuch() {
     const roh = posts.data ?? [];
     const pfade = roh.map((z) => z.bild_pfad).filter((p): p is string => Boolean(p));
     const links = new Map<string, string>();
-    if (pfade.length) {
+
+    /*
+     * Zwei Wege zum Bild, und die Verzweigung hängt am **Parameter**, nicht am
+     * Anmeldezustand:
+     *
+     *   Gast        → öffentlicher Link. Der Bucket ist seit 0008 öffentlich,
+     *                 die Pfade sind `<uuid>/<uuid>.jpg` und damit nicht ratbar.
+     *                 Stabil und cachebar — was auf einer Seite zählt, die
+     *                 Freunde mehrfach öffnen.
+     *   Angemeldet  → signierter Link, eine Stunde gültig. Unverändert, damit
+     *                 der bewährte Weg der drei Reisenden Byte für Byte derselbe
+     *                 bleibt; fällt der öffentliche Bucket aus, merken es nur
+     *                 Gäste.
+     *
+     * Am Parameter und nicht an `auth.userId`, weil das deterministisch ist:
+     * Öffnet ein Reisender die Gästeseite im angemeldeten Browser, soll sie sich
+     * trotzdem wie für einen Gast verhalten.
+     */
+    if (gast) {
+      for (const pfad of pfade) {
+        links.set(pfad, sb.storage.from(BUCKET).getPublicUrl(pfad).data.publicUrl);
+      }
+    } else if (pfade.length) {
       const { data } = await sb.storage.from(BUCKET).createSignedUrls(pfade, 3600);
       for (const eintrag of data ?? []) {
         if (eintrag.signedUrl && eintrag.path) links.set(eintrag.path, eintrag.signedUrl);
@@ -131,6 +184,9 @@ export async function ladeFreundebuch() {
       text: z.text ?? '',
       datum: z.datum,
       ortNr: z.ort_nr ?? null,
+      ortName: z.ort_name ?? null,
+      ortLat: z.ort_lat ?? null,
+      ortLng: z.ort_lng ?? null,
       sticker: z.sticker ?? null,
       bildPfad: z.bild_pfad ?? null,
       bildUrl: z.bild_pfad ? (links.get(z.bild_pfad) ?? null) : null,
@@ -140,7 +196,7 @@ export async function ladeFreundebuch() {
 
     buch.status = 'bereit';
   } catch (e) {
-    buch.fehler = deute(e);
+    buch.fehler = deute(e, gast);
     buch.status = 'fehler';
   }
 }
@@ -174,6 +230,16 @@ export type NeuerBeitrag = {
   text: string;
   datum: string;
   ortNr: number | null;
+  /**
+   * Name und Koordinate des gewählten Orts.
+   *
+   * Werden mitgeschrieben, damit die öffentliche Tagebuchansicht ohne Zugriff
+   * auf `places_custom` auskommt — dort stehen die Unterkünfte, und die bleiben
+   * privat. Die Maske hat den Ort ohnehin schon aufgelöst.
+   */
+  ortName?: string | null;
+  ortLat?: number | null;
+  ortLng?: number | null;
   sticker: string | null;
 };
 
@@ -206,6 +272,9 @@ export async function beitragAnlegen(neu: NeuerBeitrag) {
       text: neu.text,
       datum: neu.datum,
       ort_nr: neu.ortNr,
+      ort_name: neu.ortName ?? null,
+      ort_lat: neu.ortLat ?? null,
+      ort_lng: neu.ortLng ?? null,
       sticker: neu.sticker,
       bild_pfad: pfad,
       created_by: auth.userId,

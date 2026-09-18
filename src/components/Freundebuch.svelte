@@ -125,11 +125,18 @@
     e.preventDefault();
     if (!neuDatei && !neuText.trim()) return;
 
+    // Ort samt Koordinate mitschreiben, nicht nur die Nummer: Die öffentliche
+    // Tagebuchansicht kann `places_custom` nicht lesen — dort stehen die
+    // Unterkünfte —, und selbst angelegte Orte werden unterwegs am häufigsten
+    // getaggt. `gewaehlterOrt` ist hier ohnehin schon aufgelöst.
     const ok = await beitragAnlegen({
       datei: neuDatei,
       text: neuText.trim(),
       datum: neuDatum,
       ortNr: neuOrt ? Number(neuOrt) : null,
+      ortName: gewaehlterOrt?.name ?? null,
+      ortLat: gewaehlterOrt?.lat ?? null,
+      ortLng: gewaehlterOrt?.lng ?? null,
       sticker: neuSticker,
     });
     if (!ok) return;

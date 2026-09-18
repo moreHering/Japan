@@ -26,8 +26,18 @@ create table if not exists auth.users (
   encrypted_password varchar(255),
   email_confirmed_at timestamptz,
   invited_at         timestamptz,
-  confirmation_token varchar(255),
-  recovery_token     varchar(255),
+  -- Die Tokenspalten von GoTrue. Bewusst nullbar und ohne Vorgabewert, genau
+  -- wie bei Supabase — daran hing der Anmeldefehler: GoTrue liest sie in
+  -- Go-Strings ein und stolpert über NULL. Der Prüfstand muss das nachbilden
+  -- können, sonst prüft die Migration gegen eine zu freundliche Datenbank.
+  confirmation_token         varchar(255),
+  recovery_token             varchar(255),
+  email_change               varchar(255),
+  email_change_token_new     varchar(255),
+  email_change_token_current varchar(255),
+  phone_change               text,
+  phone_change_token         varchar(255),
+  reauthentication_token     varchar(255),
   last_sign_in_at    timestamptz,
   raw_app_meta_data  jsonb,
   raw_user_meta_data jsonb,

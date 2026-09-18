@@ -231,7 +231,42 @@ begin
   raise notice 'Beiträge: sichtbar für alle, löschbar nur für den Urheber — bestanden';
 end $$;
 
+-- --------------------------------------------------- Anmeldung möglich? ---
+--
+-- Der Grund, warum es diese Prüfung gibt: Nach dem ersten Migrationslauf
+-- standen die Konten vollständig da — und die Anmeldung scheiterte trotzdem
+-- mit „Database error querying schema", weil vier Tokenspalten NULL waren.
+-- Von außen war das nicht zu sehen. Hier ist es zu sehen.
+
 reset role;
+
+do $$
+declare
+  spalten constant text[] := array[
+    'confirmation_token', 'recovery_token', 'email_change', 'email_change_token_new'
+  ];
+  spalte  text;
+  n       integer;
+  fehler  text[] := '{}';
+begin
+  foreach spalte in array spalten loop
+    -- Nur die Konten, die 0002 anlegt. Die drei Testkonten oben entstehen
+    -- absichtlich roh und ohne diese Spalten — sie bilden nach, wie ein per
+    -- SQL angelegtes Konto aussieht, bevor 0005 es repariert.
+    execute format(
+      'select count(*) from auth.users where %I is null and email like ''%%@japan2026.local''',
+      spalte
+    ) into n;
+    if n > 0 then
+      fehler := fehler || format('%s ist bei %s Konto/Konten NULL', spalte, n);
+    end if;
+  end loop;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Anmeldung: keine NULL in den Tokenspalten — bestanden';
+end $$;
 
 \echo ''
 \echo '  Alle Prüfungen bestanden.'

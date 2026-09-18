@@ -57,16 +57,23 @@ begin
 
     if uid is null then
       uid := gen_random_uuid();
+      -- Die Tokenspalten müssen leer sein, nicht NULL: GoTrue liest sie in
+      -- Go-Strings ein und bricht bei NULL mit „Database error querying
+      -- schema" ab — beim Lesen des Kontos, noch vor der Passwortprüfung.
+      -- Das hat die erste Fassung gekostet; 0005 räumt es nachträglich auf,
+      -- hier entsteht es gar nicht erst.
       insert into auth.users (
         instance_id, id, aud, role, email, encrypted_password,
         email_confirmed_at, created_at, updated_at,
-        raw_app_meta_data, raw_user_meta_data
+        raw_app_meta_data, raw_user_meta_data,
+        confirmation_token, recovery_token, email_change, email_change_token_new
       ) values (
         '00000000-0000-0000-0000-000000000000', uid, 'authenticated', 'authenticated',
         k->>'email', crypt(pw, gen_salt('bf')),
         now(), now(), now(),
         '{"provider":"email","providers":["email"]}'::jsonb,
-        jsonb_build_object('name', k->>'name')
+        jsonb_build_object('name', k->>'name'),
+        '', '', '', ''
       );
 
       -- Ohne passende Identity meldet sich Supabase nicht mit E-Mail an.

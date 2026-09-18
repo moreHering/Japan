@@ -28,7 +28,9 @@
     placesOfDay,
     removeFromDay,
     setNote,
+    toggleBooking,
   } from '../lib/store.svelte';
+  import bookingsData from '../data/bookings.json';
 
   type Props = { places: Place[] };
   let { places }: Props = $props();
@@ -50,13 +52,47 @@
 
   let openDay = $state<string>(days[0].date);
   let poolQuery = $state('');
+
   let poolCats = $state<Set<Category>>(new Set(CATEGORIES.map((c) => c.key)));
   let poolAll = $state(false);
+  /**
+   * Der ★-Filter ist **kein** Mitglied von `poolCats`.
+   *
+   * Der Set ist `Set<Category>`, und `togglePoolCat()` garantiert, dass er nie
+   * leer wird — sonst zeigte der Pool nichts und der Grund wäre unsichtbar. Ein
+   * ★ in derselben Menge würde diese Zusicherung sinnlos machen: Man könnte alle
+   * Kategorien abwählen, solange ★ drin bleibt.
+   */
+  let nurTipps = $state(false);
   let showMap = $state(false);
   let dragging = $state<number | null>(null);
   let dragOver = $state<{ date: string; index: number } | null>(null);
 
   let current = $derived(days.find((d) => d.date === openDay)!);
+
+  /**
+   * Die Buchung zur Etappe des offenen Tages, falls es eine gibt.
+   *
+   * `legs.json` nennt sie über `booking` als `id`; hier wird sie in
+   * `bookings.json` aufgelöst. Der Haken liegt in `plan.bookings[id]` — dieselbe
+   * Stelle, die die Organisation-Ansicht setzt. Wer hier abhakt, hakt dort ab.
+   *
+   * Das ist der Teil, der die Etappe vom Hinweis zum Werkzeug macht: Am Umzugstag
+   * will man nicht lesen, dass eine Reservierung nötig ist, sondern sehen, ob sie
+   * steht.
+   *
+   * Steht hinter `current` und nicht davor: `$derived` ist faul, davor liefe es
+   * auch — aber nur, solange niemand die Ableitung früher liest, und dann mit
+   * einem Fehler, der nach einem Svelte-Problem aussieht statt nach einer
+   * Reihenfolge.
+   */
+  const buchungen = new Map(
+    (bookingsData as { id: string; label: string; detail: string }[]).map((b) => [b.id, b]),
+  );
+
+  let legBuchung = $derived(
+    current.leg?.booking ? (buchungen.get(current.leg.booking) ?? null) : null,
+  );
 
   /**
    * Vorschläge: standardmäßig nur die Station des geöffneten Tages.
@@ -70,24 +106,66 @@
    * Die Suche greift auch auf den Beschreibungstext zu, nicht nur auf den Namen:
    * „Affen" findet Jigokudani, „Teppanyaki" das Restaurant im 31. Stock.
    */
+  /**
+   * Grundmenge der Vorschläge: verplante Orte weg, Stationsgrenze beachtet —
+   * Kategorien und ★ **nicht**.
+   *
+   * Der Zwischenschritt ist der Kern der Zählung an den Chips. Zählte man auf
+   * `pool`, wäre nach dem ersten Klick auf einen Chip die Zahl **aller anderen**
+   * null: `pool` hat den Kategoriefilter schon angewandt. Regel für Facetten:
+   * jede ignoriert ihre eigene Dimension und beachtet die anderen.
+   */
+  let poolBasis = $derived(
+    alle.filter(
+      (p) => !dayOfPlace(p.nr) && (poolAll || p.station === current.station.slug),
+    ),
+  );
+
+  /** Zahl je Kategorie — ohne den Kategoriefilter, aber mit dem ★-Filter. */
+  let katZahl = $derived.by(() => {
+    const m = new Map<Category, number>(CATEGORIES.map((c) => [c.key, 0]));
+    for (const p of poolBasis) {
+      if (nurTipps && !p.isFriendTip) continue;
+      m.set(p.category, (m.get(p.category) ?? 0) + 1);
+    }
+    return m;
+  });
+
+  /** Zahl der Freundestipps — ohne den ★-Filter, aber mit dem Kategoriefilter. */
+  let tippZahl = $derived(
+    poolBasis.filter((p) => poolCats.has(p.category) && p.isFriendTip).length,
+  );
+
+
   let pool = $derived.by(() => {
     const q = poolQuery.trim().toLowerCase();
-    return alle
-      .filter((p) => {
-        if (dayOfPlace(p.nr)) return false; // schon verplant
-        if (q) {
-          return (
-            p.name.toLowerCase().includes(q) ||
-            String(p.nr) === q ||
-            plainText(p.descriptionHtml).toLowerCase().includes(q)
-          );
-        }
-        if (!poolCats.has(p.category)) return false;
-        if (!poolAll && p.station !== current.station.slug) return false;
-        return true;
-      })
+    // Bei einer Suche gilt sie über alles — auch über verplante Stationen hinweg
+    // und ohne Kategorie- und ★-Filter.
+    if (q) {
+      return alle
+        .filter(
+          (p) =>
+            !dayOfPlace(p.nr) &&
+            (p.name.toLowerCase().includes(q) ||
+              String(p.nr) === q ||
+              plainText(p.descriptionHtml).toLowerCase().includes(q)),
+        )
+        .sort((a, b) => a.nr - b.nr);
+    }
+    return poolBasis
+      .filter((p) => poolCats.has(p.category) && (!nurTipps || p.isFriendTip))
       .sort((a, b) => a.nr - b.nr);
   });
+
+  /**
+   * Wie viele der sichtbaren Vorschläge gerade an **diesem** Wochentag zu haben.
+   *
+   * Absichtlich nicht „wie viele haben irgendwann einen Schließtag": Das stand so
+   * auf der Startseite und ist vor einem Klick keine Entscheidungshilfe — jede
+   * Karte im Pool nennt ihren Schließtag ohnehin selbst (`PlaceCard.svelte`). Die
+   * Zahl, die vorher etwas sagt, ist die für heute.
+   */
+  let heuteZu = $derived(pool.filter((p) => p.closedDay === current.weekday).length);
 
   let poolSuche = $derived(poolQuery.trim().length > 0);
 
@@ -213,8 +291,35 @@
 
       {#if current.leg}
         <div class="note leg">
-          <b>Umzug: {current.leg.from} → {current.leg.to}</b>
-          <span>{current.leg.connection} · {current.leg.duration}</span>
+          <b class="umzug">{current.leg.from} <span class="pfeil">→</span> {current.leg.to}</b>
+          <span>{current.leg.connection}</span>
+          <span class="dauer">{current.leg.duration}</span>
+
+          <!--
+            Der Buchungsstand der Fahrt, aus `bookings.json` über `leg.booking`.
+            Der Haken schreibt in `plan.bookings` — dieselbe Stelle, die die
+            Organisation-Ansicht setzt; hier abhaken heißt dort abgehakt.
+
+            Die erste Etappe (Osaka → Kyoto, JR Special Rapid) hat keine Buchung
+            und braucht keine — dann fehlt dieser Teil, statt „nichts zu buchen"
+            zu behaupten.
+          -->
+          {#if legBuchung}
+            <label class="legbuchung" class:erledigt={plan.bookings[legBuchung.id]}>
+              <input
+                type="checkbox"
+                checked={Boolean(plan.bookings[legBuchung.id])}
+                onchange={() => toggleBooking(legBuchung.id)}
+              />
+              <span class="legbtext">
+                <b>{legBuchung.label}</b>
+                {plan.bookings[legBuchung.id] ? 'ist gebucht' : '— noch nicht gebucht'}
+              </span>
+            </label>
+            {#if !plan.bookings[legBuchung.id]}
+              <span class="legbdetail">{legBuchung.detail}</span>
+            {/if}
+          {/if}
         </div>
       {/if}
 
@@ -375,17 +480,40 @@
               <button
                 class="chip"
                 class:on={poolCats.has(c.key)}
+                class:leer={katZahl.get(c.key) === 0}
                 style={`--chip:${c.color}`}
                 onclick={() => togglePoolCat(c.key)}
                 aria-pressed={poolCats.has(c.key)}
               >
                 <i></i>{c.short}
+                <!-- Die Zahl kommt aus `katZahl` und damit aus `poolBasis` — ohne
+                     den Kategoriefilter. Sonst stünde nach dem ersten Klick auf
+                     allen anderen Chips eine Null. -->
+                <b>{katZahl.get(c.key) ?? 0}</b>
               </button>
             {/each}
+
+            <!--
+              Kein `disabled` bei null: Sind an einer Station alle Kategorien
+              leer, wäre die ganze Leiste tot und der Ausweg („alle Stationen")
+              nur noch Text. Ausgrauen genügt.
+            -->
+            <button
+              class="chip tipp"
+              class:on={nurTipps}
+              class:leer={tippZahl === 0}
+              onclick={() => (nurTipps = !nurTipps)}
+              aria-pressed={nurTipps}
+            >
+              ★ <b>{tippZahl}</b>
+            </button>
           </div>
         {/if}
 
-        <p class="poolcount">{pool.length} noch nicht eingeplant · {totalPlanned} insgesamt verplant</p>
+        <p class="poolcount">
+          {pool.length} noch nicht eingeplant · {totalPlanned} insgesamt verplant{#if heuteZu}
+            · <b class="zuheute">{heuteZu} heute geschlossen</b>{/if}
+        </p>
       </div>
 
       <div class="poollist">
@@ -568,8 +696,75 @@
     font-size: 0.82rem;
   }
 
+  /* ------------------------------------------------------------- Umzugstag ---
+
+     Der Etappenblock ist der Grund, an einem Umzugstag überhaupt in den Planer zu
+     schauen: Er nennt Richtung, Verbindung, Dauer und ob die Fahrt gebucht ist.
+     Deshalb goldener Grund statt nur goldener Kante — dieselbe Bauart wie
+     `.note.warn`, die denselben Weg für Schließtage geht. */
   .note.leg {
     border-left-color: var(--kin);
+    background: rgba(166, 124, 51, 0.08);
+  }
+
+  /* `.note.leg b.umzug` und nicht `.umzug` mit `!important`: `.note b` (0,1,1)
+     setzt oben Schrift und Größe für alle Fettungen im Kasten. Zwei Klassen plus
+     Element gewinnen darüber, ohne die Kaskade zu brechen. */
+  .note.leg b.umzug {
+    font-family: var(--disp);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  .note.leg .pfeil {
+    color: var(--kin);
+    margin: 0 2px;
+  }
+
+  .note.leg .dauer {
+    font-family: var(--util);
+    font-size: 0.74rem;
+    color: var(--ai-40);
+  }
+
+  /* Tippfläche 44 px wie überall. Der Haken schreibt in denselben Zustand wie die
+     Organisation-Ansicht, deshalb soll man ihn nicht knapp verfehlen. */
+  .legbuchung {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 44px;
+    margin-top: 4px;
+    cursor: pointer;
+  }
+
+  .legbuchung input {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    accent-color: var(--kin);
+  }
+
+  .legbtext {
+    font-size: 0.84rem;
+    color: var(--shu-deep);
+  }
+
+  .legbtext b {
+    font-family: var(--util);
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+  }
+
+  .legbuchung.erledigt .legbtext {
+    color: var(--ai-40);
+  }
+
+  .note.leg .legbdetail {
+    font-size: 0.8rem;
+    color: var(--ai-60);
+    padding-left: 29px;
   }
 
   .note.warn {
@@ -826,6 +1021,29 @@
     border-color: var(--chip);
   }
 
+  /* Die Zahl im Chip. Tabellenziffern, damit die Leiste beim Filtern nicht
+     zappelt — 11 und 44 sind sonst verschieden breit. */
+  .chip b {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--ai);
+  }
+
+  /* Null heißt: Der Chip ist anklickbar, aber es kommt nichts. Ausgrauen statt
+     `disabled` — siehe Kommentar im Markup. */
+  .chip.leer {
+    opacity: 0.45;
+  }
+
+  .chip.tipp {
+    letter-spacing: 0.06em;
+  }
+
+  .chip.tipp.on {
+    color: var(--ai);
+    border-color: var(--kin);
+  }
+
   .chip.on i {
     opacity: 1;
   }
@@ -850,6 +1068,10 @@
     font-size: 0.72rem;
     cursor: pointer;
   }
+  .zuheute {
+    color: var(--shu-deep);
+  }
+
   .poolcount {
     font-family: var(--util);
     font-size: 0.68rem;

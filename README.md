@@ -7,9 +7,9 @@ sechs Stationen, 19 Nächte, 164 Orte.
 
 | Seite | Adresse | Zweck |
 |---|---|---|
-| Startseite | `/` | Tageszählung und **der Reiseband als Volltext** — elf Kapitel, direkt lesbar |
-| Tagesplan | `/plan/` | 20 Reisetage — Orte zuordnen, sortieren, Notizen; warnt bei Schließtagen |
-| Orte | `/orte/` | Alle Orte, filterbar, mit Karte im selben Bild; anlegen, bearbeiten, ausblenden |
+| Startseite | `/` | Tageszählung, **der Reiseband als Volltext** — elf Kapitel, direkt lesbar — und die sechs Stationen |
+| Tagesplan | `/plan/` | 20 Reisetage — Orte zuordnen, sortieren, Notizen; warnt bei Schließtagen; am Umzugstag Etappe und Buchungsstand der Fahrt |
+| Orte | `/orte/` | Alle Orte, filterbar, mit Karte im selben Bild; anlegen, bearbeiten, ausblenden; KML-Download |
 | Organisation | `/organisation/` | Buchungen und Fristen, Budget in ¥/€, Packliste, Abgleich, Export/Import |
 | Freundebuch | `/freundebuch/` | Steckbriefe und Fotostream der drei — **nur angemeldet** |
 | Reisetagebuch | `/tagebuch/` | Dieselben Beiträge für Gäste, ohne Anmeldung — **nicht verlinkt**, siehe unten |
@@ -136,6 +136,54 @@ Deklarationsblock von `.neu textarea, .neu input` mitgenommen — Rahmen, Polste
 die 16-px-Schrift gegen den iOS-Zoom waren weg, und gültiges CSS blieb es trotzdem.
 Gefunden hat es `npm run test:suche` an der Höhe der Tippziele.
 
+## Wo etwas steht — und warum dort
+
+Die Startseite trug unter dem Reiseband einmal drei Zusammenfassungsblöcke. Zwei
+sind weitergezogen, weil sie beim Planen gebraucht werden und hinter ~14.650
+Wörtern Bandtext niemand sie dort sucht:
+
+- **Die fünf Etappen** stehen im Tagesplan, am jeweiligen Umzugstag — mit
+  Richtung, Verbindung, Dauer **und dem Buchungsstand der Fahrt**. Der Haken dort
+  schreibt in `plan.bookings`, also denselben Zustand, den die
+  Organisation-Ansicht setzt: ein Zustand, nicht zwei. Die Zuordnung Etappe →
+  Buchung steht als `booking`-Feld in `src/data/legs.json` und nennt die `id` aus
+  `bookings.json`. Ausdrücklich als Referenz und nicht über `due === date`
+  hergeleitet — die vier Fristen treffen heute zufällig die Etappentage, aber ein
+  zweiter Transporteintrag mit derselben Frist tauchte dann still im Etappenblock
+  auf. `test/legs.test.ts` prüft die Verknüpfung in **beide** Richtungen, auch die
+  wichtigere: Kommt eine Transportbuchung dazu, deren Frist ein Umzugstag ist,
+  muss die Etappe sie nennen.
+- **Die Ortszahlen** sind im Ortspool des Planers zu Werkzeug geworden: Die
+  Kategoriechips tragen ihre Anzahl, ein ★-Chip filtert die Freundestipps, und die
+  Zählzeile nennt, wie viele der Vorschläge **an diesem Wochentag** geschlossen
+  haben. Nicht „wie viele irgendwann einen Schließtag haben" — das stand so auf
+  der Startseite und ist vor einem Klick keine Entscheidungshilfe.
+- **Die zwei Erklärtexte** („141 von 164 Orten", „Nummern wie im Buch") stehen auf
+  `/orte/`, wo sie die Zahl erklären, die dort steht. Und zwar in `orte.astro`
+  statt in `PlaceExplorer.svelte`: Die Insel läuft `client:only`, ihr Markup ist
+  nicht im ausgelieferten HTML — der KML-Download wäre von JavaScript abhängig.
+  Er war repoweit die **einzige** Stelle, die `trip.kmlFile` verlinkt; wäre er mit
+  der Section verschwunden, hätte niemand die Datei mehr erreicht und kein Test
+  hätte angeschlagen.
+
+Bei Facettenzählern gilt eine Regel, die leicht bricht: **jede Facette ignoriert
+ihre eigene Dimension und beachtet die anderen.** Zählte die Chipzahl auf `pool`
+statt auf `poolBasis`, stünde nach dem ersten Klick auf allen anderen Chips eine
+Null — die Liste wird ja korrekt kürzer, nur die Zahlen lügen.
+`test/browser-plan.mjs` wählt deshalb einen Chip ab und sieht danach wieder hin.
+
+### Totes CSS
+
+`src/pages/index.astro` hatte nach zwei Umbauten rund 160 Zeilen CSS für Elemente,
+die es nicht mehr gibt — erst der App-Hero, dann die Kapitelkacheln. Im Build fällt
+das nicht auf: Astro und Vite entfernen unbenutzte Regeln nicht, und anders als bei
+Svelte-Komponenten warnt niemand über unbenutzte Selektoren in einer `.astro`-Datei.
+
+`test/startseite-css.test.ts` vergleicht die Klassenselektoren im lokalen
+`<style>`-Block mit den Klassen im Markup und nennt die Differenz. Ausgenommen sind
+`:global(…)`-Regeln — die binden Klassen aus dem Reiseband, das über `set:html`
+hereinkommt; das ist die Grenze der Prüfung und steht dort so.
+
 ## Entwicklung
 
 ```bash
@@ -160,6 +208,7 @@ npm run test:browser     # Orte und Karte
 npm run test:suche       # Suche gegen die Filter, Bildwahl
 npm run test:korrekturen # Orte bearbeiten und ausblenden
 npm run test:band        # das Reiseband auf der Startseite
+npm run test:plan        # Tagesplan: Etappen, Buchungshaken, Chipzahlen
 npm run test:buch        # Freundebuch, angemeldet
 npm run test:tagebuch    # die öffentliche Gästeansicht
 ```
@@ -168,12 +217,23 @@ Die Browsertests laufen mit Playwright im iPhone-13-Format gegen den Dev-Server.
 Sie prüfen, was nur ein Browser zeigt: Querscrollen, Größe der Tippziele,
 Leaflet überhaupt.
 
-Zwei Eigenheiten des Dev-Servers, über die man dabei stolpert: Er hängt eine
-`astro-dev-toolbar` in die Seite, und darin stecken Eingabefelder und eine
-Auswahlliste. Playwrights Selektoren durchstoßen Shadow-Grenzen und finden sie —
-Prüfungen auf „kein `input` auf der Seite" laufen deshalb über
-`document.querySelectorAll`. Und `MapView` setzt `zoomControl: !L.Browser.mobile`:
-im iPhone-Profil gibt es keine Zoomknöpfe.
+Drei Eigenheiten des Dev-Servers, über die man dabei stolpert:
+
+1. Er hängt eine `astro-dev-toolbar` in die Seite, und darin stecken
+   Eingabefelder und eine Auswahlliste. Playwrights Selektoren durchstoßen
+   Shadow-Grenzen und finden sie — Prüfungen auf „kein `input` auf der Seite"
+   laufen deshalb über `document.querySelectorAll`.
+2. `MapView` setzt `zoomControl: !L.Browser.mobile`: im iPhone-Profil gibt es
+   keine Zoomknöpfe, und eine Zweifingergeste lässt sich mit Playwright nicht
+   sinnvoll nachbilden.
+3. **`npm run build` nicht laufen lassen, während der Dev-Server läuft.** Der
+   Build schreibt `node_modules/.vite` neu, der laufende Server behält seinen alten
+   Modulgraph, und die Islands scheitern an „Failed to fetch dynamically imported
+   module". Das sieht nach einem Fehler in der Sache aus — die Seite lädt, die
+   Insel bleibt leer, der Test meldet fehlende Elemente. Abhilfe: Server neu
+   starten. Derselbe Stolperstein hat schon einmal zu einer falschen Diagnose
+   geführt („neue Knöpfe verdrängen den Umschalter" — es war Vites „504 Outdated
+   Optimize Dep").
 
 **Ein Muster, das sich durch alle Prüfungen zieht: zu jeder Reparatur gehört eine
 Gegenprobe.** Erst wird die Reparatur wieder entfernt und geschaut, ob die Prüfung

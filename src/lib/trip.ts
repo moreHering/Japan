@@ -35,6 +35,19 @@ export type Leg = {
   to: string;
   connection: string;
   duration: string;
+  /**
+   * `id` der zugehörigen Buchung in `bookings.json` — fehlt, wo keine
+   * Reservierung nötig ist (Osaka → Kyoto, JR Special Rapid).
+   *
+   * Ausdrücklich eine Referenz und keine Herleitung: Die vier Transportbuchungen
+   * haben heute zufällig genau die Etappentage als `due`, aber `due` bedeutet
+   * dort den Fahrtag und bei anderen Einträgen eine Frist davor
+   * (Ghibli-Vorverkauf). Ein zweiter Transporteintrag mit derselben Frist —
+   * etwa ein Flughafentransfer — tauchte bei einer Herleitung still im
+   * Etappenblock des Planers auf. Vier Zeilen in einer handgepflegten Datei mit
+   * fünf Einträgen sind billiger als jede Heuristik.
+   */
+  booking?: string;
 };
 
 export const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'] as const;

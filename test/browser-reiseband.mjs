@@ -274,6 +274,76 @@ pruefe(
   String(lesezeichen),
 );
 
+// ======================= 4) Was von der Startseite weggezogen ist ============
+
+/*
+ * Die Startseite hatte unter dem Reiseband zwei Zusammenfassungsblöcke, die jetzt
+ * dort stehen, wo man sie beim Planen braucht: die fünf Etappen im Tagesplan (am
+ * jeweiligen Umzugstag) und die Ortszahlen im Ortspool des Planers, die zwei
+ * Erklärtexte auf der Orte-Seite.
+ *
+ * Geprüft wird **beides**: dass sie hier weg sind und dass sie dort angekommen
+ * sind. Nur die erste Hälfte wäre auch grün, wenn der Inhalt einfach verloren
+ * gegangen wäre — und niemand hätte es gemerkt, weil es für diese Blöcke vorher
+ * gar keine Prüfung gab.
+ */
+console.log('\nWas weggezogen ist:');
+for (const [wahl, was] of [
+  ['.legs', 'die Etappenliste'],
+  ['.cats', 'die Kategoriekacheln'],
+  ['.notes', 'die Erklärkästen'],
+]) {
+  pruefe((await seite.locator(wahl).count()) === 0, `${was} steht nicht mehr auf der Startseite`);
+}
+// Die Stationen bleiben — und `test/browser-reiseband.mjs` selbst hängt daran:
+// Die CSS-Trennungsprüfung oben greift `.section h2`, und das ist nach dem Umbau
+// die Überschrift des Stationsblocks. Fällt der irgendwann auch weg, prüft sie ein
+// fehlendes Element und meldet einen Fehler in der Sache — genau der Fall, den ihr
+// eigener Kommentar für den entfernten Hero beschreibt.
+pruefe((await seite.locator('.station').count()) === 6, 'die sechs Stationen stehen noch da');
+
+console.log('\nUnd wo es angekommen ist:');
+await seite.goto(`${BASIS}/plan/`, { waitUntil: 'load' });
+await seite.waitForSelector('.daybar .daytab', { timeout: 10000 });
+await seite.waitForTimeout(400);
+pruefe(
+  (await seite.locator('.daytab.leg').count()) === 5,
+  'der Tagesplan markiert fünf Umzugstage',
+);
+pruefe(
+  (await seite.locator('.poolcats .chip b').count()) >= 5,
+  'die Kategoriechips im Ortspool tragen Zahlen',
+);
+
+await seite.goto(`${BASIS}/orte/`, { waitUntil: 'load' });
+await seite.waitForTimeout(700);
+const kml = seite.locator('a[href$=".kml"][download]');
+pruefe((await kml.count()) === 1, 'der KML-Download steht genau einmal auf der Orte-Seite',
+  `${await kml.count()}`);
+// Er stand vorher **nur** in der entfernten Section — repoweit die einzige Stelle,
+// die `trip.kmlFile` verlinkt. Ohne diese Prüfung wäre die Datei von nirgends mehr
+// erreichbar gewesen, und kein Test hätte angeschlagen.
+pruefe(
+  (await seite.locator('.lesehinweis').count()) === 1,
+  'und die zwei Erklärtexte sind dort gelandet',
+);
+// Zugeklappt kostet der Kasten eine Zeile — die Werkzeugleiste bleibt frei.
+const zu = await seite.locator('.lesehinweis').evaluate((n) => Math.round(n.getBoundingClientRect().height));
+pruefe(zu < 70, 'zugeklappt kostet er kaum Höhe', `${zu} px`);
+
+// Aufklappen und erst dann lesen: `innerText` gibt bei zugeklapptem `<details>`
+// nur die Zusammenfassung her, der Rest ist nicht gerendert. Damit ist gleich
+// mitgeprüft, dass sich der Kasten überhaupt öffnen lässt.
+await seite.locator('.lesehinweis summary').tap();
+await seite.waitForTimeout(300);
+const offen = (await seite.locator('.lesehinweis').innerText()).replace(/\s+/g, ' ');
+// Groß-klein-unempfindlich: Die Überschrift trägt `text-transform: uppercase`,
+// und `innerText` gibt den **gerenderten** Text — also „NUMMERN WIE IM BUCH".
+pruefe(/nummern wie im buch/i.test(offen), 'aufgeklappt steht die Erklärung zu den Nummern da');
+pruefe(/Ryokan/.test(offen), 'und die zu den erledigten Unterkunftsvorschlägen');
+const auf = await seite.locator('.lesehinweis').evaluate((n) => Math.round(n.getBoundingClientRect().height));
+pruefe(auf > zu + 40, 'und er wird dabei wirklich größer', `${zu} → ${auf} px`);
+
 // ---------------------------------------------------------------- Aufräumen ---
 
 console.log('\nFehlermeldungen der Seite:');

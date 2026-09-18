@@ -1,7 +1,29 @@
 ---
+/**
+ * Orte & Karte.
+ *
+ * Die zwei Erklärtexte unter der Insel standen früher auf der Startseite, unter
+ * dem Reiseband. Dort erklärten sie eine Zahl, die man beim Planen braucht, lagen
+ * aber hinter ~14.650 Wörtern Bandtext.
+ *
+ * Sie stehen **hier in der Seite** und nicht in `PlaceExplorer.svelte`, und das
+ * hat einen Grund, der nicht Geschmack ist: Die Insel läuft `client:only`, ihr
+ * Markup ist also nicht im ausgelieferten HTML. Der KML-Download wäre damit von
+ * JavaScript abhängig, wäre im Ausdruck weg und für einen Crawler unsichtbar —
+ * und `index.astro:222` war repoweit die **einzige** Stelle, die `trip.kmlFile`
+ * verlinkt. Wäre der Link mit der Startseiten-Section verschwunden, hätte niemand
+ * die Datei mehr erreicht, ohne dass ein Test angeschlagen wäre.
+ *
+ * Zugeklappt als `<details>`, weil es Nachschlagetext ist und keine Bedienung.
+ */
 import Base from '../layouts/Base.astro';
 import PlaceExplorer from '../components/PlaceExplorer.svelte';
-import { places } from '../lib/places';
+import { places, alleOrte } from '../lib/places';
+import { trip } from '../lib/trip';
+import { asset } from '../lib/paths';
+
+/** Vorschläge des Reisebands, die durch die Buchungen erledigt sind. */
+const erledigteUnterkuenfte = alleOrte.filter((p) => p.uebernachtung === 'vorschlag').length;
 ---
 
 <Base
@@ -9,4 +31,81 @@ import { places } from '../lib/places';
   subtitle="Liste und Karte, ein Filter für beides. Suchen, auf einen Reisetag legen, eigene Orte ergänzen."
 >
   <PlaceExplorer client:only="svelte" places={places} />
+
+  <details class="lesehinweis">
+    <summary>Woher die Zahlen kommen — Nummern, Unterkünfte, KML-Datei</summary>
+
+    <div class="lhinhalt">
+      <section>
+        <h3>{places.length} von {alleOrte.length} Orten</h3>
+        <p>
+          Für alle sechs Stationen ist etwas gebucht. Die {erledigteUnterkuenfte} Ryokan- und
+          Tempelvorschläge des Reisebands sind deshalb aus Liste, Karte und Planer genommen — sie
+          stehen weiter im gedruckten Band, falls doch etwas platzt.
+        </p>
+      </section>
+
+      <section>
+        <h3>Nummern wie im Buch</h3>
+        <p>
+          Jeder Ort trägt dieselbe Nummer wie im Reiseband — von 1 in Osaka bis 164 in Tokio. Selbst
+          ergänzte zählen ab 165 weiter, damit die gedruckten Nummern gültig bleiben. Die <a
+            href={asset(trip.kmlFile)}
+            download>KML-Datei</a
+          > lässt sich zusätzlich in Google Maps laden.
+        </p>
+      </section>
+    </div>
+  </details>
 </Base>
+
+<style>
+  .lesehinweis {
+    margin: 18px 0 0;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+
+  .lesehinweis summary {
+    /* 44 px Tippfläche wie überall sonst — ein Zusammenklapper, den man auf dem
+       Handy dreimal nicht trifft, bleibt zu. */
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    font-family: var(--util);
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+    color: var(--ai-60);
+    cursor: pointer;
+  }
+
+  .lesehinweis[open] summary {
+    border-bottom: 1px solid var(--line);
+    color: var(--ai);
+  }
+
+  .lhinhalt {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+    padding: 14px 16px 16px;
+  }
+
+  .lhinhalt h3 {
+    font-family: var(--util);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--shu);
+    margin: 0 0 6px;
+  }
+
+  .lhinhalt p {
+    font-size: 0.85rem;
+    color: var(--ai-60);
+    margin: 0;
+    line-height: 1.55;
+  }
+</style>

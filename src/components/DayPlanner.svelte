@@ -260,6 +260,7 @@
         class:on={openDay === d.date}
         class:leg={!!d.leg}
         onclick={() => (openDay = d.date)}
+        title={d.leg ? `Umzug ${d.leg.from} → ${d.leg.to} · ${d.leg.duration}` : undefined}
       >
         <small>{d.weekday}</small>
         <b>{d.date.slice(8)}.{d.date.slice(5, 7)}.</b>
@@ -605,6 +606,10 @@
     color: var(--kin-soft);
   }
 
+  /* Der goldene Balken markiert die fünf Umzugstage. Ohne den `title` am Knopf
+     ist er nicht zu deuten — man sieht, dass etwas anders ist, aber nicht was.
+     `title` reicht hier: Die Einzelheiten stehen vollständig im Etappenblock,
+     einen Tipp weiter. */
   .daytab.leg::after {
     content: '';
     position: absolute;

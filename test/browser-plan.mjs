@@ -52,6 +52,19 @@ await seite.waitForTimeout(500);
 console.log('Umzugstage im Tagesstreifen:');
 const umzugTabs = seite.locator('.daytab.leg');
 pruefe((await umzugTabs.count()) === 5, 'fünf Tage sind als Umzug markiert', `${await umzugTabs.count()}`);
+// Der goldene Balken allein ist nicht zu deuten — der `title` sagt, was er
+// bedeutet. Geprüft an allen fünf, nicht an einem.
+const titel = await umzugTabs.evaluateAll((ns) => ns.map((n) => n.getAttribute('title') ?? ''));
+pruefe(
+  titel.every((t) => /Umzug .+ → .+ · /.test(t)),
+  'jeder Umzugstag nennt Richtung und Dauer als Beschriftung',
+  titel[0],
+);
+// Und die übrigen fünfzehn tragen keinen — sonst wäre die Markierung wertlos.
+const andere = await seite
+  .locator('.daytab:not(.leg)')
+  .evaluateAll((ns) => ns.filter((n) => n.hasAttribute('title')).length);
+pruefe(andere === 0, 'die übrigen Tage tragen keine', `${andere} mit title`);
 
 /** Öffnet einen Reisetag über den Streifen. */
 async function tagOeffnen(nth) {

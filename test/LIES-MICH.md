@@ -4,6 +4,7 @@
 |---|---|---|
 | `npm test` | Abgleich-Logik (33 Prüfungen) gegen einen strengen PostgREST-Ersatz | nichts |
 | `npm run db:test` | Schema, Nummernvergabe und Zugriffsregeln gegen einen lokalen Postgres | `postgresql` installiert |
+| `npm run db:workflow` | Die psql-Schritte aus `migrate.yml` gegen denselben Postgres | vorher `db:test` |
 | `npm run test:browser` | Erfassung eigener Orte im iPhone-Format | `npm run preview` auf Port 4321 |
 | `npm run test:bild` | Verkleinern der Fotos im echten Browser | `npm run dev` auf Port 4322 |
 | `npm run test:buch` | Freundebuch mit Inhalt im iPhone-Format | `npm run dev` auf Port 4322 |

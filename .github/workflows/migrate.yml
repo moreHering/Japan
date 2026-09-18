@@ -2,9 +2,28 @@ name: Datenbank migrieren
 
 # Spielt die Migrationen aus supabase/migrations/ gegen das Supabase-Projekt ein.
 #
-# Warum über die CI und nicht lokal: Die Entwicklungsumgebung erreicht die
-# Datenbank nicht (API gesperrt, Direktverbindung nur über IPv6, Pooler-Ports
-# geschlossen). GitHub-Runner haben freies Netz.
+# Warum über die CI und nicht aus der Entwicklungsumgebung: Die erreicht die
+# Datenbank auf keinem Weg. Gemessen, nicht vermutet:
+#
+#   supabase.co / supabase.com   CONNECT tunnel failed, 403 am Proxy
+#   db.<ref>.supabase.co         löst überhaupt nicht mehr auf
+#   Pooler :5432 und :6543       keine Antwort (nur :443 ist offen)
+#   IPv6                         keine globale Adresse vorhanden
+#
+# GitHub-Runner haben freies Netz. Deshalb läuft es hier.
+#
+# ## Was gebraucht wird
+#
+# **Der einfache Weg:** ein einziges Secret `SUPABASE_DB_URL` — der vollständige
+# Connection String aus dem Dashboard unter *Project Settings → Database →
+# Connection string → URI* (Session-Pooler wählen, damit es über IPv4 geht).
+# Darin stehen Host, Port, Benutzer, Passwort und Datenbank; nichts muss
+# geraten werden.
+#
+# **Der alte Weg** bleibt als Rückfallebene: `SUPABASE_DB_PASSWORD` plus die
+# Variablen SUPABASE_REGION und SUPABASE_PROJECT_REF. Der setzt voraus, dass
+# Supabase seine Adressen weiter nach demselben Muster bildet — genau das ist
+# eine Annahme, die man sich sparen kann.
 
 on:
   push:
@@ -22,18 +41,25 @@ concurrency:
 jobs:
   migrate:
     runs-on: ubuntu-latest
+
+    env:
+      # Einmal hier, damit die Schritte darunter nur noch $DB_URL brauchen.
+      # GitHub maskiert Secrets in der Ausgabe; ausgegeben wird der Wert
+      # trotzdem nirgends.
+      DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      REGION: ${{ vars.SUPABASE_REGION || 'eu-central-1' }}
+      PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'hfrvdbaiyeddeiyprwmw' }}
+
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v7
 
       - name: Voraussetzungen prüfen
         env:
-          DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           ACCOUNT_PW: ${{ secrets.ACCOUNT_PW }}
           SB_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           SB_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
-          REGION: ${{ vars.SUPABASE_REGION }}
-          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
         run: |
           # Zeigt an, was ankommt — ohne Werte preiszugeben. Die Länge hilft
           # bei versehentlich mitkopierten Leerzeichen oder Anführungszeichen.
@@ -46,27 +72,31 @@ jobs:
           }
 
           echo "Secrets:"
+          zeige "SUPABASE_DB_URL" "$DB_URL"
           zeige "SUPABASE_DB_PASSWORD" "$DB_PASSWORD"
           zeige "ACCOUNT_PW" "$ACCOUNT_PW"
           zeige "PUBLIC_SUPABASE_URL" "$SB_URL"
           zeige "PUBLIC_SUPABASE_ANON_KEY" "$SB_KEY"
-          echo "Variablen (optional):"
-          zeige "SUPABASE_REGION" "$REGION"
-          zeige "SUPABASE_PROJECT_REF" "$PROJECT_REF"
+          echo "Variablen (nur für den Rückfallweg):"
+          printf '  %-28s %s\n' "SUPABASE_REGION" "$REGION"
+          printf '  %-28s %s\n' "SUPABASE_PROJECT_REF" "$PROJECT_REF"
           echo ""
 
-          if [ -z "$DB_PASSWORD" ]; then
-            echo "::error::Das Secret SUPABASE_DB_PASSWORD kommt leer an."
+          if [ -z "$DB_URL" ] && [ -z "$DB_PASSWORD" ]; then
+            echo "::error::Weder SUPABASE_DB_URL noch SUPABASE_DB_PASSWORD kommen an."
             echo ""
-            echo "Häufigste Ursachen, in dieser Reihenfolge:"
-            echo "  1. Es liegt unter 'Environment secrets' statt unter"
-            echo "     'Repository secrets'. Beide stehen auf derselben Seite —"
-            echo "     gebraucht wird der obere Block 'Repository secrets'."
-            echo "  2. Der Name weicht ab (Bindestrich statt Unterstrich,"
-            echo "     Kleinschreibung, Tippfehler)."
-            echo "  3. Es wurde unter 'Variables' statt 'Secrets' angelegt."
+            echo "Gebraucht wird eines von beiden — am einfachsten SUPABASE_DB_URL:"
+            echo "  Supabase → Project Settings → Database → Connection string → URI"
+            echo "  (Session pooler wählen), vollständig kopieren."
             echo ""
-            echo "Anzulegen unter:"
+            echo "Kommt ein gesetztes Secret hier leer an, liegt es fast immer an:"
+            echo "  1. Es steht unter 'Environment secrets' statt unter"
+            echo "     'Repository secrets'. Beides auf derselben Seite —"
+            echo "     gebraucht wird der obere Block."
+            echo "  2. Es wurde unter 'Variables' statt 'Secrets' angelegt."
+            echo "  3. Es liegt bei Codespaces oder Dependabot statt bei Actions."
+            echo ""
+            echo "Richtige Seite:"
             echo "  https://github.com/moreHering/Japan/settings/secrets/actions"
             exit 1
           fi
@@ -77,43 +107,53 @@ jobs:
 
           psql --version
 
+      - name: Verbindung aufbauen
+        id: verbindung
+        run: |
+          set -euo pipefail
+
+          if [ -n "$DB_URL" ]; then
+            ZIEL="$DB_URL"
+            echo "Verbindung über den hinterlegten Connection String."
+          else
+            # Rückfallweg: Adressen nach dem bekannten Muster zusammensetzen.
+            # Der Session-Pooler ist der einzige Weg mit IPv4 — die direkte
+            # Adresse db.<ref>.supabase.co löst nur auf IPv6 auf.
+            ZIEL="postgresql://postgres.${PROJECT_REF}:${DB_PASSWORD}@aws-0-${REGION}.pooler.supabase.com:5432/postgres?sslmode=require"
+            echo "Verbindung zusammengesetzt: aws-0-${REGION}.pooler.supabase.com als postgres.${PROJECT_REF}"
+          fi
+
+          # Der String enthält das Passwort und darf nirgends in der Ausgabe
+          # landen. Als Ausgabe eines Schritts wird er von GitHub maskiert,
+          # weil er aus einem Secret stammt bzw. eines enthält.
+          echo "::add-mask::$ZIEL"
+          echo "ziel=$ZIEL" >> "$GITHUB_OUTPUT"
+
+          psql "$ZIEL" -v ON_ERROR_STOP=1 -tAc \
+            "select 'verbunden mit ' || current_database() || ', ' || split_part(version(), ' on ', 1);"
+
       - name: Migrationen einspielen
         env:
-          # Der Session-Pooler ist der einzige Weg mit IPv4 — die direkte
-          # Adresse db.<ref>.supabase.co löst ausschließlich auf IPv6 auf.
-          PGHOST: aws-0-${{ vars.SUPABASE_REGION || 'eu-central-1' }}.pooler.supabase.com
-          PGPORT: '5432'
-          PGUSER: postgres.${{ vars.SUPABASE_PROJECT_REF || 'hfrvdbaiyeddeiyprwmw' }}
-          PGDATABASE: postgres
-          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          PGSSLMODE: require
+          ZIEL: ${{ steps.verbindung.outputs.ziel }}
           # Gemeinsames Anmeldepasswort der drei Konten.
           ACCOUNT_PW: ${{ secrets.ACCOUNT_PW }}
         run: |
           set -euo pipefail
 
-          echo "Verbindung zu $PGHOST als $PGUSER"
-          psql -v ON_ERROR_STOP=1 -tAc "select current_database(), version();"
-
           for datei in supabase/migrations/*.sql; do
             echo ""
             echo "── $datei ──────────────────────────────────────────"
-            psql -v ON_ERROR_STOP=1 -v pw="${ACCOUNT_PW:-}" -f "$datei"
+            psql "$ZIEL" -v ON_ERROR_STOP=1 -v pw="${ACCOUNT_PW:-}" -f "$datei"
           done
 
       - name: Ergebnis prüfen
         env:
-          PGHOST: aws-0-${{ vars.SUPABASE_REGION || 'eu-central-1' }}.pooler.supabase.com
-          PGPORT: '5432'
-          PGUSER: postgres.${{ vars.SUPABASE_PROJECT_REF || 'hfrvdbaiyeddeiyprwmw' }}
-          PGDATABASE: postgres
-          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          PGSSLMODE: require
+          ZIEL: ${{ steps.verbindung.outputs.ziel }}
         run: |
           set -euo pipefail
 
           echo "Tabellen und RLS-Status:"
-          psql -v ON_ERROR_STOP=1 -c "
+          psql "$ZIEL" -v ON_ERROR_STOP=1 -c "
             select c.relname as tabelle,
                    c.relrowsecurity as rls,
                    (select count(*) from pg_policies p
@@ -125,11 +165,19 @@ jobs:
 
           echo ""
           echo "Zugelassene Bearbeiter:"
-          psql -v ON_ERROR_STOP=1 -c "select name, farbe from public.profiles order by name;"
+          psql "$ZIEL" -v ON_ERROR_STOP=1 -c "select name, farbe from public.profiles order by name;"
+
+          echo ""
+          echo "Bilderablage:"
+          psql "$ZIEL" -tAc "
+            select coalesce(
+              (select 'vorhanden, ' || coalesce(file_size_limit, 0) / 1048576 || ' MB je Datei'
+                 from storage.buckets where id = 'freundebuch'),
+              'FEHLT');" 2>/dev/null || echo "  storage-Schema nicht lesbar"
 
           # Eine Tabelle ohne RLS wäre mit dem öffentlich lesbaren Schlüssel
           # für jeden zugänglich — das darf nicht unbemerkt durchgehen.
-          OFFEN=$(psql -tAc "
+          OFFEN=$(psql "$ZIEL" -tAc "
             select count(*) from pg_class c
               join pg_namespace n on n.oid = c.relnamespace
              where n.nspname='public' and c.relkind='r' and not c.relrowsecurity;")
@@ -138,4 +186,6 @@ jobs:
             echo "::error::$OFFEN Tabelle(n) ohne Row Level Security."
             exit 1
           fi
-          echo "Alle Tabellen sind durch RLS geschützt."
+
+          echo ""
+          echo "Alle Tabellen haben Row Level Security."

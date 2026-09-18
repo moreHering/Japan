@@ -16,7 +16,8 @@
     "test:all": "vitest run && node test/browser-orte.mjs",
     "test:bild": "node test/browser-bild.mjs",
     "test:buch": "node test/browser-freundebuch.mjs",
-    "pruefliste": "node scripts/pruefliste.mjs"
+    "pruefliste": "node scripts/pruefliste.mjs",
+    "db:workflow": "supabase/test/workflow-probe.sh"
   },
   "dependencies": {
     "@astrojs/svelte": "^9.0.1",

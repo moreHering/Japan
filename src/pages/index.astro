@@ -43,16 +43,11 @@ const chapterOf: Record<string, string> = {
         Sechs Stationen, {trip.nights} Nächte, {places.length} Orte. Der Reiseband erzählt,
         warum sie sich lohnen — hier entscheidest du, wann.
       </p>
-      <div class="herobtns">
-        <a class="btn primary" href={url('plan')}>Tagesplan öffnen</a>
-        <a class="btn" href={url('karte')}>Karte ansehen</a>
-        <a class="btn ghost" href={guide()}>Im Reiseband lesen</a>
-      </div>
     </div>
     <div class="bigk" aria-hidden="true">旅</div>
   </section>
 
-  <TripStatus client:only="svelte" total={places.length} />
+  <TripStatus client:only="svelte" />
 
   <!-- ------------------------------------------------------------ Stationen -->
   <section class="section">
@@ -224,32 +219,6 @@ const chapterOf: Record<string, string> = {
       font-size: 1rem;
       color: #cdc4b0;
       line-height: 1.65;
-    }
-
-    .herobtns {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 22px;
-    }
-
-    .herobtns .btn {
-      background: rgba(239, 231, 214, 0.1);
-      border-color: rgba(166, 124, 51, 0.6);
-      color: var(--washi);
-    }
-
-    .herobtns .btn:hover {
-      background: rgba(239, 231, 214, 0.18);
-    }
-
-    .herobtns .btn.primary {
-      background: var(--shu);
-      border-color: var(--shu);
-    }
-
-    .herobtns .btn.primary:hover {
-      background: var(--shu-deep);
     }
 
     .bigk {

@@ -1,83 +1,93 @@
 <script lang="ts">
-  /** Countdown und Planungsfortschritt — der einzige bewegliche Teil der Startseite. */
-  import { plan } from '../lib/store.svelte';
-  import { buildDays, formatDay, trip } from '../lib/trip';
+  /**
+   * Wo in der Reise ihr gerade steht — als Zeitleiste über die 20 Tage.
+   *
+   * Hier stand vorher, wie viele der 164 Orte eingeplant und besucht sind.
+   * Das ist bewusst raus: Eine Fortschrittsanzeige über Orte macht aus einer
+   * Reise eine Liste zum Abarbeiten. Was hier zählt, ist der Tag — vorher das
+   * Warten, unterwegs der Platz in der Reise, danach nichts mehr.
+   */
+  import { buildDays, formatFull, stations, trip } from '../lib/trip';
   import { url } from '../lib/paths';
-
-  type Props = { total: number };
-  let { total }: Props = $props();
 
   const days = buildDays();
 
-  /** Tage bis zur Abreise, über UTC gerechnet. */
-  function daysUntil(): number {
-    const [y, m, d] = trip.start.split('-').map(Number);
-    const target = Date.UTC(y, m - 1, d);
-    const now = new Date();
-    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    return Math.round((target - today) / 86_400_000);
+  /** Tage bis zur Abreise, über UTC gerechnet — sonst verschiebt Japan den Tag. */
+  function tageBis(iso: string): number {
+    const [y, m, d] = iso.split('-').map(Number);
+    const ziel = Date.UTC(y, m - 1, d);
+    const jetzt = new Date();
+    const heute = Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth(), jetzt.getUTCDate());
+    return Math.round((ziel - heute) / 86_400_000);
   }
 
-  const until = daysUntil();
+  const bisAbreise = tageBis(trip.start);
+  /** 1-basierter Reisetag, oder 0 davor und days.length+1 danach. */
+  const heuteNr = bisAbreise > 0 ? 0 : Math.min(days.length + 1, 1 - bisAbreise);
+  const unterwegs = heuteNr >= 1 && heuteNr <= days.length;
 
-  let planned = $derived(Object.values(plan.days).reduce((s, d) => s + d.placeNrs.length, 0));
-  let visited = $derived(plan.done.length);
+  const heute = unterwegs ? days[heuteNr - 1] : null;
 
-  /** Tage ohne einen einzigen geplanten Ort. */
-  let emptyDays = $derived(days.filter((d) => !(plan.days[d.date]?.placeNrs.length ?? 0)));
+  /** Stationsblöcke für die Leiste: je Station die Zahl ihrer Tage. */
+  const bloecke = stations.map((s) => ({
+    ...s,
+    tage: days.filter((d) => d.station.slug === s.slug),
+  }));
 
-  let percent = $derived(Math.round((visited / total) * 100));
+  const farbe = ['var(--shu)', 'var(--kin)', 'var(--matcha)', 'var(--ai)', '#2F5D6B', 'var(--shu-deep)'];
 </script>
 
-<div class="status">
-  <div class="countdown">
-    {#if until > 0}
-      <b>{until}</b>
-      <span>{until === 1 ? 'Tag' : 'Tage'} bis zur Abreise</span>
-    {:else if until > -trip.nights - 1}
-      <b>{Math.abs(until) + 1}</b>
-      <span>Reisetag läuft</span>
+<div class="status" class:laeuft={unterwegs}>
+  <div class="zahl">
+    {#if bisAbreise > 0}
+      <b>{bisAbreise}</b>
+      <span>{bisAbreise === 1 ? 'Tag' : 'Tage'} bis zur Abreise</span>
+    {:else if unterwegs}
+      <b>{heuteNr}</b>
+      <span>von {days.length} Reisetagen</span>
     {:else}
-      <b>✓</b>
+      <b>旅</b>
       <span>Reise vorbei</span>
     {/if}
   </div>
 
-  <div class="bars">
-    <div class="bar">
-      <div class="barhead">
-        <span>Eingeplant</span>
-        <b>{planned} von {total} Orten</b>
-      </div>
-      <div class="track"><i style={`width:${(planned / total) * 100}%`} class="fill plan"></i></div>
-    </div>
-
-    <div class="bar">
-      <div class="barhead">
-        <span>Besucht</span>
-        <b>{visited} von {total} · {percent}%</b>
-      </div>
-      <div class="track"><i style={`width:${percent}%`} class="fill done"></i></div>
-    </div>
-  </div>
-
-  <div class="hintbox">
-    {#if emptyDays.length === days.length}
-      <p>
-        Noch kein Tag verplant. Im <a href={url('plan')}>Tagesplan</a> liegen die 20 Reisetage bereit —
-        die Vorschläge zeigen jeweils nur die Orte der passenden Station.
+  <div class="rechts">
+    {#if unterwegs && heute}
+      <p class="heute">
+        <b>{heute.label}</b> in {heute.station.name}
+        {#if heute.leg}
+          · <span class="umzug">Umzug nach {heute.leg.to}, {heute.leg.connection}</span>
+        {:else if heute.isDeparture}
+          · <span class="umzug">Rückflug</span>
+        {/if}
       </p>
-    {:else if emptyDays.length}
-      <p>
-        <b>{emptyDays.length} {emptyDays.length === 1 ? 'Tag' : 'Tage'} noch leer:</b>
-        {emptyDays
-          .slice(0, 8)
-          .map((d) => formatDay(d.date))
-          .join(' · ')}{emptyDays.length > 8 ? ' …' : ''}
+    {:else if bisAbreise > 0}
+      <p class="heute">
+        Ab <b>{formatFull(trip.start)}</b> zählt hier der Reisetag.
+        Bis dahin liegt im <a href={url('plan')}>Tagesplan</a> alles bereit.
       </p>
     {:else}
-      <p>Alle {days.length} Tage haben mindestens einen Ort. Fehlt noch etwas?</p>
+      <p class="heute">Zwanzig Tage, sechs Stationen. Der <a href={url('plan')}>Plan</a> bleibt stehen.</p>
     {/if}
+
+    <!-- Die Leiste: ein Feld je Reisetag, gruppiert nach Station. -->
+    <div class="leiste" role="img" aria-label={`Reisetag ${heuteNr} von ${days.length}`}>
+      {#each bloecke as b, i (b.slug)}
+        <div class="block" style={`--f:${farbe[i % farbe.length]}; flex-grow:${b.tage.length}`}>
+          <div class="felder">
+            {#each b.tage as d (d.date)}
+              <i
+                class="feld"
+                class:vorbei={heuteNr > d.dayNo}
+                class:jetzt={heuteNr === d.dayNo}
+                title={`${d.label} · ${d.station.name}`}
+              ></i>
+            {/each}
+          </div>
+          <span class="name">{b.name}</span>
+        </div>
+      {/each}
+    </div>
   </div>
 </div>
 
@@ -93,14 +103,19 @@
     padding: 16px 18px;
   }
 
-  .countdown {
+  /* Unterwegs darf die Karte etwas mehr Gewicht haben. */
+  .status.laeuft {
+    border-color: var(--shu);
+  }
+
+  .zahl {
     text-align: center;
     padding-right: 20px;
     border-right: 1px solid var(--line);
     min-width: 108px;
   }
 
-  .countdown b {
+  .zahl b {
     display: block;
     font-family: var(--disp);
     font-weight: 700;
@@ -109,7 +124,7 @@
     color: var(--shu);
   }
 
-  .countdown span {
+  .zahl span {
     font-family: var(--util);
     font-size: 0.66rem;
     letter-spacing: 0.1em;
@@ -119,71 +134,89 @@
     margin-top: 4px;
   }
 
-  .bars {
+  .rechts {
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: 13px;
+    min-width: 0;
   }
 
-  .barhead {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    font-family: var(--util);
-    font-size: 0.7rem;
-    color: var(--ai-40);
-    margin-bottom: 3px;
-    gap: 10px;
-  }
-
-  .barhead b {
-    color: var(--ai);
-    font-size: 0.72rem;
-  }
-
-  .track {
-    height: 7px;
-    background: var(--washi-2);
-    border-radius: 999px;
-    overflow: hidden;
-  }
-
-  .fill {
-    display: block;
-    height: 100%;
-    border-radius: 999px;
-    transition: width 0.3s ease;
-  }
-
-  .fill.plan {
-    background: var(--kin);
-  }
-
-  .fill.done {
-    background: var(--matcha);
-  }
-
-  .hintbox {
-    grid-column: 1 / -1;
-    border-top: 1px solid var(--line-soft);
-    padding-top: 11px;
-  }
-
-  .hintbox p {
+  .heute {
     margin: 0;
-    font-size: 0.86rem;
+    font-size: 0.9rem;
     color: var(--ai-60);
+    line-height: 1.5;
   }
 
-  .hintbox b {
+  .heute b {
     color: var(--ai);
+  }
+
+  .umzug {
+    font-family: var(--util);
+    font-size: 0.78rem;
+    color: var(--kin);
+  }
+
+  .leiste {
+    display: flex;
+    gap: 7px;
+    align-items: flex-end;
+  }
+
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    /* Die Breite wächst mit der Zahl der Tage (flex-grow kommt aus dem Markup),
+       damit die Leiste die Reise maßstäblich zeigt: Tokio ist dreimal so lang
+       wie Kanazawa, und genau so soll es aussehen. */
+    flex: 0 1 0;
+  }
+
+  .felder {
+    display: flex;
+    gap: 2px;
+  }
+
+  .feld {
+    flex: 1 1 0;
+    height: 9px;
+    border-radius: 2px;
+    background: var(--washi-2);
+    border: 1px solid var(--line);
+    min-width: 6px;
+  }
+
+  .feld.vorbei {
+    background: var(--f);
+    border-color: var(--f);
+    opacity: 0.55;
+  }
+
+  .feld.jetzt {
+    background: var(--f);
+    border-color: var(--f);
+    box-shadow: 0 0 0 2px var(--card), 0 0 0 3px var(--f);
+  }
+
+  .name {
+    font-family: var(--util);
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+    color: var(--ai-40);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   @media (max-width: 560px) {
     .status {
       grid-template-columns: 1fr;
     }
-    .countdown {
+
+    .zahl {
       border-right: none;
       border-bottom: 1px solid var(--line);
       padding: 0 0 12px;
@@ -192,8 +225,15 @@
       align-items: baseline;
       gap: 10px;
     }
-    .countdown span {
+
+    .zahl span {
       margin: 0;
+    }
+
+    /* Sechs Namen nebeneinander bei 390 px: kleiner setzen, und die kurzen
+       Blöcke kürzen ihren Namen über text-overflow ab. */
+    .name {
+      font-size: 0.52rem;
     }
   }
 </style>

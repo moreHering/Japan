@@ -184,9 +184,15 @@ const m = await seite.evaluate(() => ({
 }));
 pruefe(m.doc <= m.win + 1, 'Kein Querscrollen mit Inhalt', `${m.doc} px bei ${m.win} px`);
 
+// Fünf Punkte, seit Orte und Karte auf einem Bildschirm liegen.
 pruefe(
-  (await seite.locator('.tabbar a').count()) === 6,
-  'Die Navigationsleiste hat den Punkt zum Freundebuch',
+  (await seite.locator('.tabbar a').count()) === 5,
+  'Die Navigationsleiste hat fünf Punkte',
+  String(await seite.locator('.tabbar a').count()),
+);
+pruefe(
+  (await seite.locator('.tabbar a[aria-current="page"]').innerText()).includes('Freunde'),
+  'und das Freundebuch ist der aktive',
 );
 
 pruefe(meldungen.length === 0, 'Keine Fehler in der Konsole', meldungen.join(' | '));

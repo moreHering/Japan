@@ -34,6 +34,11 @@ on:
       - 'supabase/migrations/**'
       - '.github/workflows/migrate.yml'
   workflow_dispatch:
+    inputs:
+      loeschen_pruefen:
+        description: 'Zusätzlich prüfen, ob das Löschen eines Freundebuch-Beitrags durchläuft (ändert nichts — die Probe wird zurückgerollt)'
+        type: boolean
+        default: false
 
 # Zwei gleichzeitige Migrationsläufe auf derselben Datenbank wären ein Problem.
 concurrency:
@@ -311,3 +316,17 @@ jobs:
               join auth.users u on u.id = i.user_id
              where u.email like '%@japan2026.local'
              order by 3;"
+
+      # Nur auf Anforderung: geht den Löschweg der App nach, als Rolle
+      # authenticated und mit Kennung im Claim, in einer Transaktion, die
+      # zurückgerollt wird. Zeigt, ob der Trigger auf storage.objects abbricht
+      # (dann scheitert das Löschen ganz) oder wegen RLS nichts trifft (dann
+      # bleibt das Bild liegen). Beides sieht in der App völlig anders aus.
+      - name: Löschen prüfen
+        if: inputs.loeschen_pruefen
+        env:
+          ZIEL: ${{ steps.verbindung.outputs.ziel }}
+        run: |
+          set -uo pipefail
+          [ -n "${ZIEL:-}" ] || { echo "Keine Verbindung — übersprungen."; exit 0; }
+          psql "$ZIEL" -f supabase/test/loeschen-probe.sql

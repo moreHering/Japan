@@ -60,12 +60,21 @@ create table if not exists auth.identities (
   primary key (provider_id, provider)
 );
 
+-- Supabase liest die Kennung aus **zwei** Einstellungen: der alten Einzelform
+-- `request.jwt.claim.sub` und dem vollständigen JSON `request.jwt.claims`.
+-- PostgREST setzt je nach Fassung die eine oder die andere. Der Stub hatte nur
+-- die erste — damit lief ein Test durch, der in Wirklichkeit auf die zweite
+-- angewiesen war. Dieselbe Falle wie bei den NULL-Tokenspalten: eine
+-- freundlichere Nachbildung als das Original. Jetzt das echte coalesce.
 create or replace function auth.uid()
 returns uuid
 language sql
 stable
 as $$
-  select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.sub', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'
+  )::uuid;
 $$;
 
 -- Die Rolle, unter der Supabase angemeldete Zugriffe ausführt.

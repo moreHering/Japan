@@ -91,6 +91,24 @@ end $$;
 grant usage on schema public, auth to authenticated, anon;
 grant select on auth.users to authenticated;
 
+-- ------------------------------------------------ Vorgabe-Privilegien wie dort ---
+--
+-- Zum **vierten** Mal dieselbe Falle, deshalb ausführlich: Supabase erteilt der
+-- Rolle `anon` per Vorgabe Rechte auf alles, was in `public` entsteht. Dieser
+-- Stub tat das nicht — `anon` hatte hier gar keine Tabellenrechte.
+--
+-- Folge: Ein `revoke all ... from anon` in einer Migration wäre lokal
+-- wirkungslos, weil nichts zu widerrufen ist. Der Test wäre grün, und die
+-- Sicherung, die in Produktion die ganze Arbeit macht, wäre ungeprüft. Genau so
+-- ist es vorher schon dreimal ausgegangen: fehlende Tokenspalten in auth.users,
+-- ein auth.uid(), das nur eine der beiden Claimformen las, und ein fehlendes
+-- storage-Schema samt Löschschutz.
+--
+-- Also: erst alles geben, damit das Widerrufen etwas zu tun hat.
+alter default privileges in schema public grant all on tables    to anon, authenticated;
+alter default privileges in schema public grant all on sequences to anon, authenticated;
+alter default privileges in schema public grant all on functions to anon, authenticated;
+
 -- ---------------------------------------------------------------- storage ---
 --
 -- Warum das hier steht: Dreimal hintereinander war dieser Stub freundlicher als

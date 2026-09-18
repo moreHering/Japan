@@ -263,6 +263,95 @@ jobs:
           echo ""
           echo "Alle Tabellen haben Row Level Security."
 
+      # Die Gästesicht ist die einzige Stelle, an der ein Fehler heißt: Fremde
+      # lesen den Plan oder schreiben ins Tagebuch. Lokal ist das geprüft — aber
+      # nur dort gilt mein Stub. Hier gilt Supabase' eigenes Rechtemodell samt
+      # seiner Vorgabe-Privilegien für `anon`, und das ist der Grund für diesen
+      # Schritt.
+      - name: Gästesicht prüfen
+        env:
+          ZIEL: ${{ steps.verbindung.outputs.ziel }}
+        run: |
+          set -uo pipefail
+          [ -n "${ZIEL:-}" ] || { echo "Keine Verbindung — übersprungen."; exit 0; }
+
+          echo "Was die Rolle anon lesen darf:"
+          psql "$ZIEL" -c "
+            select c.relname as tabelle,
+                   has_any_column_privilege('anon', c.oid, 'select') as lesen,
+                   has_table_privilege('anon', c.oid, 'insert')
+                     or has_table_privilege('anon', c.oid, 'update')
+                     or has_table_privilege('anon', c.oid, 'delete') as schreiben
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relkind = 'r'
+             order by c.relname;"
+
+          echo "Policies, die Gäste erreichen:"
+          psql "$ZIEL" -c "
+            select tablename, policyname, cmd, roles
+              from pg_policies
+             where schemaname = 'public'
+               and ('anon' = any(roles) or 'public' = any(roles))
+             order by tablename, policyname;"
+
+          echo "Bilderablage:"
+          psql "$ZIEL" -tAc \
+            "select case when public then 'öffentlich lesbar' else 'PRIVAT' end
+               from storage.buckets where id = 'freundebuch';" 2>/dev/null \
+            || echo "  storage-Schema nicht lesbar"
+
+          # Und jetzt die Invarianten als Abbruchbedingung. Genau dieselben
+          # Abfragen wie in supabase/test/schema-test.sql — hier gegen echt.
+          ZUVIEL=$(psql "$ZIEL" -tAc "
+            select coalesce(string_agg(c.relname, ', ' order by c.relname), '')
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relkind = 'r'
+               and c.relname not in ('profiles','guestbook_profile','guestbook_post')
+               and has_any_column_privilege('anon', c.oid, 'select');")
+
+          SCHREIBT=$(psql "$ZIEL" -tAc "
+            select coalesce(string_agg(distinct c.relname, ', '), '')
+              from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace,
+                   unnest(array['insert','update','delete','truncate']) r
+             where n.nspname = 'public' and c.relkind = 'r'
+               and has_table_privilege('anon', c.oid, r);")
+
+          VIEWS=$(psql "$ZIEL" -tAc "
+            select count(*) from pg_class c
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relkind in ('v','m')
+               and has_any_column_privilege('anon', c.oid, 'select');")
+
+          OFFEN=$(psql "$ZIEL" -tAc \
+            "select public from storage.buckets where id = 'freundebuch';" 2>/dev/null || echo "")
+
+          FEHLER=0
+          if [ -n "$ZUVIEL" ]; then
+            echo "::error::anon darf zu viel lesen: $ZUVIEL"
+            FEHLER=1
+          fi
+          if [ -n "$SCHREIBT" ]; then
+            echo "::error::anon darf schreiben auf: $SCHREIBT"
+            FEHLER=1
+          fi
+          if [ "$VIEWS" != "0" ]; then
+            # Der RLS-Wächter oben sieht nur relkind='r' — eine View wäre dort
+            # ein Loch, das die CI nicht bemerkt.
+            echo "::error::$VIEWS View(s) für anon lesbar"
+            FEHLER=1
+          fi
+          if [ "$OFFEN" = "f" ]; then
+            echo "::error::Die Bilderablage ist privat — das Tagebuch zeigt dann kaputte Bilder."
+            FEHLER=1
+          fi
+          [ "$FEHLER" = "0" ] || exit 1
+
+          echo ""
+          echo "Gästesicht: genau drei Tabellen lesbar, kein Schreibrecht, Bilder öffentlich."
+
       # Wenn die Anmeldung scheitert, liegt es fast nie an den Tabellen,
       # sondern an `auth.users`. GoTrue liest einige Spalten in Go-Strings ein
       # und stolpert über NULL — Konten, die per SQL entstanden sind, haben

@@ -346,6 +346,242 @@ begin
   raise notice 'Korrekturen: ohne Profil kein Zugriff — bestanden';
 end $$;
 
+-- ====================================================== Die Gästeansicht ===
+--
+-- Ab 0008 liest die Rolle `anon` drei Tabellen: profiles (nur id/name/farbe),
+-- guestbook_profile und guestbook_post. Alles andere muss dicht bleiben, und
+-- schreiben darf `anon` nirgends.
+--
+-- Die Prüfungen sind bewusst **generisch** über den Katalog formuliert und nicht
+-- als Aufzählung: Eine künftige Tabelle in `public` bekommt in Supabase wieder
+-- Vorgabe-Privilegien für `anon`. Eine Aufzählung würde das nie bemerken, diese
+-- Prüfungen fallen um.
+
+reset role;
+set role anon;
+-- Beide Claimformen leeren — sonst prüft man einen Gast, der noch eine Kennung
+-- trägt, und `auth.uid()` liefert etwas. Das war schon einmal die Ursache einer
+-- falsch negativen Probe.
+set request.jwt.claim.sub = '';
+set request.jwt.claims = '';
+
+do $$
+declare
+  n      integer;
+  fehler text[] := '{}';
+begin
+  -- --- sehen darf ---
+  select count(*) into n from public.guestbook_post;
+  if n < 1 then fehler := fehler || 'Gast sah keine Beiträge'; end if;
+
+  select count(*) into n from public.guestbook_profile;
+  if n < 1 then fehler := fehler || 'Gast sah keine Steckbriefe'; end if;
+
+  select count(*) into n from public.profiles;
+  if n < 3 then fehler := fehler || format('Gast sah %s statt 3 Personen', n); end if;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Gast: Tagebuch und Steckbriefe lesbar — bestanden';
+end $$;
+
+do $$
+declare
+  n      integer;
+  fehler text[] := '{}';
+  t      text;
+begin
+  -- --- nicht sehen darf ---
+  --
+  -- Zwei Ausgänge gelten beide als bestanden: Ohne Tabellenrecht wirft Postgres,
+  -- mit Recht aber ohne Policy kommen null Zeilen. Beides heißt „dicht".
+  foreach t in array array[
+    'plan_days', 'plan_notes', 'plan_flags', 'expenses', 'places_custom', 'places_patch'
+  ] loop
+    begin
+      execute format('select count(*) from public.%I', t) into n;
+      if n > 0 then
+        fehler := fehler || format('Gast konnte %s lesen (%s Zeilen)', t, n);
+      end if;
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
+
+  -- `angelegt_am` ist nicht freigegeben — der Zugriff muss scheitern.
+  begin
+    select count(angelegt_am) into n from public.profiles;
+    fehler := fehler || 'Gast konnte profiles.angelegt_am lesen';
+  exception when insufficient_privilege then null;
+  end;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Gast: Plan, Ausgaben und eigene Orte bleiben dicht — bestanden';
+end $$;
+
+do $$
+declare
+  fehler text[] := '{}';
+begin
+  -- --- schreiben darf nirgends ---
+  begin
+    insert into public.guestbook_post (text, datum, created_by)
+    values ('von einem Gast', current_date, '11111111-1111-1111-1111-111111111111');
+    fehler := fehler || 'Gast konnte einen Beitrag anlegen';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    update public.guestbook_post set text = 'umgeschrieben';
+    if found then fehler := fehler || 'Gast konnte einen Beitrag ändern'; end if;
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    delete from public.guestbook_post;
+    if found then fehler := fehler || 'Gast konnte einen Beitrag löschen'; end if;
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    insert into public.guestbook_profile (user_id, feld, wert)
+    values ('11111111-1111-1111-1111-111111111111', 'motto', 'gekapert');
+    fehler := fehler || 'Gast konnte einen Steckbrief beschreiben';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    insert into public.expenses (id, datum, text, yen, payer, created_by)
+    values (gen_random_uuid(), current_date, 'Gast', 1, 'x',
+            '11111111-1111-1111-1111-111111111111');
+    fehler := fehler || 'Gast konnte eine Ausgabe anlegen';
+  exception when insufficient_privilege then null;
+  end;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Gast: schreibt nirgends — bestanden';
+end $$;
+
+reset role;
+
+-- ------------------------------------ Die Invarianten über den Katalog ---
+--
+-- Das ist der eigentliche Wert dieses Abschnitts: Die Prüfungen oben nennen
+-- Tabellen beim Namen und übersehen deshalb jede neue. Diese hier nicht.
+
+do $$
+declare
+  liste text;
+  n     integer;
+  fehler text[] := '{}';
+begin
+  -- Alle Abfragen unten gehen über `pg_class.oid`, **nicht** über
+  -- `format('public.%I', name)::regclass`. Mit der Zeichenkettenvariante zieht
+  -- der Planer die Rechteprüfung vor den Schemafilter und löst Namen gegen den
+  -- Suchpfad auf — der Test brach dann mit „relation public.pg_statistic does
+  -- not exist" ab. Mit der OID gibt es nichts aufzulösen.
+  --
+  -- Und `has_any_column_privilege`, nicht `has_table_privilege`: Bei `profiles`
+  -- gibt 0008 nur drei Spalten frei, und ein Spaltenrecht macht das
+  -- Tabellenrecht nicht wahr. Mit der falschen Funktion wäre `profiles` hier
+  -- unsichtbar und die Prüfung wertlos.
+
+  -- 1) Lesen: genau drei Tabellen, keine mehr.
+  select string_agg(c.relname, ', ' order by c.relname) into liste
+    from pg_class c
+    join pg_namespace ns on ns.oid = c.relnamespace
+   where ns.nspname = 'public'
+     and c.relkind = 'r'
+     and c.relname not in ('profiles', 'guestbook_profile', 'guestbook_post')
+     and has_any_column_privilege('anon', c.oid, 'select');
+  if liste is not null then
+    fehler := fehler || format('anon darf zu viel lesen: %s', liste);
+  end if;
+
+  -- 2) Schreiben: nirgends.
+  --
+  -- Zwei Funktionen, weil es zwei Sorten Recht gibt: INSERT und UPDATE lassen
+  -- sich auf einzelne Spalten vergeben, DELETE und TRUNCATE nur auf die ganze
+  -- Tabelle. `has_any_column_privilege` mit 'delete' bricht mit
+  -- „unrecognized privilege type" ab — geprüft, nicht vermutet.
+  select string_agg(distinct c.relname, ', ') into liste
+    from pg_class c
+    join pg_namespace ns on ns.oid = c.relnamespace,
+         unnest(array['insert', 'update']) r
+   where ns.nspname = 'public'
+     and c.relkind = 'r'
+     and has_any_column_privilege('anon', c.oid, r);
+  if liste is not null then
+    fehler := fehler || format('anon darf spaltenweise schreiben auf: %s', liste);
+  end if;
+
+  select string_agg(distinct c.relname, ', ') into liste
+    from pg_class c
+    join pg_namespace ns on ns.oid = c.relnamespace,
+         unnest(array['delete', 'truncate', 'insert', 'update']) r
+   where ns.nspname = 'public'
+     and c.relkind = 'r'
+     and has_table_privilege('anon', c.oid, r);
+  if liste is not null then
+    fehler := fehler || format('anon darf tabellenweit schreiben auf: %s', liste);
+  end if;
+
+  -- 3) Policies: keine erreicht anon außer den drei, und keine ist mehr als
+  --    SELECT. `public` wird mitgeprüft — eine Policy ohne TO-Klausel gilt für
+  --    PUBLIC und damit auch für anon. Genau diese Falle soll der Grant-Widerruf
+  --    abfangen, und diese Prüfung stellt sicher, dass sie gar nicht entsteht.
+  select string_agg(format('%s/%s', tablename, cmd), ', ') into liste
+    from pg_policies
+   where schemaname = 'public'
+     and ('anon' = any(roles) or 'public' = any(roles))
+     and (cmd <> 'SELECT'
+          or tablename not in ('profiles', 'guestbook_profile', 'guestbook_post'));
+  if liste is not null then
+    fehler := fehler || format('Policy erreicht Gäste unerwartet: %s', liste);
+  end if;
+
+  -- 4) Views: keine für anon lesbar. Der RLS-Wächter im Migrationsworkflow sieht
+  --    nur relkind='r' — eine View wäre dort ein Loch, das die CI nicht bemerkt.
+  select count(*) into n
+    from pg_class c
+    join pg_namespace ns on ns.oid = c.relnamespace
+   where ns.nspname = 'public'
+     and c.relkind in ('v', 'm')
+     and has_any_column_privilege('anon', c.oid, 'select');
+  if n > 0 then
+    fehler := fehler || format('%s View(s) für anon lesbar', n);
+  end if;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Gast: genau drei Tabellen lesbar, kein Schreibrecht, keine offene View — bestanden';
+end $$;
+
+-- Die Bilderablage muss öffentlich sein, sonst zeigt das Tagebuch kaputte
+-- Bildsymbole — und niemand erfährt es, weil die Seite sonst funktioniert.
+do $$
+declare
+  offen boolean;
+begin
+  if to_regclass('storage.buckets') is null then
+    raise notice 'Bilderablage: kein storage-Schema, übersprungen';
+    return;
+  end if;
+  select public into offen from storage.buckets where id = 'freundebuch';
+  if offen is null then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - Bucket freundebuch fehlt';
+  end if;
+  if not offen then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - Bucket freundebuch ist nicht öffentlich';
+  end if;
+  raise notice 'Bilderablage: öffentlich lesbar — bestanden';
+end $$;
+
 -- --------------------------------------------------- Anmeldung möglich? ---
 --
 -- Der Grund, warum es diese Prüfung gibt: Nach dem ersten Migrationslauf

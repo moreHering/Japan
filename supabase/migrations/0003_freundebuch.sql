@@ -30,10 +30,16 @@ begin
     return;
   end if;
 
-  -- Nicht öffentlich: Die Bilder sind über zeitlich begrenzte Links erreichbar,
-  -- die der angemeldete Client anfordert. Ein öffentlicher Bereich wäre über
-  -- die geratene Adresse für jeden lesbar, und in einem Freundebuch stehen
-  -- Gesichter.
+  -- Angelegt als **nicht** öffentlich — das ist aber nur der Anfangswert.
+  --
+  -- Seit 0008 ist der Bucket öffentlich, weil das Reisetagebuch unter
+  -- /Japan/tagebuch/ auch ohne Anmeldung Bilder zeigen soll. Die Begründung und
+  -- was daran unwiderruflich ist, steht im Kopf von 0008_oeffentlich.sql.
+  --
+  -- Hier stand früher das Gegenteil („in einem Freundebuch stehen Gesichter"),
+  -- und `public` wurde bei jedem Lauf wieder auf `false` gezwungen. Beides ist
+  -- weg: Die Sichtbarkeit entscheidet ab jetzt **nur** 0008, damit es genau eine
+  -- Stelle gibt, an der sie steht.
   insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
   values (
     'freundebuch',
@@ -42,10 +48,12 @@ begin
     5242880,                                   -- 5 MB; verkleinert wird im Browser
     array['image/jpeg', 'image/png', 'image/webp']
   )
+  -- `public` bewusst **nicht** im do-update: Sonst nimmt jeder Lauf dem Bucket
+  -- wieder die Öffentlichkeit, die 0008 ihm gibt — innerhalb desselben Laufs
+  -- würde es sich zwar heilen, aber die Datei behauptete etwas Falsches.
   on conflict (id) do update
     set file_size_limit    = excluded.file_size_limit,
-        allowed_mime_types = excluded.allowed_mime_types,
-        public             = excluded.public;
+        allowed_mime_types = excluded.allowed_mime_types;
 
   raise notice 'Bilderablage freundebuch bereit.';
 end $$;

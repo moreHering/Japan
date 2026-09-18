@@ -1,9 +1,0 @@
----
-import Base from '../layouts/Base.astro';
-import MapPage from '../components/MapPage.svelte';
-import { places } from '../lib/places';
----
-
-<Base title="Karte" full>
-  <MapPage client:only="svelte" places={places} />
-</Base>

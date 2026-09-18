@@ -1,0 +1,33 @@
+{
+  "_erklaerung": [
+    "Welche der 25 Orte in der Kategorie Übernachten noch Vorschläge sind.",
+    "",
+    "Für jede der sechs Stationen ist eine Unterkunft gebucht (siehe stay in",
+    "stations.json). Die Vorschläge des Reisebands sind damit erledigt und",
+    "werden aus der App genommen — sie standen sonst weiter in Liste, Karte",
+    "und Tagesplaner herum und machten die Kategorie Übernachten unbrauchbar.",
+    "",
+    "In places.json bleiben sie erhalten und tragen uebernachtung: 'vorschlag'.",
+    "Fällt eine Buchung aus, holt eine einzige Zeile in src/lib/places.ts sie",
+    "zurück.",
+    "",
+    "gebucht: Die Nummer des Orts, der die tatsächliche Unterkunft IST. Der",
+    "bleibt sichtbar und wird als Unterkunft gekennzeichnet, nicht als",
+    "Vorschlag. Für Hakone ist der gebuchte Ryokan in den Quellen nicht",
+    "benannt — sobald der Name feststeht, kommt die Nummer hier rein.",
+    "",
+    "keineUebernachtung: Orte, die das Reiseband unter Übernachten führt, die",
+    "aber gar keine sind. Nr. 164 ist ein Tages-Onsen an der Talstation nach",
+    "der Wanderung. Die Kategorie bleibt wie im gedruckten Band, der Ort bleibt",
+    "aber sichtbar — er ist kein Bett, sondern etwas zu tun."
+  ],
+  "gebucht": {
+    "osaka": null,
+    "kyoto": null,
+    "kanazawa": null,
+    "takayama": null,
+    "hakone": null,
+    "tokio": 147
+  },
+  "keineUebernachtung": [164]
+}

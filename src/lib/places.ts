@@ -25,6 +25,13 @@ export type Place = {
   cashOnly: boolean;
   /** Nummern weiterer Orte an genau derselben Koordinate. */
   sameSpotAs?: number[];
+  /**
+   * Nur bei der Kategorie Übernachten gesetzt.
+   *
+   * `gebucht` — das ist die Unterkunft, in der wirklich geschlafen wird.
+   * `vorschlag` — ein Vorschlag des Reisebands, durch die Buchung erledigt.
+   */
+  uebernachtung?: 'gebucht' | 'vorschlag';
 };
 
 /**
@@ -77,7 +84,22 @@ export const STATIONSWAHL: { slug: string; label: string; planbar: boolean }[] =
   { slug: ABSEITS, label: ABSEITS_LABEL, planbar: false },
 ];
 
-export const places = placesData as Place[];
+/** Alle 164 Orte des Reisebands, unverändert. Nur zum Nachschlagen. */
+export const alleOrte = placesData as Place[];
+
+/**
+ * Die Arbeitsliste der App.
+ *
+ * Draußen sind die Übernachtungsvorschläge: Für jede der sechs Stationen ist
+ * etwas gebucht, damit sind die Vorschläge des Reisebands erledigt. Sie standen
+ * sonst zu 23 Stück in Liste, Karte und Tagesplaner herum und machten die
+ * Kategorie Übernachten unbrauchbar.
+ *
+ * **Falls eine Buchung platzt:** Diese Zeile durch `alleOrte` ersetzen, und sie
+ * sind sofort wieder da — die Daten stehen weiterhin vollständig in
+ * places.json, welcher Ort welche Rolle hat in data/source/unterkunft.json.
+ */
+export const places = alleOrte.filter((p) => p.uebernachtung !== 'vorschlag');
 
 export const CATEGORIES: { key: Category; label: string; short: string; color: string }[] = [
   { key: 'kultur', label: 'Kultur & Sehenswürdigkeiten', short: 'Kultur', color: '#C6402B' },
@@ -89,12 +111,17 @@ export const CATEGORIES: { key: Category; label: string; short: string; color: s
 
 export const categoryOf = (key: Category) => CATEGORIES.find((c) => c.key === key)!;
 
+/**
+ * Sucht in **allen** 164 Orten, nicht nur in der Arbeitsliste: Eine Nummer aus
+ * dem gedruckten Reiseband soll auch dann etwas finden, wenn der Ort in der App
+ * nicht mehr angeboten wird.
+ */
 export function placeByNr(nr: number): Place | undefined {
-  return places.find((p) => p.nr === nr);
+  return alleOrte.find((p) => p.nr === nr);
 }
 
 /** Die höchste vergebene Nummer der festen Orte — eigene zählen darüber weiter. */
-export const HOECHSTE_FESTE_NR = places.reduce((m, p) => Math.max(m, p.nr), 0);
+export const HOECHSTE_FESTE_NR = alleOrte.reduce((m, p) => Math.max(m, p.nr), 0);
 
 /** Orte einer Station, optional nur Zentrum oder nur Ausflüge. */
 export function placesOfStation(station: string, area?: 'zentrum' | 'ausflug'): Place[] {

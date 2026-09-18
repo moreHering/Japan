@@ -1,7 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import TripStatus from '../components/TripStatus.svelte';
-import { places, CATEGORIES } from '../lib/places';
+import { places, alleOrte, CATEGORIES } from '../lib/places';
 import { legs, stations, trip, formatDay } from '../lib/trip';
 import { url, guide, asset } from '../lib/paths';
 
@@ -17,6 +17,8 @@ const catCounts = CATEGORIES.map((c) => ({
 }));
 
 const friendTips = places.filter((p) => p.isFriendTip);
+/** Vorschläge des Reisebands, die durch die Buchungen erledigt sind. */
+const erledigteUnterkuenfte = alleOrte.filter((p) => p.uebernachtung === 'vorschlag').length;
 const bookingPlaces = places.filter((p) => p.needsBooking).length;
 const closedPlaces = places.filter((p) => p.closedDay).length;
 /** Manche Orte haben beides — deshalb zählen, nicht addieren. */
@@ -148,6 +150,14 @@ const chapterOf: Record<string, string> = {
           Wochentag liegt; die offenen Reservierungen stehen in der <a
             href={url('organisation')}>Organisation</a
           >.
+        </p>
+      </div>
+      <div class="note">
+        <h4>Unterkünfte stehen</h4>
+        <p>
+          Für alle sechs Stationen ist etwas gebucht. Die {erledigteUnterkuenfte} Ryokan- und
+          Tempelvorschläge des Reisebands sind deshalb aus Liste, Karte und Planer genommen — sie
+          stehen weiter im gedruckten Band, falls doch etwas platzt.
         </p>
       </div>
       <div class="note">

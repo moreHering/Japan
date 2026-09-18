@@ -54,6 +54,7 @@ const SPALTEN: Record<string, string[]> = {
     'closed_day',
     'needs_booking',
     'cash_only',
+    'unterkunft',
     'created_at',
     'created_by',
     'updated_at',

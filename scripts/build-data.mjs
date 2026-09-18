@@ -20,6 +20,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const KML = resolve(root, 'data/source/Japan-Karte-2026.kml');
 const HTML = resolve(root, 'data/source/Japan-Reisefuehrer-2026.html');
 const BOOK = resolve(root, 'data/source/buch-erlebnisse.json');
+const UNTERKUNFT = resolve(root, 'data/source/unterkunft.json');
 const OUT = resolve(root, 'src/data/places.json');
 
 /** Erwartungswerte, gegen die das Ergebnis geprüft wird. */
@@ -31,6 +32,10 @@ const EXPECT = {
   unnumbered: 7,
   /** Abschnitte, in denen diese Einträge stehen — einer je Station außer Kanazawa. */
   unnumberedSections: 5,
+  /** Übernachtungsvorschläge, die durch die Buchungen erledigt sind. */
+  unterkunftVorschlaege: 23,
+  /** Orte der Kategorie Übernachten, die die tatsächliche Buchung sind. */
+  unterkunftGebucht: 1,
 };
 
 /** KML-Style-IDs → interne Kategorie-Slugs. */
@@ -284,6 +289,53 @@ for (const [nr, t] of texts) {
   htmlByName.get(key).push(nr);
 }
 
+/**
+ * Trennt bei den Übernachtungsorten das Gebuchte vom Vorschlag.
+ *
+ * Für alle sechs Stationen ist etwas gebucht. Die Vorschläge des Reisebands
+ * sind damit erledigt; sie bleiben in den Daten stehen (mit `uebernachtung:
+ * 'vorschlag'`), werden aber von der App nicht mehr angeboten. Welcher Ort die
+ * tatsächliche Buchung ist und welcher gar keine Übernachtung, steht kuratiert
+ * in `data/source/unterkunft.json` — raten wäre hier falsch.
+ */
+function markiereUnterkuenfte(places) {
+  const cfg = JSON.parse(readFileSync(UNTERKUNFT, 'utf8'));
+  const keine = new Set(cfg.keineUebernachtung ?? []);
+  const gebucht = new Map(
+    Object.entries(cfg.gebucht ?? {}).filter(([, nr]) => Number.isInteger(nr)),
+  );
+  const gebuchteNrn = new Set(gebucht.values());
+
+  let vorschlaege = 0;
+  let belegt = 0;
+
+  for (const p of places) {
+    if (p.category !== 'hotel' || keine.has(p.nr)) continue;
+    if (gebuchteNrn.has(p.nr)) {
+      p.uebernachtung = 'gebucht';
+      belegt += 1;
+    } else {
+      p.uebernachtung = 'vorschlag';
+      vorschlaege += 1;
+    }
+  }
+
+  // Eine Nummer, die es nicht gibt oder die zur falschen Station gehört, wäre
+  // ein stiller Fehler in der kuratierten Datei.
+  for (const [station, nr] of gebucht) {
+    const p = places.find((x) => x.nr === nr);
+    if (!p) fail(`unterkunft.json: Nr. ${nr} (${station}) gibt es nicht`);
+    else if (p.station !== station) {
+      fail(`unterkunft.json: Nr. ${nr} liegt in ${p.station}, nicht in ${station}`);
+    }
+  }
+  for (const nr of keine) {
+    if (!places.some((x) => x.nr === nr)) fail(`unterkunft.json: Nr. ${nr} gibt es nicht`);
+  }
+
+  return { vorschlaege, belegt };
+}
+
 const { places: geo, corrections } = readKml(htmlByName);
 
 const places = [];
@@ -317,6 +369,7 @@ for (const nr of [...geo.keys()].sort((a, b) => a - b)) {
 }
 
 const book = assignBook(places);
+const unterkunft = markiereUnterkuenfte(places);
 
 // Orte auf identischer Position gegenseitig markieren, damit die Karte deren
 // Marker leicht versetzt zeichnen kann statt sie übereinanderzulegen.
@@ -353,6 +406,15 @@ for (const [cat, want] of Object.entries(EXPECT.categories)) {
 
 const tips = places.filter((p) => p.isFriendTip).length;
 if (tips !== EXPECT.friendTips) problems.push(`${tips} Freundestipps statt ${EXPECT.friendTips}`);
+
+if (unterkunft.vorschlaege !== EXPECT.unterkunftVorschlaege) {
+  problems.push(
+    `${unterkunft.vorschlaege} Übernachtungsvorschläge statt ${EXPECT.unterkunftVorschlaege}`,
+  );
+}
+if (unterkunft.belegt !== EXPECT.unterkunftGebucht) {
+  problems.push(`${unterkunft.belegt} gebuchte Unterkünfte statt ${EXPECT.unterkunftGebucht}`);
+}
 
 const badCoords = places.filter(
   (p) =>
@@ -621,6 +683,9 @@ if (doubled.length) {
 }
 console.log(`  Kategorien   ${Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
 console.log(`  Freundestipps ${tips}`);
+console.log(
+  `  Übernachten   ${unterkunft.belegt} gebucht · ${unterkunft.vorschlaege} Vorschläge (erledigt, nicht mehr in der App)`,
+);
 console.log(`  Schließtage   ${places.filter((p) => p.closedDay).length}`);
 console.log(`  Reservierung  ${places.filter((p) => p.needsBooking).length}`);
 console.log(`  Nur Bargeld   ${places.filter((p) => p.cashOnly).length}`);

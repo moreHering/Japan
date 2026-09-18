@@ -368,6 +368,7 @@ function zeileAusOrt(ort: EigenerOrt, wer: string, mitNr: boolean) {
     lng: ort.lng,
     beschreibung: ort.descriptionHtml,
     from_book: Boolean(ort.book) || Boolean(ort.bookTitle),
+    unterkunft: ort.uebernachtung === 'gebucht',
     closed_day: ort.closedDay,
     needs_booking: ort.needsBooking,
     cash_only: ort.cashOnly,
@@ -479,7 +480,7 @@ async function holeStand(sb: SB): Promise<{ stand: Partial<PlanState>; leer: boo
     sb
       .from('places_custom')
       .select(
-        'nr, name, kategorie, station, area, lat, lng, beschreibung, from_book, closed_day, needs_booking, cash_only, created_by',
+        'nr, name, kategorie, station, area, lat, lng, beschreibung, from_book, closed_day, needs_booking, cash_only, unterkunft, created_by',
       )
       .order('nr'),
   ]);
@@ -540,6 +541,7 @@ async function holeStand(sb: SB): Promise<{ stand: Partial<PlanState>; leer: boo
     needsBooking: Boolean(z.needs_booking),
     closedDay: z.closed_day ?? null,
     cashOnly: Boolean(z.cash_only),
+    uebernachtung: z.unterkunft ? ('gebucht' as const) : undefined,
   }));
 
   const leer =

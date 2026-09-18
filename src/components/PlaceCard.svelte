@@ -66,6 +66,9 @@
       {#if eigen}
         <span class="selbst" title="Selbst ergänzt">✎</span>
       {/if}
+      {#if place.uebernachtung === 'gebucht'}
+        <span class="gebucht">hier schlafen wir</span>
+      {/if}
     </h3>
 
     <div class="meta">
@@ -171,6 +174,19 @@
   .selbst {
     font-size: 0.8em;
     color: var(--shu);
+  }
+
+  .gebucht {
+    font-family: var(--util);
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #fff;
+    background: var(--matcha);
+    border-radius: 999px;
+    padding: 2px 8px;
+    vertical-align: middle;
+    white-space: nowrap;
   }
 
   /* Gestrichelter Rand wie der Marker auf der Karte — dieselbe Sprache für

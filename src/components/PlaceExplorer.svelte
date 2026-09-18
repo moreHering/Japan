@@ -1,6 +1,16 @@
 <script lang="ts">
   /**
-   * Orte-Browser: Filter, Liste und Karte.
+   * Orte und Karte — ein Bildschirm.
+   *
+   * Vorher waren das zwei Seiten: eine Liste mit kleiner Karte daneben und
+   * eine Vollbildkarte mit eigenem Filterblatt. Beide zeigten dieselben Orte
+   * mit fast denselben Filtern, nur jeweils halb. Wer auf der Karte etwas fand,
+   * musste zur Liste wechseln, um es auf einen Tag zu legen; wer in der Liste
+   * filterte, sah das Ergebnis auf der anderen Seite nicht.
+   *
+   * Jetzt filtert eine Leiste beide Ansichten gleichzeitig. Am Rechner stehen
+   * Liste und Karte nebeneinander, auf dem Handy wird umgeschaltet — die Filter
+   * bleiben dabei gesetzt.
    *
    * Liste und Karte liegen bewusst in einer einzigen Komponente. Als zwei
    * getrennte Astro-Islands müssten sie Zustand über die Inselgrenze teilen,
@@ -27,6 +37,7 @@
     isDone,
     istPlanbar,
     plan,
+    placesOfDay,
     unplacePlace,
   } from '../lib/store.svelte';
 
@@ -58,12 +69,24 @@
   let onlyBook = $state(false);
   let onlyOpen = $state(false);
   let hideDone = $state(false);
+  let nurGeplant = $state(false);
+  /** Gesetzt: nur die Orte dieses Reisetags, mit Linie in der Reihenfolge. */
+  let tagFilter = $state<string | null>(null);
+
   let selected = $state<number | null>(null);
   let targetDay = $state<string>(days[0].date);
   let mobileView = $state<'liste' | 'karte'>('liste');
+  /**
+   * Auf dem Handy liegen die Filter zusammengeklappt.
+   *
+   * Ausgeklappt sind es fünf Reihen — dann steht der erste Ort unterhalb des
+   * Bildschirmrands, und die Seite beginnt mit Bedienelementen statt mit
+   * Inhalt. Am Rechner ist genug Platz, dort stehen sie immer offen.
+   */
+  let filterOffen = $state(false);
   let mapRef = $state<MapView | null>(null);
 
-  /** Erfassung eigener Orte, ausgelöst über den langen Druck auf der Karte. */
+  /** Erfassung eigener Orte. */
   let pin = $state<{ lat: number; lng: number } | null>(null);
   let pickMode = $state(false);
   let formOffen = $state(false);
@@ -71,7 +94,14 @@
 
   let filtered = $derived.by(() => {
     const q = query.trim().toLowerCase();
+    const amTag = tagFilter ? new Set(placesOfDay(tagFilter)) : null;
+    const geplant = nurGeplant
+      ? new Set(Object.values(plan.days).flatMap((d) => d.placeNrs))
+      : null;
+
     return alle.filter((p) => {
+      if (amTag) return amTag.has(p.nr); // ein Tag zeigt genau seine Orte
+      if (geplant && !geplant.has(p.nr)) return false;
       if (!cats.has(p.category)) return false;
       if (station !== 'alle' && p.station !== station) return false;
       if (onlyTips && !p.isFriendTip) return false;
@@ -89,8 +119,18 @@
 
   let visibleNrs = $derived(filtered.map((p) => p.nr));
 
-  // Nach Station und Nummer gruppieren, damit die Reihenfolge der des Buchs folgt.
+  /** Im Tagesfilter zeigt die Karte die geplante Reihenfolge als Linie. */
+  let route = $derived(tagFilter ? placesOfDay(tagFilter) : []);
+
+  // Nach Station und Nummer gruppieren, damit die Reihenfolge der des Buchs
+  // folgt. Im Tagesfilter zählt dagegen die geplante Reihenfolge.
   let grouped = $derived.by(() => {
+    if (tagFilter) {
+      const reihe = placesOfDay(tagFilter)
+        .map((nr) => filtered.find((p) => p.nr === nr))
+        .filter((p): p is Place => Boolean(p));
+      return reihe.length ? [[formatDay(tagFilter), reihe] as [string, Place[]]] : [];
+    }
     const map = new Map<string, Place[]>();
     for (const p of [...filtered].sort((a, b) => a.nr - b.nr)) {
       const key = p.stationLabel;
@@ -99,6 +139,33 @@
     }
     return [...map];
   });
+
+  /** Wie viele Filter gerade etwas einschränken — für die Zahl am Knopf. */
+  let aktiveFilter = $derived(
+    (station !== 'alle' ? 1 : 0) +
+      (cats.size < CATEGORIES.length ? 1 : 0) +
+      (onlyTips ? 1 : 0) +
+      (onlyBook ? 1 : 0) +
+      (onlyOpen ? 1 : 0) +
+      (hideDone ? 1 : 0) +
+      (nurGeplant ? 1 : 0) +
+      (tagFilter ? 1 : 0),
+  );
+
+  function filterZuruecksetzen() {
+    query = '';
+    station = 'alle';
+    cats = new Set(CATEGORIES.map((c) => c.key));
+    onlyTips = onlyBook = onlyOpen = hideDone = nurGeplant = false;
+    tagFilter = null;
+    selected = null;
+  }
+
+  let abseitsAnzahl = $derived(alle.filter(istAbseits).length);
+  let eigeneAnzahl = $derived(plan.customPlaces.length);
+  let plannedTotal = $derived(
+    Object.values(plan.days).reduce((sum, d) => sum + d.placeNrs.length, 0),
+  );
 
   function toggleCat(key: Category) {
     const next = new Set(cats);
@@ -122,8 +189,15 @@
     else mapRef?.fitVisible();
   }
 
-  let abseitsAnzahl = $derived(alle.filter(istAbseits).length);
-  let eigeneAnzahl = $derived(plan.customPlaces.length);
+  /** Tagesfilter setzen oder abschalten. */
+  function tagWaehlen(datum: string | null) {
+    tagFilter = datum;
+    nurGeplant = false;
+    selected = null;
+    if (datum) setTimeout(() => mapRef?.fitVisible(), 60);
+  }
+
+  // ------------------------------------------------------------- Erfassung --
 
   function stelleGewaehlt(lat: number, lng: number) {
     pin = { lat, lng };
@@ -144,6 +218,7 @@
     bearbeiten = ort;
     pin = { lat: ort.lat, lng: ort.lng };
     formOffen = true;
+    mobileView = 'liste';
   }
 
   function erfassenSchliessen() {
@@ -152,10 +227,6 @@
     pin = null;
     bearbeiten = null;
   }
-
-  let plannedTotal = $derived(
-    Object.values(plan.days).reduce((sum, d) => sum + d.placeNrs.length, 0),
-  );
 </script>
 
 <div class="toolbar">
@@ -185,7 +256,36 @@
     </select>
   </div>
 
-  <div class="row cats">
+  <div class="row schnell">
+    <button
+      class="btn small filterknopf"
+      class:primary={aktiveFilter > 0}
+      onclick={() => (filterOffen = !filterOffen)}
+      aria-expanded={filterOffen}
+    >
+      Filter{aktiveFilter ? ` (${aktiveFilter})` : ''}
+      <span class="pfeil" class:auf={filterOffen}>▾</span>
+    </button>
+
+    <span class="count"><b>{filtered.length}</b> von {alle.length}</span>
+
+    <span class="spacer"></span>
+
+    <div class="switch">
+      <button
+        class="btn small"
+        class:primary={mobileView === 'liste'}
+        onclick={() => (mobileView = 'liste')}>Liste</button
+      >
+      <button
+        class="btn small"
+        class:primary={mobileView === 'karte'}
+        onclick={() => (mobileView = 'karte')}>Karte</button
+      >
+    </div>
+  </div>
+
+  <div class="row cats" class:zu={!filterOffen}>
     {#each CATEGORIES as c (c.key)}
       <button
         class="chip"
@@ -193,30 +293,77 @@
         style={`--chip:${c.color}`}
         onclick={() => toggleCat(c.key)}
         aria-pressed={cats.has(c.key)}
+        disabled={Boolean(tagFilter)}
       >
         <i></i>{c.short}
       </button>
     {/each}
-
-    <span class="spacer"></span>
-
-    <button class="chip plain" class:on={onlyTips} onclick={() => (onlyTips = !onlyTips)} aria-pressed={onlyTips}>
-      ★ Freundestipps
-    </button>
-    <button class="chip plain" class:on={onlyBook} onclick={() => (onlyBook = !onlyBook)} aria-pressed={onlyBook}>
-      📖 Reiseführer
-    </button>
-    <button class="chip plain" class:on={hideDone} onclick={() => (hideDone = !hideDone)} aria-pressed={hideDone}>
-      offen
-    </button>
-    <button class="chip plain" class:on={onlyOpen} onclick={() => (onlyOpen = !onlyOpen)} aria-pressed={onlyOpen}>
-      ohne Schließtag
-    </button>
   </div>
 
-  <div class="row status">
-    <span class="count"><b>{filtered.length}</b> von {alle.length} Orten</span>
-    <span class="count dim">{plannedTotal} eingeplant · {plan.done.length} besucht</span>
+  <div class="row cats" class:zu={!filterOffen}>
+    <button
+      class="chip plain"
+      class:on={onlyTips}
+      onclick={() => (onlyTips = !onlyTips)}
+      aria-pressed={onlyTips}
+      disabled={Boolean(tagFilter)}>★ Freundestipps</button
+    >
+    <button
+      class="chip plain"
+      class:on={onlyBook}
+      onclick={() => (onlyBook = !onlyBook)}
+      aria-pressed={onlyBook}
+      disabled={Boolean(tagFilter)}>📖 Reiseführer</button
+    >
+    <button
+      class="chip plain"
+      class:on={hideDone}
+      onclick={() => (hideDone = !hideDone)}
+      aria-pressed={hideDone}
+      disabled={Boolean(tagFilter)}>noch offen</button
+    >
+    <button
+      class="chip plain"
+      class:on={onlyOpen}
+      onclick={() => (onlyOpen = !onlyOpen)}
+      aria-pressed={onlyOpen}
+      disabled={Boolean(tagFilter)}>ohne Schließtag</button
+    >
+    <button
+      class="chip plain"
+      class:on={nurGeplant}
+      onclick={() => {
+        nurGeplant = !nurGeplant;
+        tagFilter = null;
+      }}
+      aria-pressed={nurGeplant}>eingeplant ({plannedTotal})</button
+    >
+
+    <!-- Kam von der früheren Kartenseite: ein einzelner Reisetag, mit Linie. -->
+    <label class="tagwahl" class:on={Boolean(tagFilter)}>
+      <span>Tag</span>
+      <select
+        value={tagFilter ?? ''}
+        aria-label="Nur die Orte eines Reisetags"
+        onchange={(e) => tagWaehlen((e.currentTarget as HTMLSelectElement).value || null)}
+      >
+        <option value="">alle</option>
+        {#each days as d (d.date)}
+          <option value={d.date}>
+            {d.label} · {d.station.name} ({placesOfDay(d.date).length})
+          </option>
+        {/each}
+      </select>
+    </label>
+  </div>
+
+  <div class="row status" class:zu={!filterOffen}>
+    {#if eigeneAnzahl}
+      <span class="count dim">{eigeneAnzahl} selbst ergänzt</span>
+    {/if}
+    {#if aktiveFilter}
+      <button class="btn small ghost" onclick={filterZuruecksetzen}>Filter zurücksetzen</button>
+    {/if}
 
     <span class="spacer"></span>
 
@@ -230,18 +377,6 @@
     </label>
 
     <button class="btn small ghost" onclick={() => mapRef?.fitVisible()}>Karte einpassen</button>
-    <button class="btn small" class:primary={pickMode} onclick={() => (pickMode ? erfassenSchliessen() : erfassenStarten())}>
-      {pickMode ? 'abbrechen' : '+ eigener Ort'}
-    </button>
-  </div>
-
-  <div class="row switch">
-    <button class="btn small" class:primary={mobileView === 'liste'} onclick={() => (mobileView = 'liste')}>
-      Liste
-    </button>
-    <button class="btn small" class:primary={mobileView === 'karte'} onclick={() => (mobileView = 'karte')}>
-      Karte
-    </button>
   </div>
 </div>
 
@@ -258,6 +393,8 @@
           // Ein frisch angelegter Ort soll auffindbar sein, auch wenn die
           // Filter ihn gerade ausschließen würden.
           station = 'alle';
+          tagFilter = null;
+          nurGeplant = false;
           query = '';
         }
       }}
@@ -274,7 +411,13 @@
 <div class="split" data-view={mobileView}>
   <div class="list">
     {#if !filtered.length}
-      <p class="empty">Kein Ort passt zu diesen Filtern.</p>
+      <p class="empty">
+        {#if tagFilter}
+          Für {formatDay(tagFilter)} ist noch nichts geplant.
+        {:else}
+          Kein Ort passt zu diesen Filtern.
+        {/if}
+      </p>
     {/if}
 
     {#each grouped as [label, group] (label)}
@@ -312,11 +455,25 @@
       places={alle}
       visible={visibleNrs}
       {selected}
+      {route}
       {pin}
       {pickMode}
       onselect={(nr) => (selected = nr)}
       onpick={stelleGewaehlt}
     />
+
+    <!-- Auf dem Handy scrollt die Werkzeugleiste weg, sobald die Karte den
+         Bildschirm füllt. Der Knopf zum Ergänzen bleibt deshalb auf ihr. -->
+    {#if !formOffen}
+      <button
+        class="rundknopf"
+        class:aktiv={pickMode}
+        onclick={() => (pickMode ? erfassenSchliessen() : erfassenStarten())}
+        title="Eigenen Ort ergänzen — oder lange auf die Karte drücken"
+      >
+        {pickMode ? '✕' : '+'}<span>{pickMode ? 'abbrechen' : 'Ort'}</span>
+      </button>
+    {/if}
   </div>
 </div>
 
@@ -391,6 +548,13 @@
     color: var(--ai-40);
   }
 
+  /* Im Tagesfilter zeigt die Ansicht genau die Orte dieses Tages — die
+     übrigen Filter hätten dort keine Wirkung und stehen deshalb still. */
+  .chip[disabled] {
+    opacity: 0.4;
+    cursor: default;
+  }
+
   .chip i {
     width: 9px;
     height: 9px;
@@ -413,6 +577,33 @@
   .chip.plain.on {
     border-color: var(--shu);
     color: var(--shu-deep);
+  }
+
+  .tagwahl {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--util);
+    font-size: 0.74rem;
+    color: var(--ai-40);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 4px 2px 11px;
+    background: var(--card);
+  }
+
+  .tagwahl.on {
+    border-color: var(--shu);
+    color: var(--shu-deep);
+    background: var(--washi-2);
+  }
+
+  .tagwahl select {
+    font-size: 0.74rem;
+    padding: 4px 6px;
+    border-color: transparent;
+    background: transparent;
+    max-width: 190px;
   }
 
   .spacer {
@@ -447,8 +638,38 @@
     padding: 5px 8px;
   }
 
+  .schnell {
+    align-items: center;
+  }
+
+  .filterknopf {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pfeil {
+    transition: transform 0.15s ease;
+    display: inline-block;
+  }
+
+  .pfeil.auf {
+    transform: rotate(180deg);
+  }
+
   .switch {
-    display: none;
+    display: flex;
+    gap: 6px;
+  }
+
+  /* Am Rechner ist Platz: Dort stehen die Filter immer offen, und der
+     Umschalter zwischen Liste und Karte ist überflüssig, weil beides
+     nebeneinander liegt. */
+  @media (min-width: 901px) {
+    .filterknopf,
+    .switch {
+      display: none;
+    }
   }
 
   /* -------------------------------------------------------------- Zweispalter */
@@ -505,6 +726,37 @@
     top: calc(var(--nav-h) + 14px);
   }
 
+  .rundknopf {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 46px;
+    padding: 0 16px 0 14px;
+    border-radius: 999px;
+    border: 1px solid var(--shu);
+    background: var(--shu);
+    color: #fff;
+    font-family: var(--util);
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(22, 35, 60, 0.28);
+  }
+
+  .rundknopf span {
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
+  }
+
+  .rundknopf.aktiv {
+    background: var(--ai);
+    border-color: var(--ai);
+  }
+
   .empty {
     font-family: var(--util);
     font-size: 0.85rem;
@@ -516,23 +768,34 @@
     .split {
       grid-template-columns: 1fr;
     }
-    .switch {
-      display: flex;
+
+    /* Zugeklappt: Die Seite beginnt mit Orten, nicht mit fünf Reihen Knöpfen. */
+    .row.zu {
+      display: none;
     }
+
     .split[data-view='liste'] .mapwrap {
       display: none;
     }
+
     .split[data-view='karte'] .list {
       display: none;
     }
-    .list,
-    .mapwrap {
+
+    .list {
       max-height: none;
-      height: auto;
-      position: static;
+      overflow: visible;
     }
+
+    /*
+     * Die Karte füllt auf dem Handy den Rest des Bildschirms. Ohne feste Höhe
+     * bekäme sie die Höhe ihres Inhalts — und Leaflet hat keinen.
+     */
     .mapwrap {
-      height: calc(var(--app-h) - 210px);
+      position: relative;
+      top: auto;
+      height: calc(var(--app-h) - 60px);
+      min-height: 320px;
     }
   }
 </style>

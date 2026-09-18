@@ -132,6 +132,9 @@ function normalisiereOrt(raw: unknown): EigenerOrt | null {
     needsBooking: Boolean(o.needsBooking),
     closedDay: typeof o.closedDay === 'string' && o.closedDay ? o.closedDay : null,
     cashOnly: Boolean(o.cashOnly),
+    // Ein selbst angelegter Ort kann eure Unterkunft sein — dann ist er kein
+    // Vorschlag, sondern die Buchung.
+    uebernachtung: o.uebernachtung === 'gebucht' ? ('gebucht' as const) : undefined,
   };
 }
 
@@ -495,6 +498,8 @@ function naechsteVorlaeufigeNr(): number {
 
 export type NeuerOrt = {
   name: string;
+  /** Hier wird geschlafen. */
+  unterkunft?: boolean;
   category: Category;
   station: string;
   stationLabel: string;
@@ -512,7 +517,12 @@ export type NeuerOrt = {
 /** Legt einen Ort an und gibt seine (vorläufige) Nummer zurück. */
 export function ortAnlegen(daten: NeuerOrt, angelegtVon: string | null = null): number {
   const nr = naechsteVorlaeufigeNr();
-  const ort = normalisiereOrt({ ...daten, nr, angelegtVon });
+  const ort = normalisiereOrt({
+    ...daten,
+    nr,
+    angelegtVon,
+    uebernachtung: daten.unterkunft ? 'gebucht' : undefined,
+  });
   if (!ort) throw new Error('Der Ort ist unvollständig.');
   mutate(
     () => {
@@ -526,7 +536,17 @@ export function ortAnlegen(daten: NeuerOrt, angelegtVon: string | null = null): 
 export function ortAendern(nr: number, daten: Partial<NeuerOrt>) {
   const i = plan.customPlaces.findIndex((p) => p.nr === nr);
   if (i === -1) return;
-  const zusammen = normalisiereOrt({ ...plan.customPlaces[i], ...daten, nr });
+  const zusammen = normalisiereOrt({
+    ...plan.customPlaces[i],
+    ...daten,
+    nr,
+    uebernachtung:
+      daten.unterkunft === undefined
+        ? plan.customPlaces[i].uebernachtung
+        : daten.unterkunft
+          ? 'gebucht'
+          : undefined,
+  });
   if (!zusammen) return;
   mutate(
     () => {

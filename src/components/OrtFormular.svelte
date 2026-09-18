@@ -43,6 +43,7 @@
   let area = $state<'zentrum' | 'ausflug'>(ort?.area ?? 'zentrum');
   let beschreibung = $state(ort?.descriptionHtml ?? '');
   let ausBuch = $state(Boolean(ort?.book));
+  let unterkunft = $state(ort?.uebernachtung === 'gebucht');
   let closedDay = $state(ort?.closedDay ?? '');
   let needsBooking = $state(ort?.needsBooking ?? false);
   let cashOnly = $state(ort?.cashOnly ?? false);
@@ -60,6 +61,12 @@
   });
 
   let istAbseitsGewaehlt = $derived(station === ABSEITS);
+
+  // Wer den Haken setzt, meint ein Bett — die Kategorie zieht nach, damit der
+  // Ort im Filter „Übernachten" auftaucht, wo man ihn sucht.
+  $effect(() => {
+    if (unterkunft && category !== 'hotel') category = 'hotel';
+  });
 
   function absenden(e: Event) {
     e.preventDefault();
@@ -90,6 +97,7 @@
       lat: la,
       lng: lo,
       descriptionHtml: beschreibung.trim(),
+      unterkunft,
       book: ausBuch ? '—' : undefined,
       bookTitle: ausBuch ? 'Aus dem Reiseführer' : undefined,
       closedDay: closedDay || null,
@@ -201,6 +209,10 @@
     <label>
       <input type="checkbox" bind:checked={ausBuch} />
       <span>📖 aus dem Reiseführer</span>
+    </label>
+    <label>
+      <input type="checkbox" bind:checked={unterkunft} />
+      <span>hier schlafen wir</span>
     </label>
     <label>
       <input type="checkbox" bind:checked={needsBooking} />

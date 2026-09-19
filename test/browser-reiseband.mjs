@@ -53,14 +53,26 @@ const mass = await seite.evaluate(() => {
   const cs = p ? getComputedStyle(p) : null;
   return {
     absaetze: bt.querySelectorAll('p').length,
-    kapitel: bt.querySelectorAll('section[id]').length,
+    /*
+     * `details.kap[id]` und nicht mehr `section[id]`: Seit der Band ein Akkordeon
+     * ist, trägt die Klappe den Anker. **Gezählt wird bewusst innerhalb von
+     * `.bandtext`** — das ist die Zusicherung, die einen Fehler gefunden hat, den
+     * keine Zählung fand: Ein Schnitt mitten durch ein `<div>` ließ den
+     * HTML-Parser den Behälter vorzeitig schließen, und ab Kyoto standen sechs von
+     * elf Kapiteln daneben statt darin. Die Bilanz der Datei war dabei
+     * ausgeglichen, `document.querySelectorAll('details.kap')` hätte elf gemeldet.
+     */
+    kapitel: bt.querySelectorAll('details.kap[id]').length,
+    kapitelImDokument: document.querySelectorAll('details.kap[id]').length,
+    teile: bt.querySelectorAll('details.teil').length,
+    offen: bt.querySelectorAll('details.kap[open]').length,
     zeichen: (bt.textContent ?? '').length,
     schriftgroesse: cs ? parseFloat(cs.fontSize) : 0,
     zeilenhoehe: cs ? parseFloat(cs.lineHeight) / parseFloat(cs.fontSize) : 0,
     schrift: cs ? cs.fontFamily.split(',')[0].replace(/["']/g, '') : '',
     // Erstes Kapitel möglichst früh: Der Text ist die Hauptsache.
     ersterKapitelY: Math.round(
-      (bt.querySelector('section[id]')?.getBoundingClientRect().top ?? 0) + window.scrollY,
+      (bt.querySelector('details.kap[id]')?.getBoundingClientRect().top ?? 0) + window.scrollY,
     ),
     deckelY: Math.round(
       (bt.querySelector('.cover2, .wrap')?.getBoundingClientRect().top ?? 9999) + window.scrollY,
@@ -75,6 +87,18 @@ if (!mass) {
 }
 
 pruefe(mass.kapitel === kapitel.length, `alle ${kapitel.length} Kapitel sind da`, String(mass.kapitel));
+pruefe(
+  mass.kapitel === mass.kapitelImDokument,
+  'und alle liegen **in** .bandtext, keines daneben',
+  `${mass.kapitel} drin von ${mass.kapitelImDokument} im Dokument`,
+);
+// Sechs Stationen à drei Abschnitte plus Osakas Tagesausflug.
+pruefe(mass.teile === 19, 'die sechs Stationen sind in 19 Abschnitte geteilt', String(mass.teile));
+pruefe(
+  mass.offen === 1,
+  'genau ein Kapitel steht offen — elf zugeklappte Zeilen sähen nach Ladefehler aus',
+  String(mass.offen),
+);
 pruefe(mass.absaetze > 100, 'der Text ist vollständig, nicht angerissen', `${mass.absaetze} Absätze`);
 // 90.000, nicht 100.000: Die „137 kB" aus der Skriptausgabe sind Markup. Der
 // reine Text hat 99.046 Zeichen — meine erste Schwelle war schlicht falsch
@@ -116,10 +140,84 @@ pruefe(
   'die anklickbaren Kapitelkacheln sind weg',
 );
 
+/*
+ * Der Inhalt ist noch vollständig — und das ist die Prüfung mit dem größten Wert
+ * an dieser Umformung.
+ *
+ * Die Vorlage für das Akkordeon kam als fertige HTML-Datei. Hätte man sie
+ * eingesetzt statt den Band daraus zu erzeugen, wären **19 Probier-Tabellen** und
+ * die **fünf** Blöcke „Weitere Optionen — ohne Nummer, nur hier im Buch" weg
+ * gewesen. Letztere haben keine Koordinaten, stehen deshalb nicht in
+ * `places.json` und in keiner anderen Datei — sie wären ersatzlos verloren, ohne
+ * dass etwas rot geworden wäre. Genau deshalb steht das hier.
+ */
+const inhalt = await seite.evaluate(() => {
+  const bt = document.querySelector('.bandtext');
+  return {
+    tabellen: bt.querySelectorAll('table').length,
+    rahmen: bt.querySelectorAll('.bandtabelle').length,
+    nurImBuch: (bt.textContent.match(/ohne Nummer, nur hier im Buch/g) ?? []).length,
+    bilder: bt.querySelectorAll('img').length,
+  };
+});
+pruefe(inhalt.tabellen === 19, 'die 19 Probier-Tabellen sind noch da', String(inhalt.tabellen));
+pruefe(inhalt.rahmen === 19, 'und jede in ihrem Scrollrahmen', String(inhalt.rahmen));
+pruefe(
+  inhalt.nurImBuch === 5,
+  'die fünf „nur hier im Buch"-Blöcke sind noch da — sie stehen nirgends sonst',
+  String(inhalt.nurImBuch),
+);
+pruefe(inhalt.bilder === 9, 'und die neun Bilder', String(inhalt.bilder));
+
 const quer = await seite.evaluate(
   () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
 );
 pruefe(!quer, 'kein Querscrollen');
+
+/*
+ * Ein Ankersprung muss die Klappe öffnen.
+ *
+ * `paths.ts:kapitel('kyoto')` gibt `/Japan/#kyoto`, und seit dem Umbau sitzt der
+ * Anker an einem `<details>`. Ohne das Skript auf der Startseite landet man
+ * richtig und sieht **nichts** — eine zugeklappte Zeile — und hält den Link für
+ * kaputt. Das ist der einzige Grund für jenes Skript, also gehört es geprüft.
+ */
+console.log('\nAnkersprung in ein Kapitel:');
+await seite.goto(`${BASIS}/#kyoto`, { waitUntil: 'load' });
+await seite.waitForTimeout(800);
+const sprung = await seite.evaluate(() => {
+  const d = document.getElementById('kyoto');
+  const r = d?.querySelector('summary')?.getBoundingClientRect();
+  return { da: !!d, offen: !!d?.open, oben: r ? Math.round(r.top) : null };
+});
+pruefe(sprung.da, 'das Kapitel Kyoto trägt den Anker');
+pruefe(sprung.offen, 'und der Sprung klappt es auf');
+pruefe(
+  sprung.oben !== null && sprung.oben < 200,
+  'die Überschrift steht danach im Bild, nicht unter der Kopfzeile',
+  `${sprung.oben} px`,
+);
+
+/*
+ * Die Druckfassung bleibt durchlaufender Text.
+ *
+ * Ein zugeklapptes `<details>` druckt nicht: Wer `reiseband.html` aufs Papier
+ * gibt, bekäme elf Überschriften und sonst nichts. Deshalb greift die Umformung
+ * nur auf dem Weg zur Startseite, und deshalb wird hier nachgesehen.
+ */
+console.log('\nDie Druckfassung:');
+await seite.goto(`${BASIS}/reiseband.html`, { waitUntil: 'load' });
+await seite.waitForTimeout(500);
+const druckfassung = await seite.evaluate(() => ({
+  details: document.querySelectorAll('details').length,
+  kapitel: document.querySelectorAll('section.chapter[id]').length,
+  tabellen: document.querySelectorAll('table').length,
+}));
+pruefe(druckfassung.details === 0, 'sie enthält kein einziges <details>', String(druckfassung.details));
+pruefe(druckfassung.kapitel === 11, 'die elf Kapitel stehen als <section>', String(druckfassung.kapitel));
+pruefe(druckfassung.tabellen === 19, 'mit ihren 19 Tabellen', String(druckfassung.tabellen));
+await seite.goto(`${BASIS}/`, { waitUntil: 'load' });
+await seite.waitForTimeout(500);
 
 // Die Tabellen scrollen für sich, nicht die Seite.
 const tabellen = await seite.evaluate(() => {

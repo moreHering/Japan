@@ -77,6 +77,39 @@ const chapterOf: Record<string, string> = {
 
   <div class="bandtext" set:html={bandInhalt} />
 
+  <!--
+    Ein Ankersprung muss die Klappe öffnen.
+
+    Der Band ist seit dem Umbau ein Akkordeon, und die Anker sitzen an den
+    `<details>`. Ein Link wie `/Japan/#kyoto` aus `paths.ts:kapitel()` springt
+    sonst an eine **zugeklappte** Zeile: Man landet richtig und sieht nichts, und
+    hält den Link für kaputt. Das ist der einzige Grund für dieses Skript.
+
+    Zwei Fälle, beide nötig: beim Laden mit Anker (`hashchange` feuert dann
+    nicht) und bei jedem Sprung danach. `scrollIntoView` erst **nach** dem
+    Öffnen — vorher steht die Klappe noch an ihrer alten Höhe, und der Browser
+    scrollt an die falsche Stelle.
+  -->
+  <script is:inline>
+    (function () {
+      function aufklappen() {
+        var id = location.hash.slice(1);
+        if (!id) return;
+        var ziel = document.getElementById(id);
+        if (!ziel) return;
+        // Auch die Eltern öffnen: Ein Anker kann in einem Teilabschnitt liegen.
+        var k = ziel;
+        while (k) {
+          if (k.tagName === 'DETAILS') k.open = true;
+          k = k.parentElement;
+        }
+        ziel.scrollIntoView();
+      }
+      window.addEventListener('hashchange', aufklappen);
+      aufklappen();
+    })();
+  </script>
+
   <p class="banddruck">
     <!--
       Steht hinter dem Text, nicht davor: Eine Fußnote, die 80 px Vorlauf kostet,
@@ -223,8 +256,13 @@ const chapterOf: Record<string, string> = {
       overflow-wrap: break-word;
     }
     /* Die Anker sitzen an den Kapiteln. Ohne Abstand verschwindet die
-       Überschrift beim Sprung unter die feste Kopfzeile. */
-    .bandtext :global(section[id]) {
+       Überschrift beim Sprung unter die feste Kopfzeile.
+
+       `details[id]` und nicht mehr `section[id]`: Seit der Band ein Akkordeon
+       ist, trägt die Klappe den Anker. Der alte Selektor blieb gültiges CSS und
+       traf nichts — die Art Regel, die man erst bemerkt, wenn eine Überschrift
+       unter der Kopfzeile steckt. */
+    .bandtext :global(details[id]) {
       scroll-margin-top: 70px;
     }
     /* Der Scrollrahmen um jede Tabelle — sonst schiebt die breiteste die ganze

@@ -22,6 +22,13 @@ const KML = resolve(root, 'data/source/Japan-Karte-2026.kml');
 const HTML = resolve(root, 'data/source/Japan-Reisefuehrer-2026.html');
 const BOOK = resolve(root, 'data/source/buch-erlebnisse.json');
 const UNTERKUNFT = resolve(root, 'data/source/unterkunft.json');
+/**
+ * Die Stationsstammdaten. Bisher brauchte dieses Skript sie nicht; die
+ * Klappenköpfe des Reisebands nehmen daraus Nummer, Name, Kanji und Beiname —
+ * dieselben Angaben, die die Vorlage im Summary zeigt. Von Hand abgeschrieben
+ * stünden sie zweimal im Repo und wären nach der ersten Änderung uneinig.
+ */
+const STATIONEN = JSON.parse(readFileSync(resolve(root, 'src/data/stations.json'), 'utf8'));
 const OUT = resolve(root, 'src/data/places.json');
 
 /** Erwartungswerte, gegen die das Ergebnis geprüft wird. */
@@ -678,8 +685,6 @@ text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
   // schlimmer als keine.
   // Der Text selbst, für die Startseite. Der Band liegt dort nicht mehr hinter
   // einem Link, sondern wird gelesen.
-  const lese = schreibeLesefassung(html);
-
   const kapitel = leseKapitel(html);
   if (kapitel.length !== CHAPTER_IDS.length) {
     fail(`${kapitel.length} Kapitelköpfe gefunden statt ${CHAPTER_IDS.length}`);
@@ -690,8 +695,11 @@ text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
   if (ohneTitel.length) {
     fail(`Kapitel ohne Titel oder Rubrik: ${ohneTitel.map((k) => k.id).join(', ')}`);
   }
-  const stationen = kapitel.filter((k) => STATION_CHAPTERS.includes(k.id));
-  const ohneJp = stationen.filter((k) => !k.jp);
+  // Die sechs **Kapitel**, die eine Station sind — nicht zu verwechseln mit
+  // `STATIONEN` aus `stations.json`. Beide hießen einen Moment lang `stationen`,
+  // und `st.kanji` war dann still `undefined`.
+  const stationsKapitel = kapitel.filter((k) => STATION_CHAPTERS.includes(k.id));
+  const ohneJp = stationsKapitel.filter((k) => !k.jp);
   if (ohneJp.length) {
     fail(`Stationskapitel ohne japanischen Namen: ${ohneJp.map((k) => k.id).join(', ')}`);
   }
@@ -701,7 +709,331 @@ text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
     'utf8',
   );
 
+  // Erst **nach** `leseKapitel()`: Die Klappenköpfe brauchen Rubrik, Titel und
+  // Kanji, und die stehen dort. Vorher aufgerufen wäre `kapitel` noch leer — die
+  // Reihenfolge dieser zwei Zeilen ist also eine Abhängigkeit und keine Kosmetik.
+  const lese = schreibeLesefassung(html, kapitel, STATIONEN);
+
   return { added, ...stats, kapitel: kapitel.length, lese };
+}
+
+/**
+ * Das Reiseband als Akkordeon — **nur für die Startseite**.
+ *
+ * Der Band ist rund 14.650 Wörter. Auf der Startseite lag er als durchlaufender
+ * Volltext, und auf einem 390-px-Schirm ist das eine Schriftrolle: Man scrollt
+ * durch Osaka, um nach Hakone zu kommen. Die Vorlage für diese Fassung kam vom
+ * Nutzer (`Japan-Reiseband-mobil.html`) — alles in aufklappbaren `<details>`, je
+ * Station eine Ebene mit Hintergrund, Guide und Essen darin.
+ *
+ * **Erzeugt und nicht kopiert, und das ist der Punkt.** Die gesendete Vorlage
+ * hätte man einsetzen können; gemessen fehlen darin aber 19 Probier-Tabellen, die
+ * fünf Blöcke „Weitere Optionen — ohne Nummer, nur hier im Buch" (die haben keine
+ * Koordinaten, stehen deshalb in keiner anderen Datei und wären ersatzlos weg),
+ * fünf Kapitelanker und rund 715 Wörter. Übernommen ist deshalb die **Form**, der
+ * **Inhalt** kommt weiter aus `data/source/`. Eine Korrektur dort landet damit
+ * automatisch im Band, wie bisher.
+ *
+ * `public/reiseband.html` bleibt unangetastet durchlaufender Text: Ein
+ * zugeklapptes `<details>` druckt nicht, und diese Datei ist ausdrücklich das
+ * geschlossene Dokument zum Ausdrucken. Deshalb greift die Umformung hier, auf
+ * dem Weg zur Startseite, und nicht in `writeGuide()`.
+ */
+
+/**
+ * Die Marken der fünf Kapitel ohne Station, so wie in der gesendeten Vorlage.
+ *
+ * Die sechs Stationskapitel nehmen ihr Kanji aus `stations.json` — dort steht es
+ * schon, und abgeschrieben wäre es nach der ersten Änderung uneinig. (Für Kyoto
+ * hält die Vorlage 雅 „Eleganz", die Projektdaten 形 „Form". Gilt `stations.json`:
+ * Der Beiname lautet „Die Schule der Form".)
+ */
+const KAPITEL_MARKE = {
+  einladung: '✉️',
+  prolog: '🕰️',
+  route: '🗺️',
+  ankunft: '🛬',
+  epilog: '🎁',
+};
+
+/**
+ * Teilt ein Stationskapitel an den Marken in Klapp-Abschnitte.
+ *
+ * Die Marken sind **gemessen und nicht geraten**: Alle sechs Stationskapitel der
+ * Quelle führen genau je einen `<h3>` „Orte auf der Karte", „Der Guide" und
+ * „🍜 Essens-Fokus". Fehlt eine, bricht der Lauf ab — ein stillschweigend falsch
+ * geschnittenes Kapitel wäre schlimmer als ein abgebrochener Build.
+ *
+ * Was nach dem Essensteil noch kommt, wird ein **eigener** Abschnitt und wandert
+ * nicht nach vorn. Betroffen ist nur Osaka (der Dorogawa-Ausflug samt Gomagyō und
+ * Suigyō); die gesendete Vorlage zieht ihn vor „Der Guide", aber dann wäre das
+ * Skript keine reine Umformung mehr, sondern müsste die Quelle umsortieren — und
+ * jede solche Sonderregel tut beim nächsten Textumbau still das Falsche.
+ */
+/**
+ * Findet zu einer Position die Grenze des umschließenden **direkten Kindes**.
+ *
+ * Das ist die Lehre aus einem Fehler, den ich gebaut und im Browser gefunden
+ * habe: Die erste Fassung schnitt den Kapiteltext an den Positionen der `<h3>`.
+ * Das geht gut, solange die Überschrift ein direktes Kind ist — „Der Guide" und
+ * „Essens-Fokus" sind es. Osakas „Tagesausflug" steckt aber eine Ebene tiefer, in
+ * `<div class="daytrip">`. Ein Schnitt dort zerreißt das `div`: Der vordere Teil
+ * bekam ein offenes, der hintere ein überzähliges `</div>`.
+ *
+ * Die Gesamtbilanz der Datei blieb dabei **ausgeglichen** — 374 `<div>` auf 374
+ * `</div>` —, weshalb jede Zählprüfung schwieg. Sichtbar wurde es erst im
+ * Browser: Der HTML-Parser schloss `.bandtext` vorzeitig, und ab Kyoto standen
+ * sechs von elf Kapiteln **außerhalb** des Behälters, an den das Bandstylesheet
+ * gebunden ist. Gefunden durch Vergleich mit dem Stand aus `git show HEAD:` —
+ * vorher 11 von 11 im Behälter, danach 5.
+ *
+ * Deshalb wird nie an einer beliebigen Stelle geschnitten, sondern nur dort, wo
+ * ein direktes Kind beginnt.
+ */
+function kindGrenze(innen, pos) {
+  let tiefe = 0;
+  let kindStart = 0;
+  for (const m of innen.matchAll(/<div\b[^>]*>|<\/div>/g)) {
+    if (m.index > pos) break;
+    if (m[0].startsWith('<div')) {
+      if (tiefe === 0) kindStart = m.index;
+      tiefe++;
+    } else {
+      tiefe--;
+      if (tiefe === 0) kindStart = m.index + m[0].length;
+    }
+  }
+  // Auf oberster Ebene ist die Position selbst die Grenze; sonst der Anfang des
+  // Kindes, in dem sie steckt.
+  return tiefe === 0 ? pos : kindStart;
+}
+
+/** Findet zu `<div class="wrap">` das passende `</div>`, per Tiefenzählung. */
+function wrapGrenzen(inhalt, slug) {
+  const auf = inhalt.search(/<div class="wrap"[^>]*>/);
+  if (auf < 0) fail(`Kapitel "${slug}": kein <div class="wrap"> — Reiseband umgebaut?`);
+  const tagEnde = inhalt.indexOf('>', auf) + 1;
+  let tiefe = 1;
+  for (const m of inhalt.slice(tagEnde).matchAll(/<div\b[^>]*>|<\/div>/g)) {
+    tiefe += m[0].startsWith('<div') ? 1 : -1;
+    if (tiefe === 0) return { auf, innenVon: tagEnde, innenBis: tagEnde + m.index };
+  }
+  fail(`Kapitel "${slug}": <div class="wrap"> wird nicht geschlossen`);
+}
+
+/**
+ * Teilt ein Stationskapitel in Klapp-Abschnitte.
+ *
+ * Gearbeitet wird **innerhalb** von `div.wrap`, nicht auf dem rohen Kapitel: Das
+ * `wrap` umspannt den ganzen Text, und die Klappen müssen darin liegen, nicht
+ * darüber — sonst öffnet es im ersten Abschnitt und schließt im letzten.
+ *
+ * Zwei Blöcke bleiben **offen** und wandern in keine Klappe:
+ *
+ * - **Der Verweis in den Planer** (`a.app-orte`). Er ist das, was man beim Öffnen
+ *   einer Station zuerst braucht: „38 Orte in Osaka — ansehen". Er steht an der
+ *   Stelle, an der in der Quelle die Überschrift „Orte auf der Karte" stand;
+ *   `writeGuide()` hat sie ersetzt. Das war die erste Falle — der ursprüngliche
+ *   Entwurf schnitt an jener Überschrift und brach ab, weil sie zu diesem
+ *   Zeitpunkt längst entfernt ist. Die Marke gibt es nur in der Quelle.
+ * - **Die Übergangszeile** (`div.transition`), die zum nächsten Kapitel führt
+ *   („Jetzt fahrt ihr eine halbe Stunde nach Norden …"). In einer Klappe namens
+ *   „Tagesausflug Dorogawa" stünde sie sinnwidrig.
+ */
+function teileKapitel(inhalt, slug, name) {
+  const g = wrapGrenzen(inhalt, slug);
+  const vorher = inhalt.slice(0, g.auf);
+  const wrapTag = inhalt.slice(g.auf, g.innenVon);
+  let innen = inhalt.slice(g.innenVon, g.innenBis);
+  // **Nach** dem schließenden `</div>` weiterschneiden, nicht davor: Das
+  // schließende Tag setzt diese Funktion unten selbst. Der erste Versuch nahm es
+  // hier mit und setzte es dort noch einmal — ein `</div>` zu viel, genau der
+  // Fehler, den diese Umschreibung beheben soll.
+  const nachher = inhalt.slice(g.innenBis + '</div>'.length);
+
+  const herausnehmen = (regex, wasFehlt) => {
+    let gefunden = '';
+    innen = innen.replace(regex, (m) => {
+      gefunden = m;
+      return '';
+    });
+    if (!gefunden) fail(`Kapitel "${slug}": ${wasFehlt}`);
+    return gefunden;
+  };
+  const verweis = herausnehmen(/<a class="app-orte"[\s\S]*?<\/a>/, 'kein a.app-orte — writeGuide() geändert?');
+  // Die Übergangszeile hat nur das letzte Kapitel nicht.
+  let uebergang = '';
+  innen = innen.replace(/<div class="transition">[\s\S]*?<\/div><\/div>/, (m) => {
+    uebergang = m;
+    return '';
+  });
+
+  const h3 = [...innen.matchAll(/<h3\b[^>]*>([\s\S]*?)<\/h3>/g)];
+  const text = (i) => stripTags(h3[i][1]).replace(/\s+/g, ' ').trim();
+  const finde = (nadel) => h3.findIndex((_, i) => text(i).includes(nadel));
+
+  const iGuide = finde('Der Guide');
+  const iEssen = finde('Essens-Fokus');
+  if (iGuide < 0 || iEssen < 0) {
+    fail(
+      `Kapitel "${slug}": Marke fehlt (Guide ${iGuide}, Essen ${iEssen}) — ` +
+        'Überschrift im Reiseband umbenannt? Dann hier nachziehen.',
+    );
+  }
+  if (iGuide >= iEssen) {
+    fail(`Kapitel "${slug}": Marken in unerwarteter Reihenfolge (${iGuide} vor ${iEssen})`);
+  }
+
+  // Geschnitten wird an der Grenze des Kindes, in dem die Überschrift steckt.
+  const schnitt = (i) => kindGrenze(innen, h3[i].index);
+  const teile = [
+    { von: 0, bis: schnitt(iGuide), ico: '📖', titel: 'Hintergrund & Geschichte' },
+    { von: schnitt(iGuide), bis: schnitt(iEssen), ico: '🧭', titel: 'Klassiker, Alternativen & Tipps' },
+    { von: schnitt(iEssen), bis: innen.length, ico: '🍜', titel: `Essen in ${name}` },
+  ];
+
+  // Was nach dem Essensteil noch kommt, bekommt einen eigenen Abschnitt und
+  // wandert nicht nach vorn. Betroffen ist nur Osaka (Dorogawa samt Gomagyō und
+  // Suigyō); die gesendete Vorlage zieht ihn vor „Der Guide", aber dann wäre
+  // dieses Skript keine reine Umformung mehr, sondern müsste die Quelle
+  // umsortieren — und jede solche Sonderregel tut beim nächsten Textumbau still
+  // das Falsche.
+  const nachEssen = h3.findIndex((_, i) => i > iEssen && schnitt(i) > schnitt(iEssen));
+  if (nachEssen > iEssen) {
+    teile[2].bis = schnitt(nachEssen);
+    teile.push({
+      von: schnitt(nachEssen),
+      bis: innen.length,
+      ico: '⛰️',
+      // „Tagesausflug — Dorogawa: Feuer, Wasser, Stille 洞川 · 2,5–3 h" wird
+      // „Tagesausflug — Dorogawa". Eine frühere Fassung schnitt auch an `—` und
+      // ließ nur „Tagesausflug" übrig: ein Name, der nicht sagt, wohin es geht.
+      titel: text(nachEssen).split('·')[0].split(':')[0].trim() || 'Ausflug',
+    });
+  }
+
+  const klappen = teile
+    .map(({ von, bis, ico, titel }) => {
+      const stueck = innen.slice(von, bis).trim();
+      if (!stueck) return '';
+      return `<details class="teil"><summary><span class="ico">${ico}</span>${titel}</summary><div class="dbody">${stueck}</div></details>`;
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  return `${vorher}${wrapTag}${verweis}\n${klappen}\n${uebergang}</div>${nachher}`;
+}
+
+/**
+ * Wandelt die elf Kapitel in aufklappbare Abschnitte.
+ *
+ * Der Anker bleibt am `<details>`, damit `paths.ts:kapitel('kyoto')` weiter
+ * trifft. Das Aufklappen beim Ankersprung übernimmt ein Skript auf der
+ * Startseite — ohne das springt der Browser an eine zugeklappte Überschrift, und
+ * man hält den Link für kaputt.
+ *
+ * Das **erste** Kapitel steht offen. Eine Startseite, die nur aus elf
+ * geschlossenen Zeilen besteht, sieht nach einem Ladefehler aus.
+ */
+function akkordeon(inhalt, kapitelDaten, stationen) {
+  let n = 0;
+  const raus = inhalt.replace(
+    /<section class="(chapter[^"]*)" id="([^"]+)">([\s\S]*?)<\/section>/g,
+    (_treffer, _cls, id, inneres) => {
+      n++;
+      const kap = kapitelDaten.find((k) => k.id === id);
+      if (!kap) fail(`Kapitel "${id}" steht nicht in chapters.json`);
+      const st = stationen.find((s) => s.slug === id);
+
+      // Der Kopf der Klappe. Bei einer Station wie in der Vorlage: Kanji,
+      // „01 · Osaka", Beiname. Sonst Rubrik und Titel — die fünf Kapitel ohne
+      // Station haben kein Kanji und keinen Beinamen.
+      /*
+       * Fett das **Etikett**, mager der Untertitel — bei einer Station also
+       * „01 · Osaka" und „Die Stadt, die isst".
+       *
+       * Bei den fünf Kapiteln ohne Station war es im ersten Entwurf verdreht:
+       * „Einladung, kein Programm — Bevor es losgeht". Fett stand der Satz, mager
+       * das Etikett, und man sucht in einer Klappenliste nach Etiketten. Jetzt
+       * „Bevor es losgeht — Einladung, kein Programm".
+       */
+      const kopf = st
+        ? `<span class="ico">${st.kanji}</span><b>${st.no} · ${st.name}</b> <span class="sub">${st.claim}</span>`
+        : `<span class="ico">${KAPITEL_MARKE[id] ?? '◆'}</span><b>${kap.rubrik}</b> <span class="sub">${kap.titel}</span>`;
+
+      const koerper = st ? teileKapitel(inneres, id, st.name) : inneres.trim();
+      const offen = n === 1 ? ' open' : '';
+      return `<details class="kap" id="${id}"${offen}><summary>${kopf}</summary><div class="dbody">${koerper}</div></details>`;
+    },
+  );
+
+  if (n !== kapitelDaten.length) {
+    fail(`${n} Kapitel in Klappen verwandelt, erwartet ${kapitelDaten.length}`);
+  }
+
+  /*
+   * Jede Klappe muss für sich paarig sein.
+   *
+   * Das ist die Wache gegen den Fehler, der diese Umformung zweimal gekostet hat:
+   * Ein Schnitt mitten durch ein `<div>` lässt die Bilanz der **Datei**
+   * ausgeglichen (374 auf 374) und ist damit für jede Zählprüfung unsichtbar. Erst
+   * der HTML-Parser im Browser zieht die Folge: Er schließt den Behälter
+   * vorzeitig, und ab Kyoto standen sechs von elf Kapiteln außerhalb von
+   * `.bandtext` — also außerhalb dessen, woran das Bandstylesheet gebunden ist.
+   *
+   * Je Kapitel gezählt fällt genau das auf, denn ein Schnitt durch ein Element
+   * hinterlässt im einen Abschnitt ein offenes und im anderen ein überzähliges
+   * Tag. Geprüft wird hier und nicht nur im Browsertest, weil `npm run data`
+   * derjenige Lauf ist, der den Schaden anrichtet.
+   */
+  /*
+   * **Jede** Klappe muss für sich paarig sein — die Kapitel und die Teile darin.
+   *
+   * Erst auf Kapitelebene geprüft: Das war zu grob und die Gegenprobe hat es
+   * bewiesen. Ein Schnitt mitten durch ein `<div>` unbalanciert die zwei
+   * *Teilabschnitte*, aber beide liegen im selben Kapitel — die Kapitelsumme
+   * stimmte weiter, die Wache schwieg, und das Loch ging durch.
+   *
+   * Auf Teilebene fällt es auf: Der vordere Abschnitt behält ein offenes Tag, der
+   * hintere ein überzähliges. Die Bilanz der **Datei** bleibt dabei ausgeglichen
+   * (374 auf 374), weshalb keine einfache Zählung das je gesehen hätte. Sichtbar
+   * wurde der Schaden nur im Browser: Der HTML-Parser schloss `.bandtext`
+   * vorzeitig, und ab Kyoto standen sechs von elf Kapiteln außerhalb dessen, woran
+   * das Bandstylesheet gebunden ist.
+   */
+  for (const auf of [...raus.matchAll(/<details class="(kap|teil)"(?: id="([^"]+)")?[^>]*>/g)]) {
+    const wer = auf[2] ? `Kapitel "${auf[2]}"` : `ein Teilabschnitt`;
+    // Das passende `</details>` per Tiefenzählung, nicht per Regex bis zum
+    // nächsten: Beim letzten Kapitel liefe so ein Ausdruck bis zum Dateiende und
+    // nähme das Markup mit, das nach den Kapiteln steht. Daran hat sich diese
+    // Wache im ersten Versuch selbst angeschlagen.
+    const von = auf.index + auf[0].length;
+    let tiefe = 1;
+    let bis = -1;
+    for (const m of raus.slice(von).matchAll(/<details\b[^>]*>|<\/details>/g)) {
+      tiefe += m[0].startsWith('<details') ? 1 : -1;
+      if (tiefe === 0) {
+        bis = von + m.index;
+        break;
+      }
+    }
+    if (bis < 0) fail(`${wer}: <details> wird nicht geschlossen`);
+    const block = raus.slice(von, bis);
+
+    for (const tag of ['div', 'details', 'table', 'p', 'span', 'ul']) {
+      const anzahl = (re) => (block.match(re) ?? []).length;
+      const offen = anzahl(new RegExp(`<${tag}\\b`, 'g'));
+      const zu = anzahl(new RegExp(`</${tag}>`, 'g'));
+      if (offen !== zu) {
+        fail(
+          `${wer}: ${offen} <${tag}> gegen ${zu} </${tag}> — ein Schnitt läuft mitten ` +
+            'durch ein Element. Siehe kindGrenze(): geschnitten wird nur an Kindgrenzen.',
+        );
+      }
+    }
+  }
+
+  return raus;
 }
 
 /** Der Container, an den das Stylesheet des Bandes gebunden wird. */
@@ -720,11 +1052,78 @@ const BAND_CONTAINER = '.bandtext';
  * 2. **Der Rückweg-Knopf fällt raus.** „← Zum Reiseplaner" ist auf der
  *    Startseite des Planers Unsinn.
  */
-function schreibeLesefassung(html) {
+/**
+ * Das Stylesheet der Klappen — aus der gesendeten Vorlage übernommen, nicht
+ * erfunden. Es ist ihre Gestaltung.
+ *
+ * **Umgeschrieben sind nur die Token-Namen.** Die Vorlage führt in ihrer mobilen
+ * Fassung einen zweiten Satz Namen (`--karte`, `--linie`, `--linie2`, `--ai60`,
+ * `--shu2`, `--gold`) mit denselben Werten wie `--card`, `--line`, `--line-soft`,
+ * `--ai-60`, `--shu-deep`, `--kin-soft`. Zwei Namen für eine Farbe ist die Art
+ * Doppelung, an der Stylesheets verrotten: Beim nächsten Farbwechsel ändert
+ * jemand einen und nicht den anderen.
+ *
+ * Ergänzt gegenüber der Vorlage ist nur, was aus unserem Inhalt kommt und dort
+ * nicht vorkam: `.bandtabelle` (der Scrollrahmen um die 19 Probier-Tabellen) und
+ * `a.app-orte` steht offen im Kapitelkörper statt in einer Klappe.
+ *
+ * Wird zusammen mit dem übrigen Bandstylesheet durch `scope()` an `.bandtext`
+ * gebunden — die Prüfung unten bricht bei jeder ungebundenen Regel ab.
+ */
+const KLAPPEN_CSS = `
+details.kap, details.teil {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: 10px 0;
+  overflow: hidden;
+}
+details.kap[open], details.teil[open] { background: #FBF8F1; }
+details.kap > summary, details.teil > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 15px;
+  font-family: var(--util);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ai);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  /* 48 px, damit der Daumen trifft — es ist die Hauptbedienung dieser Seite. */
+  min-height: 48px;
+}
+details.kap > summary::-webkit-details-marker,
+details.teil > summary::-webkit-details-marker { display: none; }
+details.kap > summary::after, details.teil > summary::after {
+  content: "+";
+  margin-left: auto;
+  font-size: 20px;
+  color: var(--shu);
+  font-weight: 400;
+  line-height: 1;
+}
+details.kap[open] > summary::after, details.teil[open] > summary::after { content: "–"; }
+details.kap > summary .ico, details.teil > summary .ico { font-size: 15px; }
+/* Das Kanji der Station etwas größer — es ist die Marke, an der man das
+   Kapitel wiedererkennt, nicht bloß ein Aufzählungszeichen. */
+details.kap > summary .ico { font-family: var(--jp); font-size: 18px; color: var(--shu); }
+details.kap > summary .sub, details.teil > summary .sub {
+  color: var(--ai-60);
+  font-weight: 400;
+}
+.dbody { padding: 0 15px 14px; }
+.dbody > :first-child { margin-top: 0; }
+/* Die innere Ebene steht eingerückt, damit man sieht, dass sie zur Station
+   gehört und nicht zum nächsten Kapitel. */
+details.kap > .dbody > details.teil { margin: 10px 0; }
+`;
+
+function schreibeLesefassung(html, kapitelDaten, stationen) {
   const roh = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
   if (!roh.trim()) fail('Kein Stylesheet im Reiseband gefunden');
 
-  const stil = scope(roh, BAND_CONTAINER);
+  const stil = scope(`${roh}\n${KLAPPEN_CSS}`, BAND_CONTAINER);
   // Eine ungebundene Regel würde in die App durchschlagen. Lieber hier
   // abbrechen als im Browser suchen.
   const offen = [...stil.matchAll(/(?:^|\n)([^@\s][^{}\n]*)\{/g)]
@@ -767,6 +1166,10 @@ function schreibeLesefassung(html) {
   if (rahmen !== tabellen) {
     fail(`${rahmen} Tabellenrahmen für ${tabellen} Tabellen — Auszeichnung unerwartet`);
   }
+
+  // Zuletzt die Klappen. **Nach** den Tabellenrahmen, weil die Rahmen sonst in
+  // den Abschnitten gesucht würden, die es zu diesem Zeitpunkt noch nicht gibt.
+  inhalt = akkordeon(inhalt, kapitelDaten, stationen);
 
   mkdirSync(resolve(root, 'src/data'), { recursive: true });
   writeFileSync(resolve(root, 'src/data/reiseband-inhalt.html'), `${inhalt}\n`, 'utf8');

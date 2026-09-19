@@ -385,3 +385,44 @@ text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
 @media(max-width:600px){.bandtext .app-orte{flex-wrap:wrap;gap:10px;padding:14px 16px}
 .bandtext .app-orte .ao-go{width:100%}}
 @media print{.bandtext .app-back{display:none}}
+.bandtext details.kap, .bandtext details.teil{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: 10px 0;
+  overflow: hidden;
+}
+.bandtext details.kap[open], .bandtext details.teil[open]{ background: #FBF8F1; }
+.bandtext details.kap > summary, .bandtext details.teil > summary{
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 15px;
+  font-family: var(--util);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ai);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  /* 48 px, damit der Daumen trifft — es ist die Hauptbedienung dieser Seite. */
+  min-height: 48px;
+}
+.bandtext details.kap > summary::-webkit-details-marker, .bandtext details.teil > summary::-webkit-details-marker{ display: none; }
+.bandtext details.kap > summary::after, .bandtext details.teil > summary::after{
+  content: "+";
+  margin-left: auto;
+  font-size: 20px;
+  color: var(--shu);
+  font-weight: 400;
+  line-height: 1;
+}
+.bandtext details.kap[open] > summary::after, .bandtext details.teil[open] > summary::after{ content: "–"; }
+.bandtext details.kap > summary .ico, .bandtext details.teil > summary .ico{ font-size: 15px; }
+.bandtext details.kap > summary .ico{ font-family: var(--jp); font-size: 18px; color: var(--shu); }
+.bandtext details.kap > summary .sub, .bandtext details.teil > summary .sub{
+  color: var(--ai-60);
+  font-weight: 400;
+}
+.bandtext .dbody{ padding: 0 15px 14px; }
+.bandtext .dbody > :first-child{ margin-top: 0; }
+.bandtext details.kap > .dbody > details.teil{ margin: 10px 0; }

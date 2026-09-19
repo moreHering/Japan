@@ -19,11 +19,25 @@
 
 name: Wache
 
+# **Kein `on: push`**, und das ist beim ersten Lauf gelernt.
+#
+# Der erste Entwurf hatte eines. `deploy.yml` läuft auf denselben Pushes und ruft
+# diesen Workflow über `workflow_call` — er liefe also **zweimal** je Push, mit
+# allem doppelt: Chromium, Build, 327 Browserprüfungen, fünf Minuten Runnerzeit.
+#
+# Schlimmer als die Verschwendung ist, dass die `concurrency`-Gruppe unten es
+# verdeckt hat: Beim ersten Push wurde der eigenständige Lauf abgebrochen, weil der
+# Lauf aus dem Deploy in dieselbe Gruppe fiel. Welcher von beiden überlebt, hängt
+# damit an der Startreihenfolge — und käme der eigenständige als zweiter, bräche er
+# das Tor des Deploys **mitten im Lauf** ab. `build` sähe ein abgebrochenes
+# `needs: wache` und scheiterte, ohne dass an der Anwendung etwas falsch wäre.
+# Genau die Sorte Fehlschlag, die man eine Stunde lang im Code sucht.
+#
+# Auf einem Pull Request läuft `deploy.yml` nicht, dort wird also weiter selbst
+# ausgelöst.
 on:
-  push:
-    branches: [main, 'claude/**']
   pull_request:
-  # Damit `deploy.yml` diesen Lauf als Bedingung davorschalten kann.
+  # Damit `deploy.yml` diesen Lauf als Tor davorschalten kann.
   workflow_call:
   # Damit man ihn ohne neuen Commit wiederholen kann.
   workflow_dispatch:
@@ -31,8 +45,12 @@ on:
 permissions:
   contents: read
 
+# Nur für die Pull-Request-Läufe von Belang: Ein neuer Push auf denselben Zweig
+# macht den vorigen Lauf hinfällig. Die Läufe aus `deploy.yml` tragen eine eigene
+# Gruppe — `github.workflow` ist dort der rufende Workflow —, deshalb kann diese
+# Gruppe das Tor nicht mehr abwürgen.
 concurrency:
-  group: wache-${{ github.ref }}
+  group: wache-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -72,6 +90,24 @@ jobs:
 
       - name: Ortsdaten auf Plausibilität prüfen
         run: npm run wache:daten
+
+      - name: Astro-Typen erzeugen
+        # Ohne diesen Schritt scheitert die Typprüfung auf einem frischen Checkout
+        # mit drei Mal TS2339 „Property 'env' does not exist on type 'ImportMeta'"
+        # (`src/lib/paths.ts:10`, `src/lib/supabase.ts:20-21`).
+        #
+        # Der Grund: `import.meta.env` ist eine Zutat von Astro und Vite, und die
+        # Typen dafür stehen in `.astro/types.d.ts` — einer **erzeugten** Datei, die
+        # `.gitignore:3` ausschließt. Auf einem Entwicklungsrechner ist sie da, weil
+        # dort schon einmal `astro dev` oder `astro build` gelaufen ist. Auf einem
+        # Runner gibt es sie beim ersten `tsc` nicht.
+        #
+        # Das war im ersten Lauf der erste rote Schritt — und es ist ein Fehler in
+        # der Erprobung gewesen, nicht bloß im Workflow: Der „frische Klon", in dem
+        # die Schrittfolge vorher von Hand durchlief, war eine `tar`-Kopie des
+        # Arbeitsverzeichnisses und hat `.astro/` mitgenommen. Ein frischer Stand
+        # ist, was **git** hat, nicht was im Verzeichnis liegt.
+        run: npx astro sync
 
       - name: Typen prüfen
         # `|| true` steht hier **nicht**. Wenn die Typen nicht stimmen, ist Schluss.

@@ -209,7 +209,8 @@ kein Deploy.** Geprüft wird in dieser Reihenfolge — das Billige zuerst, damit
 kaputte Koordinate nach einer halben Minute auffällt und nicht nach sechs:
 
 1. `npm run wache:daten` — die Ortsdaten, ohne Netz und ohne Browser.
-2. `npx tsc --noEmit`, dann `npm test` (189 Prüfungen), dann `npm run build`.
+2. `npx astro sync` (erzeugt die Typen für `import.meta.env`), `npx tsc --noEmit`,
+   `npm test` (189 Prüfungen), `npm run build`.
 3. Chromium (zwischengespeichert), Dev-Server, und die zehn Browsersuiten mit
    zusammen 327 Prüfungen — jede als eigener Schritt, damit ein Lauf alle
    Ergebnisse zeigt statt nur des ersten Fehlers.
@@ -219,10 +220,11 @@ harmlose Textänderung. Wer trotzdem veröffentlichen muss, startet `deploy.yml`
 über `workflow_dispatch` von einem Stand, der grün war — nicht indem er das
 `needs` entfernt.
 
-### Vier Dinge, an denen es zuerst gescheitert ist
+### Sechs Dinge, an denen es zuerst gescheitert ist
 
-Alle vier beim Nachfahren der Schrittfolge von Hand gefunden, nicht im CI. Das war
-der Zweck des Nachfahrens.
+Vier davon beim Nachfahren der Schrittfolge von Hand gefunden — das war der Zweck
+des Nachfahrens. Die letzten zwei erst im ersten echten Lauf, und beide zeigen eine
+Grenze der Erprobung, die benannt gehört.
 
 - **`npx tsc --noEmit` war nie sauber.** `test/setup.ts` deklarierte `const
   localStorage` auf oberster Ebene; da die Datei keinen `import` und kein `export`
@@ -252,6 +254,33 @@ der Zweck des Nachfahrens.
   gestartet, wenn der Dev-Server gar nicht hochgekommen ist — zwanzig
   Verbindungsfehler, die die eine wahre Ursache verdecken. Jetzt hängen sie an
   `steps.devserver.outcome == 'success'`.
+- **Ein `on: push` in `wache.yml` war einer zu viel** — gelernt am ersten echten
+  Lauf. `deploy.yml` läuft auf denselben Pushes und ruft den Wächter über
+  `workflow_call`; er lief also zweimal, mit allem doppelt. Verdeckt hat es die
+  `concurrency`-Gruppe, indem sie den einen Lauf abbrach — und damit wäre es
+  gefährlich geworden: Startet der eigenständige Lauf als zweiter, würgt er das Tor
+  des Deploys mitten im Lauf ab, `build` sieht ein abgebrochenes `needs` und
+  scheitert, ohne dass an der Anwendung etwas falsch ist. Der Auslöser ist weg und
+  die Gruppe trägt jetzt `github.workflow` im Namen.
+- **`npx astro sync` fehlte** — und der eigentliche Fehler steckte in meiner
+  Erprobung. Auf einem frischen Checkout scheitert `tsc` drei Mal mit TS2339
+  „Property 'env' does not exist on type 'ImportMeta'": `import.meta.env` ist eine
+  Zutat von Astro und Vite, und die Typen dafür stehen in `.astro/types.d.ts` — einer
+  **erzeugten** Datei, die `.gitignore` ausschließt. Auf einem Entwicklungsrechner ist
+  sie da, weil dort schon `astro dev` gelaufen ist.
+
+  Gefunden hat das nicht mein „frischer Klon", sondern der erste CI-Lauf: Der Klon war
+  eine `tar`-Kopie des Arbeitsverzeichnisses und hat `.astro/` mitgenommen. **Ein
+  frischer Stand ist, was git hat, nicht was im Verzeichnis liegt.** Die Erprobung
+  läuft jetzt über `git ls-files -z | tar --null -T - -cf -`, und damit war der Fehler
+  auf Anhieb reproduzierbar.
+
+### Dass das Tor hält, ist beobachtet und nicht behauptet
+
+Ein absichtlich rotes Push war dafür eingeplant und dann nicht nötig: Im **ersten**
+Lauf ist „Typen prüfen" rot geworden (der `astro sync`-Fehler oben), und die Jobs
+danach stehen im Protokoll als `skipped` — `build` übersprungen, `deploy`
+übersprungen, nichts veröffentlicht. Rot blockiert den Deploy, gesehen am Lauf 33.
 
 Nebenbei gemessen: `astro dev` läuft in Astro 7 als Hintergrunddienst, kehrt von
 selbst zurück und überlebt die Schrittgrenze — ein `&` und eine PID-Datei wären

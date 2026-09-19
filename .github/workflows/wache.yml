@@ -154,30 +154,54 @@ jobs:
         # ist auf einem ausgelasteten Runner zu kurz und auf einem leeren
         # Zeitverschwendung.
         #
-        # Kein `&` und keine PID-Datei, und das ist nachgemessen: Astro 7 startet
-        # den Dev-Server als **Hintergrunddienst** und kehrt von selbst zurück
-        # (`astro dev status` nennt ihn „background"). Er überlebt damit die
-        # Schrittgrenze, was hier geprüft ist — ein Aufruf in einer neuen Shell
-        # erreicht ihn. Ein `&` hätte einen Vordergrundprozess vermutet, den es
-        # nicht gibt, und `echo $!` hätte die PID der Hülle gemeldet statt die des
-        # Dienstes: eine Zahl, die aussieht wie eine Auskunft und keine ist.
+        # **Mit `&`, und das ist eine Korrektur.**
+        #
+        # Der erste Entwurf hatte eines, der zweite nicht. Grund für das Entfernen
+        # war eine Messung: In der Entwicklungsumgebung startet Astro 7 den
+        # Dev-Server als Hintergrunddienst (`astro dev status` nennt ihn
+        # „background"), kehrt nach vier Sekunden mit Exit 0 zurück, und der Dienst
+        # überlebt die Schrittgrenze. Ein `&` wäre dort überflüssig gewesen.
+        #
+        # Auf dem Runner hängt derselbe Aufruf. Woran, weiß ich nicht: `CI=true`
+        # allein erklärt es nicht — damit daemonisiert er hier weiterhin —, und das
+        # Protokoll eines laufenden Schrittes gibt GitHub nicht her. Die Ursache ist
+        # also **nicht** geklärt, und das ist der Punkt: Die Form mit `&` ist unter
+        # **beiden** Verhaltensweisen richtig. Daemonisiert er, beendet sich die
+        # Hülle sofort und die Bereitschaftsprüfung findet den Dienst; bleibt er im
+        # Vordergrund, hält der Hintergrundprozess ihn am Leben. Eine Messung aus
+        # einer Umgebung gegen eine andere zu setzen war der Fehler — Robustheit
+        # gewinnt gegen die schönere Erklärung.
+        #
+        # Keine PID-Datei: `$!` wäre bei Daemonisierung die PID der Hülle und damit
+        # eine Zahl, die aussieht wie eine Auskunft und keine ist. Zum Anhalten gibt
+        # es `astro dev stop`.
         #
         # Nebenbei: Läuft schon ein Dev-Server, startet `astro dev` **keinen
         # zweiten** — auch nicht auf einem anderen Port. Auf einem frischen Runner
-        # kein Thema; beim Nachfahren auf dem eigenen Rechner schon, und genau
-        # daran ist diese Zeile beim Erproben zuerst gescheitert.
+        # kein Thema; beim Nachfahren auf dem eigenen Rechner schon.
         run: |
-          npx astro dev --port 4322 > /tmp/dev.log 2>&1
-          for i in $(seq 1 90); do
+          npx astro dev --port 4322 > /tmp/dev.log 2>&1 &
+          # 180 Sekunden und nicht 90. Die naheliegendste Erklärung für den
+          # hängenden Start ist, dass Astros Daemon-Start auf eine
+          # Bereitschaftsmeldung des Kindprozesses wartet und die erste Übersetzung
+          # auf einem kalten Runner länger braucht als hier — dieses Projekt bringt
+          # unter anderem eine Startseite mit rund 14.650 Wörtern Bandtext mit. Hier
+          # steht der Server nach vier Sekunden, mit warmem `node_modules` und
+          # vorhandenem `.astro`-Zwischenspeicher. Die Zahl ist Luft für einen
+          # Erstlauf und keine Messung; der erste grüne Lauf sagt, wie lange es
+          # wirklich dauert.
+          for i in $(seq 1 180); do
             curl -sf -o /dev/null http://localhost:4322/Japan/plan/ && break
             sleep 1
           done
           # Die zweite Abfrage ist der eigentliche Punkt. Ohne sie läuft die
-          # Schleife bei einem kaputten Server neunzig Mal durch, und die Suiten
+          # Schleife bei einem kaputten Server bis zum Ende durch, und die Suiten
           # melden danach zwanzig sinnlose Fehler statt der einen wahren Ursache.
           if ! curl -sf -o /dev/null http://localhost:4322/Japan/plan/; then
-            echo "::error::Der Dev-Server ist nach 90 Sekunden nicht erreichbar."
-            cat /tmp/dev.log
+            echo "::error::Der Dev-Server ist nach 180 Sekunden nicht erreichbar."
+            echo "--- Startausgabe ---"; cat /tmp/dev.log || true
+            echo "--- astro dev status ---"; npx astro dev status || true
+            echo "--- astro dev logs ---"; npx astro dev logs || true
             exit 1
           fi
           echo "Dev-Server steht."
@@ -244,5 +268,7 @@ jobs:
         # Ein Wächter, der nur „rot" sagt, kostet einen zweiten Lauf zum Nachsehen.
         if: failure()
         run: |
-          echo "--- /tmp/dev.log ---"
+          echo "--- /tmp/dev.log (Startausgabe) ---"
           cat /tmp/dev.log || echo "(kein Log)"
+          echo "--- astro dev logs (der Dienst selbst) ---"
+          npx astro dev logs || echo "(kein Dienstprotokoll)"

@@ -282,10 +282,28 @@ Lauf ist „Typen prüfen" rot geworden (der `astro sync`-Fehler oben), und die 
 danach stehen im Protokoll als `skipped` — `build` übersprungen, `deploy`
 übersprungen, nichts veröffentlicht. Rot blockiert den Deploy, gesehen am Lauf 33.
 
-Nebenbei gemessen: `astro dev` läuft in Astro 7 als Hintergrunddienst, kehrt von
-selbst zurück und überlebt die Schrittgrenze — ein `&` und eine PID-Datei wären
-eine Zahl, die aussieht wie eine Auskunft und keine ist. Und es startet **keinen
-zweiten** Server, auch nicht auf einem anderen Port.
+- **Das `&` beim Dev-Server-Start war doch nötig** — und das ist ein Fehler aus einer
+  Messung, die ich zu weit getragen habe. Hier startet Astro 7 den Dev-Server als
+  Hintergrunddienst, kehrt nach vier Sekunden mit Exit 0 zurück, und der Dienst
+  überlebt die Schrittgrenze; ein `&` wäre überflüssig. **Auf dem Runner hängt
+  derselbe Aufruf.** Woran, ist nicht geklärt: `CI=true` erklärt es nicht — damit
+  daemonisiert er hier weiterhin —, und das Protokoll eines laufenden Schrittes gibt
+  GitHub nicht her. Die plausibelste Erklärung ist, dass der Daemon-Start auf eine
+  Bereitschaftsmeldung wartet und die erste Übersetzung auf einem kalten Runner
+  länger dauert.
+
+  Der Punkt ist aber nicht die Erklärung: Die Form mit `&` ist unter **beiden**
+  Verhaltensweisen richtig. Daemonisiert er, beendet sich die Hülle sofort und die
+  Bereitschaftsprüfung findet den Dienst; bleibt er im Vordergrund, hält der
+  Hintergrundprozess ihn am Leben. Eine Messung aus einer Umgebung gegen eine andere
+  zu setzen war der Fehler — Robustheit gewinnt gegen die schönere Erklärung. Die
+  Wartezeit steht jetzt bei 180 Sekunden, und bei einem Fehlschlag gibt der Schritt
+  `astro dev status` und `astro dev logs` aus, damit der nächste Fall diagnostizierbar
+  ist statt nur rot.
+
+Nebenbei: `astro dev` startet **keinen zweiten** Server, wenn schon einer läuft —
+auch nicht auf einem anderen Port. Auf einem frischen Runner kein Thema, beim
+Nachfahren auf dem eigenen Rechner schon.
 
 ### Die Ortsdaten: warum kein Kilometerdeckel
 

@@ -1,0 +1,25 @@
+---
+/**
+ * Die Selbstprüfseite.
+ *
+ * **Nicht in der Navigation**, und das ist eine Abwägung: `Base.astro:22-58` trägt
+ * fünf Einträge; ein sechster drängt die Tab-Leiste bei 390 px zusammen, und ein
+ * Diagnosewerkzeug nähme dann dauerhaft Platz von den fünf Dingen weg, die man
+ * täglich braucht. Erreichbar ist sie über den Abgleich-Abschnitt der
+ * Organisationsseite, wo `SyncPanel` schon steht — die verwandte Auskunft.
+ *
+ * Sie trägt `Base.astro` und nicht `Gast.astro`: Anders als `/tagebuch/` soll sie
+ * die Navigation und das Abgleich-Abzeichen haben. Zu verbergen gibt es hier
+ * nichts, denn sie liest nur den localStorage dieses Geräts — ein Fremder sieht
+ * seinen eigenen leeren Zustand.
+ */
+import Base from '../layouts/Base.astro';
+import Wache from '../components/Wache.svelte';
+---
+
+<Base
+  title="Selbstprüfung"
+  subtitle="Was dieses Gerät über sich sagen kann — Orte, Karte, Abgleich, Speicher."
+>
+  <Wache client:only="svelte" />
+</Base>

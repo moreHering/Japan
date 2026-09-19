@@ -26,6 +26,7 @@
     togglePacking,
   } from '../lib/store.svelte';
   import { formatEuro, formatFull, formatYen, stations, trip, yenToEuro } from '../lib/trip';
+  import { url } from '../lib/paths';
 
   type Props = { places: Place[] };
   let { places }: Props = $props();
@@ -351,6 +352,19 @@
       <SyncPanel />
     </div>
 
+    <!--
+      Der Weg zur Selbstprüfung. Sie steht **nicht** in der Navigation: Die trägt
+      fünf Einträge, und ein sechster drängt die Tab-Leiste bei 390 px zusammen.
+      Hier ist die richtige Stelle, weil daneben schon der Abgleich steht — wer
+      nachsieht, ob etwas klemmt, sucht zuerst hier.
+    -->
+    <p class="wachelink">
+      <a href={url('wache')}>Selbstprüfung öffnen</a> — prüft auf <b>diesem</b> Gerät, ob die
+      Koordinaten plausibel sind, welche Kartenart läuft und ob der Plan sich speichern lässt.
+      Das erreicht keine Prüfung im Bauvorgang, denn eigene Orte und Korrekturen liegen nur
+      hier.
+    </p>
+
     <p class="sub">
       Angemeldet gleicht sich der Plan zwischen euren Geräten ab: Änderungen wirken sofort
       hier und gehen dann in die gemeinsame Ablage — auch nachträglich, wenn gerade kein Netz
@@ -390,6 +404,17 @@
 </div>
 
 <style>
+  .wachelink {
+    font-size: 0.86rem;
+    line-height: 1.5;
+    color: var(--ai-60);
+    margin: 10px 0 0;
+  }
+  .wachelink a {
+    color: var(--shu);
+    font-weight: 600;
+  }
+
   .grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);

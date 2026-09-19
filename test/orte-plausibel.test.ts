@@ -16,12 +16,17 @@
  * **Eigene Orte ab Nr. 165, Korrekturen und Ausblendungen.** Die liegen im
  * localStorage und in Supabase, nicht in diesen Dateien. Wer in der App eine
  * falsche Koordinate einträgt — etwa aus einem Maps-Link, der auf den
- * Kartenmittelpunkt statt den Ort zeigt —, bekommt von hier **keine** Warnung. Die
- * einzige Prüfung, die das könnte, wäre eine Selbstprüfung im Gerät. Die gibt es
- * nicht. Wer sich auf diesen grünen Haken verlässt, verlässt sich auf weniger, als
- * er denkt.
+ * Kartenmittelpunkt statt den Ort zeigt —, bekommt von hier **keine** Warnung.
+ *
+ * Dafür gibt es inzwischen die Selbstprüfseite `/wache/`. Sie prüft auf dem Gerät
+ * **dieselben** Regeln aus `src/lib/wache.ts`, nur an dem Bestand, den dieser Test
+ * nicht sehen kann. Der grüne Haken hier sagt also: die Dateien stimmen. Über das,
+ * was jemand in der App eingetragen hat, sagt er nichts.
  *
  * ## Warum kein einfacher Kilometerdeckel
+ *
+ * (Die Begründung steht ausführlich in `src/lib/wache.ts`, wo die Regeln liegen.
+ * Kurz:)
  *
  * Der naheliegende Gedanke — „ein Ort liegt nicht weiter als X km von seiner
  * Station" — ist nachgemessen und schwach: Nikko (Nr. 155–157) liegt **119 km** von
@@ -42,63 +47,29 @@
 import { describe, expect, it } from 'vitest';
 import { alleOrte, CATEGORIES, type Place } from '../src/lib/places';
 import { inJapan } from '../src/lib/koordinaten';
-import stationen from '../src/data/stations.json';
+import { AUSFLUEGE, km, naechsteStation, REISERAHMEN, type Station } from '../src/lib/wache';
+import stationenRoh from '../src/data/stations.json';
 
-// ============================================================== Die Rahmen ====
-
-/**
- * Der engere Rahmen für die 164 Orte aus dem Reiseband.
+/*
+ * Die Regeln stehen seit dem Bau der Selbstprüfseite in `src/lib/wache.ts` und
+ * nicht mehr hier.
  *
- * Gemessen an den heutigen Daten: lat 34,21 (Nr. 35 Eko-in auf dem Kōya-san) bis
- * 36,76 (Nr. 156 Nikko), lng 134,69 (Himeji) bis 139,81 (Nikko). Das ist ein
- * Streifen Honshū. Mit Luft nach allen Seiten wird daraus 33–38 °N und 133–141 °O.
+ * Der Grund ist nicht Aufräumen: `/wache/` prüft auf dem Gerät **dieselben**
+ * Regeln, aber an anderen Daten — die 164 aus den Dateien plus die eigenen Orte ab
+ * Nr. 165 und alle Korrekturen, die im localStorage liegen und die dieser Test
+ * niemals sieht. Zwei Kopien derselben Regel laufen auseinander, sobald jemand
+ * eine anfasst, und dann sagt der grüne Haken im CI etwas anderes als das Telefon
+ * in der Hand.
  *
- * Bewusst **enger** als `inJapan()` aus `koordinaten.ts` (20–46 / 122–154, das
- * schließt Okinawa und Ogasawara ein): Eine Koordinate aus Hokkaidō oder Kyūshū
- * ist auf dieser Reise mit Sicherheit ein Fehler, `inJapan` würde sie durchlassen.
- *
- * Für **eigene** Orte gilt weiter `inJapan` — dort kann niemand eine Reiseroute
- * voraussetzen, und dieser Rahmen prüft ohnehin nur die Dateien.
+ * Diese Datei bleibt, weil sie die **Dateien** prüft und im Wächter vorne läuft,
+ * ohne Netz und ohne Browser. Ihre zehn Gegenproben sind nach dem Umzug
+ * unverändert gelaufen — das ist der Beweis, dass beim Verschieben nichts
+ * verrutscht ist.
  */
-const REISERAHMEN = { latVon: 33, latBis: 38, lngVon: 133, lngBis: 141 };
+const stationen = stationenRoh as unknown as Station[];
 
-/** Entfernung in Kilometern, Haversine. Für Größenordnungen genau genug. */
-function km(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const R = 6371;
-  const r = (x: number) => (x * Math.PI) / 180;
-  const dLat = r(bLat - aLat);
-  const dLng = r(bLng - aLng);
-  const h =
-    Math.sin(dLat / 2) ** 2 + Math.cos(r(aLat)) * Math.cos(r(bLat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
+/** Bequemlichkeit für die Fehlermeldungen unten. */
 const stationVon = (slug: string) => stationen.find((s) => s.slug === slug);
-
-/** Die nächstgelegene Station zu einer Koordinate, nach Luftlinie. */
-function naechsteStation(o: Place) {
-  return stationen
-    .map((s) => ({ slug: s.slug, km: km(s.center[0], s.center[1], o.lat, o.lng) }))
-    .sort((a, b) => a.km - b.km)[0];
-}
-
-/**
- * Die sechs Orte, deren nächste Station nicht die eigene ist — **und zwar zu
- * Recht**. Jeder Eintrag ist ein Tagesausflug, bei dem man von der einen Station
- * aus zu einem Ort fährt, der geografisch näher an einer anderen liegt.
- *
- * Wer hier etwas einträgt, behauptet damit: „Das ist ein Ausflug, kein Tippfehler."
- * Deshalb steht der Grund dabei — und deshalb prüft der letzte Test dieser Datei,
- * dass jeder Eintrag die Regel wirklich noch verletzt.
- */
-const AUSFLUEGE: Record<number, string> = {
-  21: 'Iga-Ueno-Burg — Tagesausflug aus Osaka, liegt näher an Kyoto',
-  22: 'Iga-ryu Ninja-Museum — dasselbe Ziel wie Nr. 21',
-  59: 'Heijo-Palast in Nara — Nara wird von Kyoto aus besucht, liegt aber näher an Osaka',
-  61: 'Todai-ji in Nara — wie Nr. 59',
-  66: 'Nara-Park — wie Nr. 59',
-  88: 'Ainokura in Gokayama — Tagesausflug aus Takayama, liegt näher an Kanazawa',
-};
 
 // ================================================================ Prüfungen ===
 
@@ -217,7 +188,7 @@ describe('Ort und Station passen zusammen', () => {
      */
     const verstoesse = alleOrte
       .filter((o) => !(o.nr in AUSFLUEGE))
-      .map((o) => ({ o, naechste: naechsteStation(o) }))
+      .map((o) => ({ o, naechste: naechsteStation(o, stationen) }))
       .filter(({ o, naechste }) => naechste.slug !== o.station);
 
     expect(
@@ -245,7 +216,7 @@ describe('Ort und Station passen zusammen', () => {
       .map(Number)
       .filter((nr) => {
         const o = alleOrte.find((x) => x.nr === nr);
-        return !o || naechsteStation(o).slug === o.station;
+        return !o || naechsteStation(o, stationen).slug === o.station;
       });
     expect(
       ueberfluessig,

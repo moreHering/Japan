@@ -57,7 +57,15 @@ const WARTESCHLANGE = 'japan2026:offene-aenderungen';
 /** Meldung über eine Änderung, die endgültig nicht durchkam. */
 const VERWORFEN = 'japan2026:verworfene-aenderung';
 /** Merker, dass dieses Gerät schon einmal erfolgreich abgeglichen hat. */
-const ERSTABGLEICH = 'japan2026:erstabgleich';
+/**
+ * Gesetzt, sobald dieses Gerät **einmal** erfolgreich abgeglichen hat.
+ *
+ * Exportiert für `/wache/`: Der Schlüssel ist die einzige verlässliche Auskunft
+ * darüber, ob der Abgleich auf diesem Telefon je gelaufen ist — `sync.status`
+ * sagt nur, wie es gerade steht. Als Name und nicht als abgeschriebene
+ * Zeichenkette, damit die zwei Stellen nicht auseinanderlaufen.
+ */
+export const ERSTABGLEICH = 'japan2026:erstabgleich';
 
 export type SyncStatus =
   | 'aus' // keine Zugangsdaten im Build

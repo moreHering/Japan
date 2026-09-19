@@ -7,12 +7,13 @@ sechs Stationen, 19 Nächte, 164 Orte.
 
 | Seite | Adresse | Zweck |
 |---|---|---|
-| Startseite | `/` | Tageszählung, **der Reiseband als Volltext** — elf Kapitel, direkt lesbar — und die sechs Stationen |
+| Startseite | `/` | Tageszählung, **der Reiseband als Akkordeon** — elf aufklappbare Kapitel — und die sechs Stationen |
 | Tagesplan | `/plan/` | 20 Reisetage — Orte zuordnen, sortieren, Notizen; warnt bei Schließtagen; am Umzugstag Etappe und Buchungsstand der Fahrt |
 | Orte | `/orte/` | Alle Orte, filterbar, mit Karte im selben Bild; anlegen, bearbeiten, ausblenden; KML-Download |
 | Organisation | `/organisation/` | Buchungen und Fristen, Budget in ¥/€, Packliste, Abgleich, Export/Import |
 | Freundebuch | `/freundebuch/` | Steckbriefe und Fotostream der drei — **nur angemeldet** |
 | Reisetagebuch | `/tagebuch/` | Dieselben Beiträge für Gäste, ohne Anmeldung — **nicht verlinkt**, siehe unten |
+| Selbstprüfung | `/wache/` | Was **dieses Gerät** über sich sagen kann — **nicht verlinkt**, erreichbar über Organisation |
 | Reiseband | `/reiseband.html` | Derselbe Text als geschlossenes Dokument zum Ausdrucken |
 
 `/karte` leitet auf `/orte/` um — beides war früher getrennt und zeigte dieselben
@@ -191,6 +192,72 @@ zuverlässig prüfbar — `npm run test:karte`. Umgekehrt lässt sich von hier *
 zeigen, dass Kacheln ankommen oder in welcher Sprache sie beschriftet sind. Das
 sieht nur ein Gerät mit freiem Netz.
 
+## Die Selbstprüfung `/wache/` — und die Lücke, die sie schließt
+
+Der Wächter im CI prüft die **Dateien**: `src/data/places.json`, die Orte aus dem
+Reiseband. Eigene Orte ab Nr. 165, Ortskorrekturen und Ausblendungen liegen aber im
+localStorage und in Supabase — der CI sieht sie **nie**. Wer in der App eine falsche
+Koordinate einträgt, etwa aus einem Maps-Link, der auf den Kartenmittelpunkt statt
+den Ort zeigt, bekam von nirgends eine Warnung. Genau das ist der Fall, den die
+Grundregel meint: *auf der Reise ist ein falsch markierter Ort schlimmer als ein
+fehlender.*
+
+Die Seite steht unter `/wache/`, ist **nicht in der Navigation** (die trägt fünf
+Einträge; ein sechster drängt die Tab-Leiste bei 390 px zusammen) und über den
+Abgleich-Abschnitt der Organisationsseite erreichbar. **Keine Anmeldung**, und das
+ist kein Versehen: Sie liest nur den localStorage dieses Geräts und Konstanten aus
+der Bauzeit — ein Fremder sieht seinen eigenen leeren Zustand. Aus Supabase holt sie
+nichts.
+
+Fünf Abschnitte, in der Reihenfolge, in der sie unterwegs zählen:
+
+1. **Orte** — die Befunde aus `src/lib/wache.ts`, jeder mit Nummer, Grund und dem
+   Weg zur Behebung; ein Tipp führt zum Ort in `/orte/`.
+2. **Karte** — welche Kachelart wirklich läuft. **Das ist neu und war vorher
+   unsichtbar:** Ob die lateinisch beschriftete Vektorkarte läuft oder der japanisch
+   beschriftete Rasterrückfall, sah man der App nicht an; sichtbar war nur der Fall,
+   in dem gar kein Hintergrund kommt. `MapView.svelte` meldet den Zustand jetzt über
+   eine Prop nach außen, aus einem `$effect` über `grund` und nicht aus den sechs
+   Zuweisungsstellen — eine vergessene Stelle wäre ein Melder, der im seltensten
+   Fall schweigt.
+3. **Abgleich** — Status, offene Änderungen, letzter und erster Abgleich. Ein Gerät,
+   das **nie** abgeglichen hat, wird ausdrücklich genannt.
+4. **Speicher** — ein Schreib- **und Lese**-Versuch auf den localStorage. Im privaten
+   Fenster wirft er, und dann ist jede Planänderung nach dem Schließen weg, ohne dass
+   sonst etwas in der App das bemerkt.
+5. **Was diese Seite nicht weiß** — als Text auf der Seite, nicht nur im Kommentar.
+
+### Eine Regel, zwei Prüfer
+
+`src/lib/wache.ts` hält die Regeln, und `test/orte-plausibel.test.ts` benutzt
+**dieselben** im CI. Vorher standen sie nur im Test. Zwei Kopien laufen auseinander,
+sobald jemand eine anfasst — und dann sagt der grüne Haken etwas anderes als das
+Telefon in der Hand. Nach dem Umzug sind die zehn Gegenproben des CI-Tests
+unverändert gelaufen; das ist der Beweis, dass nichts verrutscht ist.
+
+Die tragende Zusicherung ist, dass **jeder Ort näher an seiner eigenen Station liegt
+als an jeder anderen** — mit der benannten Ausnahmeliste für die sechs echten
+Tagesausflüge. Sie braucht keine erfundene Zahl und trifft den teuersten Fehler: eine
+echte Koordinate aus der falschen Gegend. Ein Osaka-Ort mit einer Tokio-Koordinate
+schlägt an, obwohl beide Zahlen stimmen und beide in Japan liegen.
+
+Der wertvollste Einzelbefund ist ein anderer: **ein eigener Ort mit negativer
+Nummer** heißt, dieses Gerät hat ihn angelegt und nie abgeglichen. Die Unterkunft
+steht dann auf keinem der beiden anderen Telefone — und das merkt sonst niemand, bis
+jemand sie sucht.
+
+### Zwei Fehler in der Anzeige, beide durch Messen gefunden
+
+- **„164 Orte geprüft" war falsch.** `alleOrteMitKorrekturen()` baut auf `places`,
+  und das lässt die 23 erledigten Unterkunftsvorschläge weg — geprüft waren 141 plus
+  die eigenen. Eine Prüfseite, die mehr behauptet, als sie angesehen hat, ist genau
+  das Gegenteil von nützlich: Man hält 23 Orte für kontrolliert. Jetzt steht die Zahl,
+  die stimmt, und der Unterschied ist unter „Was diese Seite nicht weiß" erklärt.
+- **Zwei Prüfungen in `browser-wache.mjs` stürzten ab, statt zu melden.** Fehlt das
+  Element, läuft Playwright in einen Timeout und die ganze Suite bricht mit einem
+  Stapelauszug ab. Zwei Gegenproben galten dadurch als stumm, obwohl die Reparatur
+  fehlte. Jetzt wird erst gezählt und dann gelesen.
+
 ## Der Wächter: was bei jedem Push geprüft wird
 
 Bis vor kurzem lief keine Prüfung dieses Projekts automatisch. `deploy.yml` sah
@@ -361,6 +428,59 @@ Damit der grüne Haken nicht mehr verspricht, als er hält:
   Dev-Server, weil sie `import('/src/lib/store.svelte.ts')` aufrufen — diesen Pfad
   löst nur Vite auf. `npm run build` läuft mit, die Suiten sehen den Dev-Stand.
 
+## Das Reiseband auf der Startseite: ein Akkordeon
+
+Der Band ist rund 14.650 Wörter und lag als durchlaufender Volltext auf der
+Startseite — auf einem 390-px-Schirm eine Schriftrolle, durch die man scrollt, um von
+Osaka nach Hakone zu kommen. Die Seitenhöhe liegt jetzt bei **7.267 px** statt rund
+33.000. Je Kapitel eine Klappe mit Kanji, Nummer und Beiname aus `stations.json`; in
+den sechs Stationen darin drei Abschnitte (Hintergrund, Klassiker, Essen), bei Osaka
+ein vierter für den Dorogawa-Ausflug. Offen bleiben zwei Dinge, die man beim Öffnen
+einer Station zuerst braucht: der Verweis in den Planer („38 Orte in Osaka —
+ansehen") und die Übergangszeile zum nächsten Kapitel.
+
+`public/reiseband.html` bleibt durchlaufender Text. Ein zugeklapptes `<details>`
+druckt nicht; wer die Datei aufs Papier gibt, bekäme sonst elf Überschriften.
+
+**Erzeugt und nicht kopiert.** Die Vorlage kam als fertige HTML-Datei. Sie
+einzusetzen wäre schneller gewesen, hätte aber Inhalt gelöscht: 19 Probier-Tabellen,
+die fünf Blöcke „Weitere Optionen — ohne Nummer, **nur hier im Buch**" (die haben
+keine Koordinaten, stehen in keiner anderen Datei und wären ersatzlos weg), fünf
+Kapitelanker und rund 715 Wörter. Übernommen ist deshalb die Form, der Inhalt kommt
+weiter aus `data/source/` — eine Korrektur dort landet wie bisher automatisch im
+Band. Vom CSS der Vorlage sind nur die Token-Namen umgeschrieben: Ihre mobile Fassung
+führt `--karte`, `--linie`, `--ai60` mit denselben Werten wie `--card`, `--line`,
+`--ai-60`, und zwei Namen für eine Farbe ist die Doppelung, an der Stylesheets
+verrotten.
+
+### Ein Fehler, den keine Zählung gesehen hat
+
+Die erste Fassung schnitt den Kapiteltext an den Positionen der `<h3>`. Das geht gut,
+solange die Überschrift ein **direktes Kind** ist — „Der Guide" und „Essens-Fokus"
+sind es. Osakas „Tagesausflug" steckt eine Ebene tiefer, in `div.daytrip`. Der Schnitt
+zerriss das `div`: vorn ein offenes, hinten ein überzähliges Tag.
+
+Die Bilanz der Datei blieb dabei **ausgeglichen**, 374 `<div>` auf 374. Jede
+Zählprüfung schwieg. Sichtbar wurde es erst im Browser, und zwar durch Vergleich mit
+`git show HEAD:` — vorher lagen 11 von 11 Kapiteln in `.bandtext`, danach 5. Der
+HTML-Parser schloss den Behälter vorzeitig, und ab Kyoto stand der halbe Band
+außerhalb dessen, woran das Bandstylesheet gebunden ist. Dazu traf die Regel
+`.bandtext section[id]` nichts mehr: gültiges CSS, das ins Leere zeigte.
+
+Behoben über `kindGrenze()`: geschnitten wird nur, wo ein direktes Kind beginnt. Dazu
+zwei unabhängige Netze, beide gegengeprobt:
+
+- **`build-data.mjs` prüft jede Klappe einzeln** auf Paarigkeit. Erst auf
+  Kapitelebene geprüft — das war zu grob, und die Gegenprobe hat es bewiesen: Ein
+  Schnitt unbalanciert die zwei Teilabschnitte, aber beide liegen im selben Kapitel,
+  die Summe stimmte weiter, das Loch ging durch.
+- **`browser-reiseband.mjs` zählt die Kapitel ausdrücklich innerhalb von
+  `.bandtext`** und vergleicht mit der Zahl im Dokument. Mit beiden Löchern gebohrt
+  schlagen dort sechs Prüfungen an, darunter „19 Tabellen — 5".
+
+Ein Ankersprung (`paths.ts:kapitel('kyoto')` → `/Japan/#kyoto`) klappt das Kapitel
+auf; ohne das landet man richtig und sieht eine zugeklappte Zeile.
+
 ## Google Maps: was geht und was nicht
 
 Gefragt war eine Schnittstelle, die die Karte in der Maps-App automatisch aktuell
@@ -496,6 +616,7 @@ npm run test:buch        # Freundebuch, angemeldet
 npm run test:tagebuch    # die öffentliche Gästeansicht
 npm run test:maps        # Tagesroute als Maps-Link, KML aus dem Live-Stand
 npm run wache:daten      # nur die Ortsdaten — ohne Netz, ohne Browser, in Sekunden
+npm run test:wache       # die Selbstprüfseite /wache/
 ```
 
 Die Browsertests laufen mit Playwright im iPhone-13-Format gegen den Dev-Server.

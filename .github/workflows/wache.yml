@@ -267,6 +267,10 @@ jobs:
         if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
         run: node test/browser-bild.mjs
 
+      - name: Selbstprüfseite
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-wache.mjs
+
       - name: Log des Dev-Servers bei einem Fehlschlag
         # Ein Wächter, der nur „rot" sagt, kostet einen zweiten Lauf zum Nachsehen.
         if: failure()

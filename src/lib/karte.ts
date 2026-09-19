@@ -13,6 +13,28 @@
  */
 
 /** Die Reihenfolge, in der ein Ortsname gesucht wird. */
+/**
+ * Der Zustand des Kartenhintergrunds, wie `MapView.svelte` ihn führt und nach
+ * außen meldet.
+ *
+ * Steht hier und nicht in der Komponente, damit `/wache/` ihn nicht abschreiben
+ * muss — zwei Kopien eines Typs sind so lange einig, bis jemand einen Fall
+ * hinzufügt. Ein `export type` aus dem Instanz-Skript einer Svelte-Komponente wäre
+ * die andere Möglichkeit gewesen und ist die heiklere: Dort bedeutet `export`
+ * eigentlich „Instanzmethode".
+ *
+ * `vektor` und `raster` sind im Kartenbild **nicht** zu unterscheiden — man sieht
+ * der App nicht an, ob sie deutsch oder japanisch beschriftet ist. Genau deshalb
+ * gibt es den Melder.
+ */
+export type Kachelzustand = {
+  art: 'vektor' | 'raster' | 'fehler';
+  /** Nur im Fehlerfall gefüllt: der Host, der nicht antwortet. */
+  host: string;
+  /** Warum der Rückfall greift, etwa „Vektorkarte nicht verfügbar (WebGL fehlt)". */
+  warum: string;
+};
+
 export const SPRACHFOLGE = ['name:de', 'name:en', 'name:latin', 'name'] as const;
 
 /**

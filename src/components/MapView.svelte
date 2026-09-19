@@ -19,7 +19,7 @@
    * Umgebung ist kein Kachelhost erreichbar — was in der Komponente bleibt, kann
    * ich nur im Fehlerfall prüfen, was dort steht, auch im Gutfall.
    */
-  import { deutscheNamen, hostVon } from '../lib/karte';
+  import { deutscheNamen, hostVon, type Kachelzustand } from '../lib/karte';
 
   type Props = {
     /** Alle Orte, die die Karte kennen soll. */
@@ -72,7 +72,21 @@
      * `applyMarken()`.
      */
     marken?: { lat: number; lng: number; text: string; farbe: string; popup?: string }[];
+    /**
+     * Meldet den Zustand des Kartenhintergrunds nach außen — für `/wache/`.
+     *
+     * Der Grund, warum das nötig ist: Zwei der drei Fälle sind im Kartenbild
+     * **stumm**. Ob die deutsche Vektorkarte läuft oder der japanisch beschriftete
+     * Rasterrückfall, sieht man der App nicht an — sichtbar wird nur der dritte
+     * Fall, wenn gar kein Hintergrund kommt. Für die Selbstprüfseite ist genau der
+     * Unterschied zwischen den ersten beiden die Auskunft: „Vektorkarte, deutsch"
+     * gegen „Rasterrückfall — japanisch, weil WebGL fehlt".
+     *
+     * Rein additiv: Ohne diese Prop verhält sich die Komponente wie vorher.
+     */
+    onkachelzustand?: (z: Kachelzustand) => void;
   };
+
 
   let {
     places,
@@ -88,6 +102,7 @@
     pin = null,
     linie = null,
     marken = [],
+    onkachelzustand,
   }: Props = $props();
 
   let host: HTMLDivElement;
@@ -112,11 +127,27 @@
    * Karte nicht zu unterscheiden, und genau so ist sie auf dem Telefon
    * angekommen.
    */
-  let grund = $state<{ art: 'vektor' | 'raster' | 'fehler'; host: string; warum: string }>({
+  let grund = $state<Kachelzustand>({
     art: 'vektor',
     host: '',
     warum: '',
   });
+  /*
+   * Der Melder nach außen.
+   *
+   * **Ein `$effect` über `grund` und nicht sechs Aufrufe an den sechs
+   * Zuweisungsstellen** (115, 137, 153, 156, 208, 225). Der Unterschied ist nicht
+   * Geschmack: Eine vergessene Zuweisung wäre ein Melder, der im seltensten Fall
+   * schweigt — und das ist der Fall, in dem man ihn braucht. Ein Effekt kann nichts
+   * vergessen, weil er an der Variablen hängt und nicht an ihren Schreibstellen.
+   *
+   * Svelte ruft ihn auch beim ersten Lauf, die Seite erfährt also den Startzustand
+   * („vektor") und nicht erst die erste Änderung.
+   */
+  $effect(() => {
+    onkachelzustand?.({ art: grund.art, host: grund.host, warum: grund.warum });
+  });
+
   let rasterEbene: any = null;
   let vektorEbene: any = null;
 

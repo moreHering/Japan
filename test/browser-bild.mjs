@@ -14,7 +14,7 @@
 
 import { chromium } from 'playwright';
 
-const BASIS = process.env.DEV ?? 'http://localhost:4322/Japan';
+import { BASIS, START } from './browserlauf.mjs';
 
 let fehler = 0;
 const pruefe = (bedingung, text, zusatz = '') => {
@@ -26,7 +26,7 @@ const pruefe = (bedingung, text, zusatz = '') => {
 };
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM ?? '/opt/pw-browsers/chromium',
+  ...START,
 });
 const seite = await browser.newPage();
 seite.on('pageerror', (e) => console.log('PAGEERROR', e.message));

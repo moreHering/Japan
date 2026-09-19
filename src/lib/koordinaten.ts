@@ -111,7 +111,18 @@ export function lese(eingabe: string): Fund {
  *
  * Kein Fehler, nur ein Hinweis — aber ein nützlicher: Verdrehte Breite und
  * Länge sind der häufigste Tippfehler, und 139,7 als Breite gibt es nicht.
- * Japans Festland liegt etwa zwischen 24–46 °N und 122–146 °O.
+ *
+ * Der Rahmen ist **absichtlich weit**: 20–46 °N und 122–154 °O schließt Okinawa
+ * im Süden und die Ogasawara-Inseln im Osten ein. Japans Festland allein läge bei
+ * etwa 24–46 °N und 122–146 °O, aber wer hier eine Koordinate einfügt, darf auch
+ * einen Ort außerhalb dieser Reise meinen.
+ *
+ * (Der Kommentar nannte vorher die engeren Zahlen, der Code prüfte die weiten.
+ * Beides stand so seit dem Anlegen da; welche der beiden Angaben gemeint war,
+ * ließ sich nicht mehr feststellen. Der Code bleibt unverändert — eine Grenze
+ * still zu verschieben, weil ein Kommentar etwas anderes behauptet, wäre die
+ * gefährlichere der zwei Möglichkeiten. Wer den engen Rahmen braucht, findet ihn
+ * in `test/orte-plausibel.test.ts` als `REISERAHMEN`.)
  */
 export function inJapan(lat: number, lng: number): boolean {
   return lat >= 20 && lat <= 46 && lng >= 122 && lng <= 154;

@@ -17,7 +17,7 @@
 
 import { chromium, devices } from 'playwright';
 
-const BASIS = process.env.DEV ?? process.env.BASIS ?? 'http://localhost:4322/Japan';
+import { BASIS, START } from './browserlauf.mjs';
 
 let fehler = 0;
 const pruefe = (bedingung, text, zusatz = '') => {
@@ -29,7 +29,7 @@ const pruefe = (bedingung, text, zusatz = '') => {
 };
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM ?? '/opt/pw-browsers/chromium',
+  ...START,
 });
 const ctx = await browser.newContext({ ...devices['iPhone 13'], acceptDownloads: true });
 const seite = await ctx.newPage();

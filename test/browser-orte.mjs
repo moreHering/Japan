@@ -14,7 +14,7 @@
 
 import { chromium, devices } from 'playwright';
 
-const BASIS = process.env.BASIS ?? 'http://localhost:4321/Japan';
+import { BASIS, START } from './browserlauf.mjs';
 const iPhone = devices['iPhone 13'];
 
 let fehler = 0;
@@ -27,14 +27,10 @@ const pruefe = (bedingung, text, zusatz = '') => {
   }
 };
 
-/*
- * Die hier installierte Playwright-Fassung erwartet einen neueren Chromium als
- * der, der im Bild liegt — und nachladen lässt die Netzrichtlinie nicht zu.
- * Deshalb der ausdrückliche Pfad auf den vorhandenen.
- */
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM ?? '/opt/pw-browsers/chromium',
-});
+// Warum `START` und nicht einfach `chromium.launch()`: siehe `browserlauf.mjs`.
+// Kurz — hier braucht Playwright einen ausdrücklichen Pfad, auf einem Runner darf
+// es keinen bekommen.
+const browser = await chromium.launch({ ...START });
 const ctx = await browser.newContext({ ...iPhone });
 const seite = await ctx.newPage();
 

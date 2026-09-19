@@ -15,7 +15,7 @@ import { chromium, devices } from 'playwright';
 // Der Dev-Server, nicht die Vorschau: Nur dort lassen sich die Module über
 // `import('/src/lib/…')` erreichen, und ohne Anmeldung ist das Formular des
 // Freundebuchs gar nicht im DOM — dann prüfte dieser Test dort nichts.
-const BASIS = process.env.BASIS ?? 'http://localhost:4322/Japan';
+import { BASIS, START } from './browserlauf.mjs';
 const iPhone = devices['iPhone 13'];
 
 let fehler = 0;
@@ -29,7 +29,7 @@ const pruefe = (bedingung, text, zusatz = '') => {
 };
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM ?? '/opt/pw-browsers/chromium',
+  ...START,
 });
 const ctx = await browser.newContext({ ...iPhone });
 const seite = await ctx.newPage();

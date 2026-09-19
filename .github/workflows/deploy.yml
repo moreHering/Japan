@@ -19,7 +19,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Das Tor. Ohne einen grünen Wächter wird nicht gebaut und nicht veröffentlicht.
+  #
+  # Was er prüft, steht in `wache.yml`: die Ortsdaten auf Plausibilität, die Typen,
+  # 189 vitest-Prüfungen, den Build und die zehn Browsersuiten mit zusammen über 320
+  # Prüfungen. Das kostet einige Minuten vor jedem Deploy. Der Preis ist bewusst:
+  # Eine kaputte Karte oder ein Ort mit falscher Koordinate soll nicht live gehen.
+  #
+  # Die Kehrseite, damit sie nicht überrascht: Ein Fehlschlag blockiert dann auch
+  # eine harmlose Textänderung. Wer in so einem Fall wirklich veröffentlichen muss,
+  # startet `deploy.yml` über `workflow_dispatch` von einem Stand, der grün war —
+  # nicht indem er dieses `needs` entfernt.
+  wache:
+    uses: ./.github/workflows/wache.yml
+
   build:
+    needs: wache
     runs-on: ubuntu-latest
     steps:
       - name: Repository auschecken
@@ -52,7 +67,11 @@ jobs:
           # Vorsorglich: Solange der Node-Cache trifft, läuft gar kein Install.
           # Sobald sich die Lockfile ändert, zöge Playwright aus den
           # devDependencies einen Chromium nach — rund 150 MB, die dieser Lauf
-          # nie anfasst. Die Browsertests laufen beim Entwickeln, nicht hier.
+          # nie anfasst. Die Browsertests laufen im Wächter-Job davor und beim
+          # Entwickeln — in **diesem** Job wird kein Browser gebraucht, deshalb
+          # bleibt die Zeile richtig. (Sie stand hier einmal mit der Begründung
+          # „Die Browsertests laufen beim Entwickeln, nicht hier", und das traf zu,
+          # solange überhaupt nichts geprüft wurde.)
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
   deploy:

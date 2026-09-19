@@ -191,6 +191,123 @@ zuverlässig prüfbar — `npm run test:karte`. Umgekehrt lässt sich von hier *
 zeigen, dass Kacheln ankommen oder in welcher Sprache sie beschriftet sind. Das
 sieht nur ein Gerät mit freiem Netz.
 
+## Der Wächter: was bei jedem Push geprüft wird
+
+Bis vor kurzem lief keine Prüfung dieses Projekts automatisch. `deploy.yml` sah
+nach, ob die Supabase-Secrets gesetzt sind, und baute dann — mit dem Kommentar
+„Die Browsertests laufen beim Entwickeln, nicht hier."
+
+Das ist nicht theoretisch schiefgegangen. In einer einzigen Sitzung sind zwei
+Regressionen entstanden: Der erste Ort auf `/orte/` rutschte von 326 px auf 454 px
+und damit unter die Falzkante, und zwei Routenknöpfe im Tagesplan standen 6 px
+auseinander. **Beide haben nur angeschlagen, weil die Suiten von Hand gestartet
+wurden.** Ohne das wären sie deployt.
+
+Seither hängt der Deploy an `.github/workflows/wache.yml`: `deploy.yml` ruft ihn
+über `workflow_call` als eigenen Job, und `build` trägt `needs: wache`. **Rot heißt
+kein Deploy.** Geprüft wird in dieser Reihenfolge — das Billige zuerst, damit eine
+kaputte Koordinate nach einer halben Minute auffällt und nicht nach sechs:
+
+1. `npm run wache:daten` — die Ortsdaten, ohne Netz und ohne Browser.
+2. `npx tsc --noEmit`, dann `npm test` (189 Prüfungen), dann `npm run build`.
+3. Chromium (zwischengespeichert), Dev-Server, und die zehn Browsersuiten mit
+   zusammen 327 Prüfungen — jede als eigener Schritt, damit ein Lauf alle
+   Ergebnisse zeigt statt nur des ersten Fehlers.
+
+Die Kehrseite, damit sie nicht überrascht: Ein Fehlschlag blockiert dann auch eine
+harmlose Textänderung. Wer trotzdem veröffentlichen muss, startet `deploy.yml`
+über `workflow_dispatch` von einem Stand, der grün war — nicht indem er das
+`needs` entfernt.
+
+### Vier Dinge, an denen es zuerst gescheitert ist
+
+Alle vier beim Nachfahren der Schrittfolge von Hand gefunden, nicht im CI. Das war
+der Zweck des Nachfahrens.
+
+- **`npx tsc --noEmit` war nie sauber.** `test/setup.ts` deklarierte `const
+  localStorage` auf oberster Ebene; da die Datei keinen `import` und kein `export`
+  hat, ist das eine *globale* Deklaration und kollidiert mit `lib.dom` — zwei Mal
+  TS2451, seit dem Anlegen. Gemerkt hat es niemand, weil vitest ohne Typprüfung
+  übersetzt und weil jeder Aufruf von `tsc` hier mit einem `grep -v test/setup.ts`
+  endete. Im CI wäre daraus ein dauerhaft blockierter Deploy geworden. Die zwei
+  Instanzen heißen jetzt `speicher` und `sitzungsSpeicher`.
+- **Die Kachelprüfung hätte auf einem Runner umgekippt.**
+  `test/browser-karte.mjs` prüft den *Fehlerfall* — dass der Hinweis erscheint,
+  wenn kein Hintergrund kommt. Hier ist das der Normalzustand, weil der Proxy jeden
+  Kachelhost sperrt; auf einem GitHub-Runner ist das Netz frei, die Kacheln kämen
+  an, der Hinweis verschwände planmäßig, und die Suite wäre rot, **obwohl alles
+  richtig ist**. Die Sperre wird deshalb jetzt mit Playwrights `route()`
+  **erzwungen** statt vorgefunden, und eine eigene Zusicherung prüft, dass sie
+  wirklich zugeschlagen hat — sonst könnte weiter bloß der Proxy die Arbeit tun und
+  man wüsste es nicht. Gegengeprobt mit einer ausgelieferten 1×1-Kachel: Dann
+  fallen vier Fehlerfallprüfungen, genau wie auf einem Runner mit freiem Netz.
+- **Eine Suite zeigte auf den falschen Port.** `browser-orte.mjs` fiel auf 4321
+  zurück, alle anderen auf 4322 — `npm run test:all` schickte sie also gegen einen
+  Port, an dem nichts horcht. Dazu lasen manche nur `BASIS`, andere nur `DEV`.
+  Beides steht jetzt einmal in `test/browserlauf.mjs`, samt dem Browserpfad: Der
+  war hart auf `/opt/pw-browsers/chromium` gesetzt, und ein Pfad, der ins Nichts
+  zeigt, ist schlechter als keiner — Playwright fällt dann nicht auf seinen eigenen
+  Browser zurück.
+- **`if: always()` war der falsche Schalter.** Er hätte die zehn Suiten auch dann
+  gestartet, wenn der Dev-Server gar nicht hochgekommen ist — zwanzig
+  Verbindungsfehler, die die eine wahre Ursache verdecken. Jetzt hängen sie an
+  `steps.devserver.outcome == 'success'`.
+
+Nebenbei gemessen: `astro dev` läuft in Astro 7 als Hintergrunddienst, kehrt von
+selbst zurück und überlebt die Schrittgrenze — ein `&` und eine PID-Datei wären
+eine Zahl, die aussieht wie eine Auskunft und keine ist. Und es startet **keinen
+zweiten** Server, auch nicht auf einem anderen Port.
+
+### Die Ortsdaten: warum kein Kilometerdeckel
+
+`test/orte-plausibel.test.ts` prüft die 164 Orte gegen `stations.json` und
+`CATEGORIES`: Nummern lückenlos 1–164 und eindeutig, Koordinate im Reiserahmen
+(lat 33–38, lng 133–141 — gemessen liegen die Orte zwischen 34,21 und 36,76 bzw.
+134,69 und 139,81), Station und Kategorie gültig, Name und Text nicht leer,
+Schließtag ein echtes Kürzel.
+
+Die interessante Zusicherung ist die letzte: **jeder Ort liegt näher an seiner
+eigenen Station als an jeder anderen.** Sie braucht keine erfundene Zahl und
+trifft trotzdem den teuersten Fehler — eine Koordinate aus der falschen Gegend,
+die im Rahmen liegt und plausibel aussieht. Ein Osaka-Ort mit einer
+Tokio-Koordinate schlägt hier an, obwohl beide Koordinaten echt sind und beide in
+Japan liegen; der Rahmen allein lässt ihn durch.
+
+Zwei Wege dorthin waren falsch und sind nachgemessen verworfen:
+
+- **Ein Kilometerdeckel** müsste über 120 km liegen, weil Nikko (Nr. 155–157)
+  legitim 119 km von Tokios Mitte entfernt ist und Himeji-jo 76 km von Osakas.
+  Dann fängt er fast nichts mehr.
+- **Die Regel ohne Ausnahmen** hält nicht: Sechs Orte verletzen sie **zu Recht**,
+  weil die Zuordnung beschreibt, von wo aus man hinfährt, und nicht die Geometrie.
+  Nara (Nr. 59, 61, 66) liegt näher an Osaka, wird aber von Kyoto aus besucht;
+  Iga-Ueno (21, 22) ist ein Ausflug aus Osaka; Ainokura (88) einer aus Takayama.
+
+Deshalb eine benannte Ausnahmeliste mit Begründung je Eintrag — und eine Prüfung,
+dass **jeder Eintrag die Regel wirklich noch verletzt**. Ohne die wird eine
+Ausnahmeliste, die niemand aufräumt, mit der Zeit zur Generalerlaubnis.
+
+Zehn Gegenproben, jede einzeln nachgewiesen: vertauschte Koordinaten, `lat: 0`,
+doppelte Nummer, Tippfehler in Station und Kategorie, leerer Name,
+ausgeschriebener Schließtag, Osaka-Ort auf Tokio-Koordinate, ein überflüssiger
+Ausnahmeeintrag, eine umbenannte Station.
+
+### Was der Wächter nicht bewacht
+
+Damit der grüne Haken nicht mehr verspricht, als er hält:
+
+- **Eigene Orte ab Nr. 165, Korrekturen und Ausblendungen.** Die liegen im
+  localStorage und in Supabase, nicht in den Dateien. Wer in der App eine falsche
+  Koordinate einträgt, bekommt **keine** Warnung. Das ist die größte Lücke, und
+  schließen könnte sie nur eine Selbstprüfung im Gerät — die gibt es nicht.
+- **Dass Kacheln ankommen und lateinisch beschriftet sind.** Geprüft wird der
+  Fehlerfall, und der wird jetzt sogar erzwungen.
+- **Dass Google die Maps-URLs annimmt.**
+- **Den Abgleich gegen echtes Supabase.** Läuft bis heute nur gegen die Attrappe.
+- **Das ausgelieferte Bundle in den Browsersuiten.** Sechs von zehn brauchen den
+  Dev-Server, weil sie `import('/src/lib/store.svelte.ts')` aufrufen — diesen Pfad
+  löst nur Vite auf. `npm run build` läuft mit, die Suiten sehen den Dev-Stand.
+
 ## Google Maps: was geht und was nicht
 
 Gefragt war eine Schnittstelle, die die Karte in der Maps-App automatisch aktuell
@@ -325,6 +442,7 @@ npm run test:plan        # Tagesplan: Etappen, Buchungshaken, Chipzahlen
 npm run test:buch        # Freundebuch, angemeldet
 npm run test:tagebuch    # die öffentliche Gästeansicht
 npm run test:maps        # Tagesroute als Maps-Link, KML aus dem Live-Stand
+npm run wache:daten      # nur die Ortsdaten — ohne Netz, ohne Browser, in Sekunden
 ```
 
 Die Browsertests laufen mit Playwright im iPhone-13-Format gegen den Dev-Server.

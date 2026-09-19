@@ -1,0 +1,212 @@
+# Der Wächter über Karte und Orte.
+#
+# Bis hierher lief keine einzige Prüfung dieses Projekts automatisch. `deploy.yml`
+# sah nach, ob die Supabase-Secrets gesetzt sind, und baute dann — mit dem
+# Kommentar „Die Browsertests laufen beim Entwickeln, nicht hier."
+#
+# Das ist nicht theoretisch schiefgegangen. In einer einzigen Sitzung sind zwei
+# Regressionen entstanden: Der erste Ort auf der Orte-Seite rutschte von 326 px auf
+# 454 px und damit unter die Falzkante, und zwei Routenknöpfe im Tagesplan standen
+# 6 px auseinander. **Beide haben nur angeschlagen, weil die Suiten von Hand
+# gestartet wurden.** Ohne das wären sie deployt.
+#
+# Dazu die Grundregel des Projekts, die in `PRUEFLISTE.md` steht: Auf der Reise ist
+# ein falsch markierter Ort schlimmer als ein fehlender.
+#
+# Eigene Datei und nicht in `deploy.yml` hineingeschrieben, aus zwei Gründen: Sie
+# kann über `workflow_call` als Tor vor den Deploy gehängt werden, und sie läuft
+# auch auf einem Pull Request, wo nichts veröffentlicht werden soll.
+
+name: Wache
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  # Damit `deploy.yml` diesen Lauf als Bedingung davorschalten kann.
+  workflow_call:
+  # Damit man ihn ohne neuen Commit wiederholen kann.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wache-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Ausdrücklich **keine** Supabase-Variablen.
+    #
+    # Das ist keine Vergesslichkeit, sondern Bedingung: Drei Suiten prüfen den
+    # Zustand *ohne* Verbindung. `browser-tagebuch.mjs` erwartet den Kasten „keine
+    # Verbindung" und dort das LoginPanel; mit gesetzten Secrets stünde etwas
+    # anderes da, und die Suiten würden rot, obwohl die Anwendung richtig arbeitet.
+    # Die 319 Browserprüfungen sind bisher alle ohne Supabase grün gelaufen — es
+    # gibt in der Entwicklungsumgebung gar keine `.env`.
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v7
+
+      - name: Node einrichten
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Abhängigkeiten installieren
+        # `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` hier **nicht** setzen: Der Browser wird
+        # gebraucht, und er soll in der Fassung kommen, die zu playwright 1.63 passt.
+        run: npm ci
+
+      # ------------------------------------------------------------------------
+      # Zuerst das Billige. Die Ortsdatenprüfung braucht kein Netz, keinen Browser
+      # und läuft in Sekunden. Ist eine Koordinate kaputt, erfährt man das nach
+      # einer halben Minute und nicht nach sechs.
+      # ------------------------------------------------------------------------
+
+      - name: Ortsdaten auf Plausibilität prüfen
+        run: npm run wache:daten
+
+      - name: Typen prüfen
+        # `|| true` steht hier **nicht**. Wenn die Typen nicht stimmen, ist Schluss.
+        run: npx tsc --noEmit
+
+      - name: Vitest
+        run: npm test
+
+      - name: Astro-Seite bauen
+        # Die einzige Stelle, die den ausgelieferten Stand anfasst. Die
+        # Browsersuiten laufen gegen den Dev-Server (siehe unten) und sehen ihn
+        # nicht — was nur beim Bauen auffällt, fällt hier auf.
+        run: npm run build
+
+      # ------------------------------------------------------------------------
+      # Ab hier der Browser.
+      # ------------------------------------------------------------------------
+
+      - name: Chromium aus dem Zwischenspeicher
+        id: pwcache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          # Der Schlüssel hängt an der Playwright-Fassung: Eine neue Fassung
+          # erwartet eine neue Chromium-Revision, ein Treffer auf den alten
+          # Schlüssel würde die falsche liefern — und der Fehler sähe dann aus wie
+          # ein Fehler der Anwendung.
+          key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Chromium installieren
+        # `--with-deps` holt die Systembibliotheken, die Chromium auf einem nackten
+        # Runner fehlen. Auch bei einem Cache-Treffer aufrufen: Der Zwischenspeicher
+        # enthält den Browser, nicht die apt-Pakete.
+        run: npx playwright install --with-deps chromium
+
+      - name: Dev-Server starten
+        id: devserver
+        # Es muss der **Dev**-Server sein, nicht `astro preview`: Sechs der zehn
+        # Suiten rufen im Browser `await import('/src/lib/store.svelte.ts')` auf, um
+        # den Plan direkt zu setzen. Diesen Pfad löst nur Vite im Dev-Modus auf; im
+        # statischen Build gibt es ihn nicht.
+        #
+        # Gewartet wird auf **Bereitschaft**, nicht auf eine Uhr: Ein `sleep 10`
+        # ist auf einem ausgelasteten Runner zu kurz und auf einem leeren
+        # Zeitverschwendung.
+        #
+        # Kein `&` und keine PID-Datei, und das ist nachgemessen: Astro 7 startet
+        # den Dev-Server als **Hintergrunddienst** und kehrt von selbst zurück
+        # (`astro dev status` nennt ihn „background"). Er überlebt damit die
+        # Schrittgrenze, was hier geprüft ist — ein Aufruf in einer neuen Shell
+        # erreicht ihn. Ein `&` hätte einen Vordergrundprozess vermutet, den es
+        # nicht gibt, und `echo $!` hätte die PID der Hülle gemeldet statt die des
+        # Dienstes: eine Zahl, die aussieht wie eine Auskunft und keine ist.
+        #
+        # Nebenbei: Läuft schon ein Dev-Server, startet `astro dev` **keinen
+        # zweiten** — auch nicht auf einem anderen Port. Auf einem frischen Runner
+        # kein Thema; beim Nachfahren auf dem eigenen Rechner schon, und genau
+        # daran ist diese Zeile beim Erproben zuerst gescheitert.
+        run: |
+          npx astro dev --port 4322 > /tmp/dev.log 2>&1
+          for i in $(seq 1 90); do
+            curl -sf -o /dev/null http://localhost:4322/Japan/plan/ && break
+            sleep 1
+          done
+          # Die zweite Abfrage ist der eigentliche Punkt. Ohne sie läuft die
+          # Schleife bei einem kaputten Server neunzig Mal durch, und die Suiten
+          # melden danach zwanzig sinnlose Fehler statt der einen wahren Ursache.
+          if ! curl -sf -o /dev/null http://localhost:4322/Japan/plan/; then
+            echo "::error::Der Dev-Server ist nach 90 Sekunden nicht erreichbar."
+            cat /tmp/dev.log
+            exit 1
+          fi
+          echo "Dev-Server steht."
+
+      # Jede Suite ein eigener Schritt, und jede läuft auch dann, wenn eine vorige
+      # rot war.
+      #
+      # `npm run test:all` verkettet mit `&&` und bricht beim ersten Fehlschlag ab.
+      # Für das Entwickeln ist das richtig; hier nicht: Man will alle Ergebnisse
+      # eines Laufs auf einmal sehen, sonst braucht man pro Fehler einen Lauf, und
+      # das sind fünf Minuten je Fehler.
+      #
+      # Die Bedingung ist deshalb **nicht** `always()`, obwohl das der erste Entwurf
+      # war. `always()` hätte die zehn Suiten auch dann gestartet, wenn der
+      # Dev-Server nicht hochgekommen oder `npm ci` gescheitert ist — dann melden
+      # sie zwanzig Verbindungsfehler und verdecken die eine wahre Ursache. Genau
+      # das, wogegen die Bereitschaftsprüfung oben gebaut ist.
+      #
+      # Also: weiterlaufen, solange der Lauf nicht abgebrochen wurde **und** der
+      # Server wirklich steht. Was davor rot war, hält den Lauf trotzdem rot — das
+      # entscheidet GitHub am Ende, nicht diese Bedingung.
+
+      - name: Orte
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-orte.mjs
+
+      - name: Karte
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-karte.mjs
+
+      - name: Suche
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-suche.mjs
+
+      - name: Korrekturen
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-korrekturen.mjs
+
+      - name: Reiseband
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-reiseband.mjs
+
+      - name: Tagesplan
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-plan.mjs
+
+      - name: Freundebuch
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-freundebuch.mjs
+
+      - name: Gästeansicht
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-tagebuch.mjs
+
+      - name: Google-Anbindung
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-maps.mjs
+
+      - name: Bildwahl
+        if: ${{ !cancelled() && steps.devserver.outcome == 'success' }}
+        run: node test/browser-bild.mjs
+
+      - name: Log des Dev-Servers bei einem Fehlschlag
+        # Ein Wächter, der nur „rot" sagt, kostet einen zweiten Lauf zum Nachsehen.
+        if: failure()
+        run: |
+          echo "--- /tmp/dev.log ---"
+          cat /tmp/dev.log || echo "(kein Log)"

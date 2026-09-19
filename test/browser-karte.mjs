@@ -27,7 +27,7 @@
 
 import { chromium, devices } from 'playwright';
 
-const BASIS = process.env.DEV ?? process.env.BASIS ?? 'http://localhost:4322/Japan';
+import { BASIS, KACHELHOSTS, START } from './browserlauf.mjs';
 
 let fehler = 0;
 const pruefe = (bedingung, text, zusatz = '') => {
@@ -39,8 +39,40 @@ const pruefe = (bedingung, text, zusatz = '') => {
 };
 
 const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM ?? '/opt/pw-browsers/chromium',
+  ...START,
 });
+
+/**
+ * Die Kachelhosts abschalten — **erzwungen, nicht vorgefunden**.
+ *
+ * Bis hierher hat diese Datei sich darauf verlassen, dass der Egress-Proxy dieser
+ * Umgebung jeden Kachelhost sperrt. Das stimmt hier, und es war der Grund, warum
+ * der Fehlerfall überhaupt beweisbar ist. Es ist aber eine Eigenschaft des
+ * **Sandkastens** und keine der Prüfung.
+ *
+ * Seit der Wächter dieselbe Suite auf einem GitHub-Runner startet, ist das ein
+ * Fehler: Dort ist das Netz frei, die Kacheln kämen an, der Hinweis verschwände
+ * planmäßig — und die Suite würde rot, **obwohl alles richtig ist**. Da rot den
+ * Deploy blockiert, hätte eine harmlose Textänderung dann an einer korrekt
+ * arbeitenden Karte gehangen. Ein Wächter, der bei richtigem Verhalten anhält, ist
+ * schlimmer als keiner.
+ *
+ * Also wird die Bedingung hergestellt. `r.abort()` liefert einen Netzfehler, und
+ * das ist genau, was Leaflet und MapLibre hier sehen sollen — derselbe Zustand an
+ * beiden Orten, und die Aussage der Prüfung ist danach an beiden dieselbe.
+ *
+ * Die Hostliste steht in `browserlauf.mjs`, weil sie mit `MapView.svelte` und
+ * `karte.ts` übereinstimmen muss. Kommt dort ein Host dazu und hier nicht, stellt
+ * diese Funktion den Fehlerfall nur halb her — und das fiele **hier** nicht auf,
+ * weil der Proxy den Rest weiter erledigt. Deshalb zählt sie mit, wie oft sie
+ * zugeschlagen hat.
+ */
+async function kachelnSperren(ctx, zaehler) {
+  await ctx.route(KACHELHOSTS, (route) => {
+    zaehler.push(route.request().url());
+    return route.abort();
+  });
+}
 
 /** Welche Kartendienste die Seite anspricht — daran hängt die Host-Aussage. */
 function beobachte(seite, eimer) {
@@ -53,6 +85,8 @@ function beobachte(seite, eimer) {
 // =================================================== 1) Orte-Seite, Handy ======
 
 const ctx = await browser.newContext({ ...devices['iPhone 13'] });
+const gesperrt = [];
+await kachelnSperren(ctx, gesperrt);
 const seite = await ctx.newPage();
 const angefragt = [];
 beobachte(seite, angefragt);
@@ -156,6 +190,20 @@ pruefe(
   hosts.join(' · '),
 );
 
+/*
+ * Und die Sperre selbst. Ohne diese Zusicherung wüsste ich nicht, ob `route()`
+ * überhaupt greift oder ob weiterhin bloß der Proxy dieser Umgebung die Arbeit
+ * tut — hier sähe beides identisch aus, und auf einem Runner mit freiem Netz wäre
+ * die Suite dann rot, ohne dass hier jemals etwas aufgefallen wäre. Genau die
+ * Sorte Prüfung, die man vergisst: Sie bewacht nicht die Anwendung, sondern die
+ * Voraussetzung der anderen Prüfungen.
+ */
+pruefe(
+  gesperrt.length > 0,
+  'die Kachelsperre hat wirklich zugeschlagen — der Fehlerfall ist hergestellt, nicht geerbt',
+  `${gesperrt.length} Anfragen abgebrochen`,
+);
+
 // ================================================ 2) Der Rasterrückfall =======
 
 /*
@@ -169,10 +217,12 @@ pruefe(
  */
 console.log('\nOhne WebGL greift der Rasterrückfall:');
 const ohneGl = await chromium.launch({
-  executablePath: process.env.CHROMIUM ?? '/opt/pw-browsers/chromium',
+  ...START,
   args: ['--disable-webgl', '--disable-webgl2', '--disable-gpu'],
 });
 const ctx2 = await ohneGl.newContext({ ...devices['iPhone 13'] });
+const gesperrt2 = [];
+await kachelnSperren(ctx2, gesperrt2);
 const s2 = await ctx2.newPage();
 const angefragt2 = [];
 beobachte(s2, angefragt2);

@@ -49,10 +49,24 @@ const erledigteUnterkuenfte = alleOrte.filter((p) => p.uebernachtung === 'vorsch
         <h3>Nummern wie im Buch</h3>
         <p>
           Jeder Ort trägt dieselbe Nummer wie im Reiseband — von 1 in Osaka bis 164 in Tokio. Selbst
-          ergänzte zählen ab 165 weiter, damit die gedruckten Nummern gültig bleiben. Die <a
-            href={asset(trip.kmlFile)}
-            download>KML-Datei</a
-          > lässt sich zusätzlich in Google Maps laden.
+          ergänzte zählen ab 165 weiter, damit die gedruckten Nummern gültig bleiben.
+        </p>
+      </section>
+
+      <section>
+        <h3>Zwei Wege nach Google My Maps</h3>
+        <p>
+          Der Knopf <b>„KML für Google My Maps"</b> direkt über diesem Kasten erzeugt die Datei aus dem
+          <b>aktuellen</b> Stand: mit euren Korrekturen und eigenen Orten, ohne die
+          ausgeblendeten, mit Reisetag je Ort. Die <a href={asset(trip.kmlFile)} download
+            >ursprüngliche KML-Datei</a
+          > ist dagegen der unveränderte Export von damals — 164 Orte, sonst nichts.
+        </p>
+        <p>
+          Eine <b>automatische</b> Anbindung an die Google-Maps-App gibt es nicht: Google
+          hat keine Schnittstelle zum Schreiben in My Maps oder in die gespeicherten
+          Listen. Ein Import <b>ergänzt</b> eine Ebene und aktualisiert keine bestehende —
+          die alte müsst ihr in My Maps selbst löschen.
         </p>
       </section>
     </div>

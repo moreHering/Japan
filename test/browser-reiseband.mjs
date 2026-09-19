@@ -318,11 +318,28 @@ pruefe(
 await seite.goto(`${BASIS}/orte/`, { waitUntil: 'load' });
 await seite.waitForTimeout(700);
 const kml = seite.locator('a[href$=".kml"][download]');
-pruefe((await kml.count()) === 1, 'der KML-Download steht genau einmal auf der Orte-Seite',
+pruefe((await kml.count()) === 1, 'die statische KML steht genau einmal auf der Orte-Seite',
   `${await kml.count()}`);
 // Er stand vorher **nur** in der entfernten Section — repoweit die einzige Stelle,
 // die `trip.kmlFile` verlinkt. Ohne diese Prüfung wäre die Datei von nirgends mehr
 // erreichbar gewesen, und kein Test hätte angeschlagen.
+
+/*
+ * Seit dem Google-Export gibt es **zwei** KML-Wege, und die Prüfung oben trifft nur
+ * den einen: Der neue Knopf ist ein `<button>` mit Blob-URL und fällt nicht unter
+ * `a[href$=".kml"][download]`. Dass die „genau einmal"-Zusicherung dadurch stehen
+ * blieb, ist Glück und keine Absicht — also wird der zweite Weg hier ausdrücklich
+ * mitgezählt, statt sich darauf zu verlassen.
+ *
+ * Die zwei sind nicht dasselbe: Der Link gibt den ursprünglichen My-Maps-Export
+ * (bytegleich mit `data/source/`), der Knopf euren aktuellen Stand mit Korrekturen
+ * und eigenen Orten. Was die Datei enthält, prüft `browser-maps.mjs`; hier geht es
+ * nur darum, dass beide Wege da sind und man sie unterscheiden kann.
+ */
+pruefe(
+  (await seite.locator('.kmlzeile button').count()) === 1,
+  'und der Knopf für den Live-Stand steht als zweiter Weg daneben',
+);
 pruefe(
   (await seite.locator('.lesehinweis').count()) === 1,
   'und die zwei Erklärtexte sind dort gelandet',
@@ -337,6 +354,23 @@ pruefe(zu < 70, 'zugeklappt kostet er kaum Höhe', `${zu} px`);
 await seite.locator('.lesehinweis summary').tap();
 await seite.waitForTimeout(300);
 const offen = (await seite.locator('.lesehinweis').innerText()).replace(/\s+/g, ' ');
+
+/*
+ * Der Unterschied zwischen den zwei KML-Wegen, und zwar **hier** geprüft und nicht
+ * oben: Der Erklärtext steht im `<details>`, und `innerText` gibt bei zugeklapptem
+ * Kasten nur die Zusammenfassung her. Die erste Fassung dieser Prüfung stand vor
+ * dem `tap()` und hätte über einen leeren Text geurteilt — dieselbe Falle, die
+ * weiter unten schon einen Kommentar hat.
+ */
+const kmlTexte = `${offen} ${(await seite.locator('.kmlzeile').innerText()).replace(/\s+/g, ' ')}`;
+pruefe(
+  /ursprünglich|unverändert/i.test(kmlTexte) && /aktuell/i.test(kmlTexte),
+  'der Text sagt, welcher der zwei KML-Wege welcher ist',
+);
+pruefe(
+  /Korrektur/i.test(kmlTexte) && /eigene/i.test(kmlTexte),
+  'und woran man den Live-Stand erkennt',
+);
 // Groß-klein-unempfindlich: Die Überschrift trägt `text-transform: uppercase`,
 // und `innerText` gibt den **gerenderten** Text — also „NUMMERN WIE IM BUCH".
 pruefe(/nummern wie im buch/i.test(offen), 'aufgeklappt steht die Erklärung zu den Nummern da');

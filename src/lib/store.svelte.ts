@@ -582,6 +582,19 @@ export function importJson(text: string): { ok: boolean; error?: string } {
       plan.packingExtra = next.packingExtra;
       plan.expenses = next.expenses;
       plan.customPlaces = next.customPlaces;
+      /*
+       * `korrekturen` fehlte hier.
+       *
+       * `exportJson()` schreibt sie mit (`...plan`), der Import übernahm sie
+       * nicht — ein Export-Import-Umlauf verlor also **jede** Ortskorrektur, und
+       * zwar stillschweigend: Die Datei enthielt sie, der Plan danach nicht mehr.
+       * Aufgefallen beim Erweitern des Exports, nicht durch eine Meldung.
+       *
+       * Für eine Reise ist das der teure Fall: Eine korrigierte Koordinate ist der
+       * Unterschied zwischen dem richtigen Laden und einem Punkt zwei Straßen
+       * weiter, und wer eine Sicherung zurückspielt, erwartet sie zurück.
+       */
+      plan.korrekturen = next.korrekturen;
     },
     { art: 'alles' },
   );
@@ -599,6 +612,17 @@ export function resetAll() {
       plan.packingExtra = fresh.packingExtra;
       plan.expenses = fresh.expenses;
       plan.customPlaces = fresh.customPlaces;
+      /*
+       * `korrekturen` fehlte hier genauso wie im Import — derselbe Fehler zweimal,
+       * gefunden durch die Prüfung, die den Umlauf nachstellt.
+       *
+       * Folge war: „Alles zurücksetzen" ließ jede Ortskorrektur stehen. Ein
+       * ausgeblendeter Ort blieb ausgeblendet, eine verschobene Koordinate blieb
+       * verschoben, und der Knopf behauptete das Gegenteil. Bei einem Knopf, der
+       * „alles" verspricht, ist das der schlimmere Fall von beiden: Man drückt ihn
+       * gerade dann, wenn man einen sauberen Anfang braucht.
+       */
+      plan.korrekturen = fresh.korrekturen;
     },
     { art: 'alles' },
   );

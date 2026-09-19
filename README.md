@@ -191,6 +191,63 @@ zuverlässig prüfbar — `npm run test:karte`. Umgekehrt lässt sich von hier *
 zeigen, dass Kacheln ankommen oder in welcher Sprache sie beschriftet sind. Das
 sieht nur ein Gerät mit freiem Netz.
 
+## Google Maps: was geht und was nicht
+
+Gefragt war eine Schnittstelle, die die Karte in der Maps-App automatisch aktuell
+hält. **Die gibt es nicht.** Google hat keine Schreib-Schnittstelle für My Maps —
+die Maps Engine API, die das konnte, wurde Anfang 2016 abgeschaltet —, und für die
+gespeicherten Listen in der App hat es nie eine gegeben. Niemand kann Orte in eine
+fremde Maps-App schreiben. Was es gibt, sind **Maps URLs**: dokumentiert,
+kostenlos, ohne Schlüssel, und sie öffnen auf dem Telefon die App.
+
+Daraus sind zwei Wege gebaut, und beide sind manuell — das ist die Grenze, nicht
+eine Bequemlichkeit:
+
+**1. Die Tagesroute als Link** (`src/lib/mapsexport.ts`, `routenLinks()`). Im
+Tagesplan stehen an jedem Tag mit mindestens zwei Orten zwei Links, „zu Fuß" und
+„ÖPNV" — in Japan ist der zweite meist der richtige. Sie öffnen Googles
+`dir`-Endpunkt mit den geplanten Orten in der geplanten Reihenfolge.
+
+- **Geteilt bei langen Tagen.** Das URL-Format nimmt neun Zwischenziele, also elf
+  Halte je Link. Ein Tag mit vierzehn Orten wird zu „Teil 1 / Teil 2", und die
+  Teile **überlappen**: Der letzte Halt von Teil 1 ist der Start von Teil 2. Ohne
+  diese Überlappung fehlte genau das Wegstück dazwischen — eine Lücke, die man
+  erst merkt, wenn man davorsteht. Die Neun steht als `MAX_ZWISCHENZIELE` an einer
+  Stelle; sie ist aus dem Gedächtnis, weil der Proxy dieser Umgebung Google
+  vollständig sperrt, und wenn sie falsch ist, ist dort die einzige Zeile.
+- **Nur Koordinaten, keine `place_id`.** Googles `waypoint_place_ids` verlangt
+  genauso viele Einträge wie `waypoints`; eigene Orte haben nie eine, Nr. 98
+  („Ashinoko Club") auch nicht. Eine Liste mit Lücken würde Google verwerfen oder
+  die Reihenfolge verschieben. Für einen **einzelnen** Ort nimmt `maps()` in
+  `paths.ts` die `placeId` weiterhin mit — dort ist sie richtig.
+
+**2. Eine KML aus dem aktuellen Stand** (`kml()`, Knopf auf `/orte/`). Der
+Unterschied zur verlinkten `public/Japan-Karte-2026.kml` ist der ganze Zweck: Die
+statische Datei ist bytegleich mit dem ursprünglichen My-Maps-Export und kennt
+**keinen** eigenen Ort, keine Korrektur und keine Ausblendung. Die erzeugte kennt
+alle drei. Gegliedert nach Station als `<Folder>`, dazu `<ExtendedData>` mit `nr`,
+`station`, `kategorie`, `reisetag`, `freundestipp`, `buch`, `schliesstag` — Google
+Earth achtet auf die Ordner, My Maps flacht beim Import ab und färbt über eine
+Spalte, deshalb beides. Ein Import in My Maps **ergänzt** eine Ebene; die alte muss
+dort gelöscht werden.
+
+**Zwei Umkehrungen, an denen man sich schneidet**, und beide werden in vitest in
+beide Richtungen geprüft: Maps-URLs wollen `lat,lng`, KML will `lng,lat`. Und CSS
+ist `#rrggbb`, KML ist `aabbggrr` — Alpha vorn, Rot und Blau getauscht. Ein
+verdrehtes Paar sieht plausibel aus und landet im Meer vor Somalia; ein
+verdrehtes Zinnoberrot wird blau.
+
+**Was von hier aus nicht prüfbar ist und deshalb nicht behauptet wird:** dass
+Google die URLs annimmt und die App sich öffnet, dass die Grenze wirklich bei neun
+Zwischenzielen liegt, und wie My Maps den Import darstellt. Der Proxy sperrt Google
+vollständig — dieselbe Sperre wie bei den Kachelhosts. Prüfbar ist restlos, was
+**vor** dem Absenden passiert, und das prüft `npm run test:maps`: Anzahl der Links,
+Reihenfolge und Koordinatenrichtung der Halte, die Naht zwischen den Teilen, und
+dass die erzeugte KML den eigenen Ort enthält und den ausgeblendeten nicht.
+
+**Am Telefon abzunehmen:** ein Tagesroutenlink öffnet die Maps-App mit der
+richtigen Reihenfolge, und die erzeugte KML importiert in My Maps ohne Fehler.
+
 ## Wo etwas steht — und warum dort
 
 Die Startseite trug unter dem Reiseband einmal drei Zusammenfassungsblöcke. Zwei
@@ -267,6 +324,7 @@ npm run test:band        # das Reiseband auf der Startseite
 npm run test:plan        # Tagesplan: Etappen, Buchungshaken, Chipzahlen
 npm run test:buch        # Freundebuch, angemeldet
 npm run test:tagebuch    # die öffentliche Gästeansicht
+npm run test:maps        # Tagesroute als Maps-Link, KML aus dem Live-Stand
 ```
 
 Die Browsertests laufen mit Playwright im iPhone-13-Format gegen den Dev-Server.

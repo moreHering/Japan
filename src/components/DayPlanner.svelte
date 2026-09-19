@@ -31,6 +31,13 @@
     toggleBooking,
   } from '../lib/store.svelte';
   import bookingsData from '../data/bookings.json';
+  /*
+   * Routenlinks stehen in `src/lib/mapsexport.ts` und nicht hier: ohne DOM, also
+   * in vitest beweisbar. Aus dieser Umgebung ist Google gar nicht erreichbar —
+   * dass eine URL die App öffnet, kann ich nie prüfen; dass sie richtig gebaut
+   * ist, schon.
+   */
+  import { HALTE_JE_LINK, routenLinks } from '../lib/mapsexport';
 
   type Props = { places: Place[] };
   let { places }: Props = $props();
@@ -176,6 +183,31 @@
   );
 
   /**
+   * Die Orte des Tages als Route in der Google-Maps-App.
+   *
+   * Warum das überhaupt der Weg ist: Google hat **keine** Schreib-Schnittstelle
+   * für My Maps oder die gespeicherten Listen — die Maps Engine API, die das
+   * konnte, ist seit Anfang 2016 abgeschaltet. Was es gibt, sind Maps-URLs, und
+   * die öffnen auf dem Telefon die App. Also: hier planen, mit Maps laufen.
+   *
+   * Eine **Liste** von Links, weil Googles Format maximal neun Zwischenziele
+   * nimmt (siehe `HALTE_JE_LINK` in `mapsexport.ts`). Ein Tag mit vierzehn Orten
+   * braucht zwei, und sie überlappen — sonst fehlte das Wegstück zwischen Teil 1
+   * und Teil 2.
+   *
+   * Steht **hinter** `currentPlaces` und nicht davor: `$derived` ist faul, davor
+   * liefe es auch, aber nur solange niemand die Ableitung früher liest — und dann
+   * mit einem Fehler, der nach einem Svelte-Problem aussieht statt nach einer
+   * Reihenfolge. Dieselbe Falle wie bei `legBuchung` weiter oben.
+   */
+  let routeZuFuss = $derived(routenLinks(currentPlaces, 'walking'));
+  let routeOepnv = $derived(routenLinks(currentPlaces, 'transit'));
+
+  /** Wie viele Halte ein Teillink abdeckt — für die Beschriftung „Teil 1 (11)". */
+  const halteImTeil = (i: number, gesamt: number) =>
+    Math.min(HALTE_JE_LINK, gesamt - i * (HALTE_JE_LINK - 1));
+
+  /**
    * Der eigentliche Nutzen gegenüber einer Papierliste: sagt, wenn ein
    * eingeplanter Ort an diesem Wochentag geschlossen ist.
    */
@@ -289,6 +321,55 @@
           </button>
         </div>
       </header>
+
+      <!--
+        Die Tagesroute in der Google-Maps-App.
+
+        Zwei Links statt eines Schalters mit gemerktem Modus: In Japan ist der
+        ÖPNV meist richtig, innerhalb eines Viertels der Fußweg — und zwei Links
+        sind billiger als ein Zustand, den man erst verstehen muss.
+
+        Nichts davon erscheint bei weniger als zwei Orten. Eine Route mit einem
+        Punkt ist keine, und ein Knopf, der nichts tut, ist schlimmer als keiner.
+      -->
+      {#if routeZuFuss.length}
+        <div class="mapsroute">
+          <span class="mrtitel">In Google Maps öffnen</span>
+          {#each routeZuFuss as url, i (url)}
+            <a
+              class="btn small ghost"
+              href={url}
+              target="_blank"
+              rel="noopener"
+              title={`${halteImTeil(i, currentPlaces.length)} Halte, zu Fuß`}
+            >
+              {routeZuFuss.length > 1 ? `zu Fuß · Teil ${i + 1}` : 'zu Fuß'}
+            </a>
+          {/each}
+          {#each routeOepnv as url, i (url)}
+            <a
+              class="btn small ghost"
+              href={url}
+              target="_blank"
+              rel="noopener"
+              title={`${halteImTeil(i, currentPlaces.length)} Halte, mit ÖPNV`}
+            >
+              {routeOepnv.length > 1 ? `ÖPNV · Teil ${i + 1}` : 'ÖPNV'}
+            </a>
+          {/each}
+          {#if routeZuFuss.length > 1}
+            <!--
+              Der Grund für die Teilung gehört dazu, sonst sieht es nach einem
+              Fehler aus: Googles URL-Format nimmt nicht mehr Halte. Die Teile
+              überlappen an einem Ort, damit kein Wegstück fehlt.
+            -->
+            <span class="mrhinweis">
+              {currentPlaces.length} Orte — Googles Linkformat trägt {HALTE_JE_LINK} je
+              Route, die Teile überlappen an einem Ort.
+            </span>
+          {/if}
+        </div>
+      {/if}
 
       {#if current.leg}
         <div class="note leg">
@@ -699,6 +780,50 @@
   .note span {
     color: var(--ai-60);
     font-size: 0.82rem;
+  }
+
+  /* --------------------------------------------------- Route in Google Maps ---
+
+     Die Zeile steht direkt unter dem Tageskopf, vor allem anderen: Am Morgen ist
+     „öffne den Tag in Maps" die erste Handlung, nicht die letzte. */
+  .mapsroute {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    /*
+     * Der Abstand ist gemessen und nicht geraten: Mit `gap: 6px` standen „zu Fuß"
+     * und „ÖPNV" sechs Pixel auseinander, jeder 38 px hoch. Das sind die zwei
+     * Knöpfe, die man an einer Straßenecke einhändig drückt, oft mit Gepäck — ein
+     * Fehlgriff öffnet die falsche Verkehrsart. 10 px Abstand und 44 px Höhe sind
+     * die Ausnahme von der projektweiten 36-px-Vorgabe für `.btn.small`
+     * (`tokens.css:318`), und zwar genau hier, weil hier unterwegs getippt wird.
+     */
+    gap: 8px 10px;
+    margin-bottom: 10px;
+  }
+
+  .mapsroute a.btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .mrtitel {
+    font-family: var(--util);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ai-40);
+    margin-right: 2px;
+  }
+
+  .mrhinweis {
+    /* Volle Breite: Der Satz erklärt die Teilung und darf nicht zwischen zwei
+       Knöpfe gequetscht werden, wo ihn niemand liest. */
+    flex: 1 0 100%;
+    font-size: 0.78rem;
+    color: var(--ai-60);
+    line-height: 1.45;
   }
 
   /* ------------------------------------------------------------- Umzugstag ---

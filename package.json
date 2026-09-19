@@ -14,7 +14,7 @@
     "db:dashboard": "node scripts/migration-fuer-dashboard.mjs",
     "test:browser": "node test/browser-orte.mjs",
     "test:karte": "node test/browser-karte.mjs",
-    "test:all": "vitest run && node test/browser-orte.mjs && node test/browser-karte.mjs && node test/browser-suche.mjs && node test/browser-korrekturen.mjs && node test/browser-reiseband.mjs && node test/browser-plan.mjs && node test/browser-freundebuch.mjs && node test/browser-tagebuch.mjs",
+    "test:all": "vitest run && node test/browser-orte.mjs && node test/browser-karte.mjs && node test/browser-suche.mjs && node test/browser-korrekturen.mjs && node test/browser-reiseband.mjs && node test/browser-plan.mjs && node test/browser-freundebuch.mjs && node test/browser-tagebuch.mjs && node test/browser-maps.mjs",
     "test:bild": "node test/browser-bild.mjs",
     "test:suche": "node test/browser-suche.mjs",
     "test:korrekturen": "node test/browser-korrekturen.mjs",
@@ -24,7 +24,8 @@
     "test:tagebuch": "node test/browser-tagebuch.mjs",
     "pruefliste": "node scripts/pruefliste.mjs",
     "db:workflow": "supabase/test/workflow-probe.sh",
-    "db:regionen": "supabase/test/regionssuche-probe.sh"
+    "db:regionen": "supabase/test/regionssuche-probe.sh",
+    "test:maps": "node test/browser-maps.mjs"
   },
   "dependencies": {
     "@astrojs/svelte": "^9.0.1",

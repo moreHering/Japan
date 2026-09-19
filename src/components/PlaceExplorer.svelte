@@ -46,6 +46,12 @@
     istKorrigiert,
     ortVerstecken,
   } from '../lib/store.svelte';
+  /*
+   * Die KML-Erzeugung steht in `src/lib/mapsexport.ts` und nicht hier: ohne DOM,
+   * also in vitest beweisbar — und aus dieser Umgebung ist My Maps ohnehin nicht
+   * erreichbar, ich kann über den Import dort nichts prüfen.
+   */
+  import { kml, kmlDateiname } from '../lib/mapsexport';
 
   type Props = { places: Place[] };
   let { places }: Props = $props();
@@ -60,6 +66,38 @@
    * mehr gelesen — Korrekturen stecken im Plan, nicht im Build.
    */
   let alle = $derived<Place[]>(sichtbareOrte());
+
+  /**
+   * Die Orte als KML herunterladen, zum Importieren in Google My Maps.
+   *
+   * **Warum es keine echte Schnittstelle ist, und das gehört an die Oberfläche:**
+   * Google bietet keinen Weg, My Maps von außen zu füllen — die Maps Engine API
+   * ist seit Anfang 2016 abgeschaltet. Ein Import ist der einzige Weg, und er
+   * **ergänzt** eine Ebene, er aktualisiert keine bestehende. „Immer aktuell"
+   * heißt also: neu importieren und die alte Ebene von Hand löschen.
+   *
+   * Der Unterschied zur statischen `Japan-Karte-2026.kml` ist der ganze Zweck:
+   * Diese hier kommt aus `sichtbareOrte()`, also **mit** euren Korrekturen und
+   * eigenen Orten und **ohne** die ausgeblendeten. Die statische Datei ist der
+   * unveränderte Export von damals und kennt davon nichts.
+   *
+   * Der Reisetag kommt aus dem Plan dazu, damit sich in My Maps nach ihm
+   * gruppieren lässt.
+   */
+  function kmlHerunterladen() {
+    const mitTag = alle.map((p) => ({ ...p, reisetag: dayOfPlace(p.nr) }));
+    const blob = new Blob([kml(mitTag, 'Japan 2026 — Orte')], {
+      // `application/vnd.google-earth.kml+xml` ist der eigentliche Typ; Google My
+      // Maps und Earth erkennen die Datei aber an der Endung, und manche Browser
+      // hängen bei unbekannten Typen ein `.txt` an. Deshalb der schlichte Weg.
+      type: 'application/xml',
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = kmlDateiname(new Date().toISOString());
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
   let versteckt = $derived<Place[]>(versteckteOrte());
 
   const days: TripDay[] = buildDays();
@@ -492,6 +530,7 @@
   </div>
 </div>
 
+
 {#if verstecktOffen && versteckt.length}
   <div class="versteckliste">
     <div class="kopf">
@@ -631,6 +670,36 @@
   </div>
 </div>
 
+<!--
+  Der KML-Download, und die Stelle ist gemessen und nicht gewählt.
+
+  Er stand eine Fassung lang **über** der Liste. Dort war er 128 px hoch — der
+  Hinweistext bricht bei 390 px auf drei Zeilen — und hat den ersten Ort von 326 px
+  auf 454 px geschoben, also unter die Falzkante. `browser-orte.mjs` hat das
+  gemeldet: „Der erste Ort steht ohne Scrollen auf dem Schirm — y = 501 px". Die
+  Liste ist der Zweck dieser Seite; ein Export, den man vor der Reise einmal drückt,
+  darf sie nicht kosten.
+
+  Hier unten steht er dafür direkt über dem `.lesehinweis`-Kasten aus `orte.astro`,
+  und in dem steckt die Verlinkung auf die **statische** KML. Die zwei Wege stehen
+  damit beieinander, und der Text, der ihren Unterschied erklärt, auch.
+
+  Warum nicht in `.row.status`: Diese Zeile trägt `class:zu={!filterOffen}` und ist
+  auf Handybreite per `display: none` versteckt, solange die Filter zu sind — der
+  Knopf wäre dort auf dem Telefon unerreichbar. Warum nicht in `orte.astro` wie der
+  statische Link: Diese Datei kennt den localStorage, sie **muss** aus der Insel
+  kommen.
+-->
+<div class="kmlzeile">
+  <button class="btn small" onclick={kmlHerunterladen}>
+    KML für Google My Maps ({alle.length} Orte)
+  </button>
+  <span class="kmlhinweis">
+    Mit euren Korrekturen und eigenen Orten, ohne die ausgeblendeten. Ein Import in
+    My Maps <b>ergänzt</b> eine Ebene — die alte müsst ihr dort löschen.
+  </span>
+</div>
+
 <style>
   .toolbar {
     display: flex;
@@ -685,6 +754,29 @@
     text-transform: uppercase;
     color: var(--shu);
     align-self: center;
+  }
+
+  /* ------------------------------------------------------------ KML-Download ---
+
+     Eigene Zeile und nicht in der Werkzeugleiste: Die trägt `class:zu` und ist auf
+     dem Handy versteckt, solange die Filter zu sind. */
+  .kmlzeile {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin: 14px 0 0;
+    padding: 12px 14px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+
+  .kmlhinweis {
+    flex: 1 1 260px;
+    font-size: 0.8rem;
+    color: var(--ai-60);
+    line-height: 1.45;
   }
 
   .versteckliste {

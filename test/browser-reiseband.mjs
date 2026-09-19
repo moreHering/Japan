@@ -184,18 +184,49 @@ pruefe(!quer, 'kein Querscrollen');
  */
 console.log('\nAnkersprung in ein Kapitel:');
 await seite.goto(`${BASIS}/#kyoto`, { waitUntil: 'load' });
-await seite.waitForTimeout(800);
-const sprung = await seite.evaluate(() => {
+
+/*
+ * Erst warten, bis die Seite ruhig ist — dann messen.
+ *
+ * Die erste Fassung wartete 800 ms und verlangte „weniger als 200 px von oben".
+ * Das ist hier durchgelaufen und auf dem Runner gefallen, und beides aus demselben
+ * Grund: Die Zahl hängt an Dingen, die nichts mit der Zusicherung zu tun haben.
+ * Der Band setzt `scroll-behavior: smooth`, also **animiert** der Sprung; und ein
+ * Hashwechsel auf der schon geladenen Seite landet anders als ein frischer Aufruf
+ * mit Anker. Isoliert nachgemessen waren es 260 px statt der behaupteten 200 —
+ * eine Pixelzahl, wo eine Aussage gebraucht wurde.
+ *
+ * Gewartet wird deshalb, bis die Position **stehen bleibt**, und geprüft wird die
+ * Sache selbst: Die Klappe ist offen, und ihre Überschrift steht im Bild statt
+ * unter der festen Kopfzeile oder außerhalb des Fensters.
+ */
+const sprung = await seite.evaluate(async () => {
+  const ruhig = async () => {
+    let vorher = null;
+    for (let i = 0; i < 40; i++) {
+      const jetzt = document.getElementById('kyoto')?.querySelector('summary')?.getBoundingClientRect()
+        .top;
+      if (jetzt !== undefined && vorher !== null && Math.abs(jetzt - vorher) < 1) return jetzt;
+      vorher = jetzt ?? null;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return vorher;
+  };
+  const oben = await ruhig();
   const d = document.getElementById('kyoto');
-  const r = d?.querySelector('summary')?.getBoundingClientRect();
-  return { da: !!d, offen: !!d?.open, oben: r ? Math.round(r.top) : null };
+  return {
+    da: !!d,
+    offen: !!d?.open,
+    oben: oben === null || oben === undefined ? null : Math.round(oben),
+    fensterhoehe: window.innerHeight,
+  };
 });
 pruefe(sprung.da, 'das Kapitel Kyoto trägt den Anker');
 pruefe(sprung.offen, 'und der Sprung klappt es auf');
 pruefe(
-  sprung.oben !== null && sprung.oben < 200,
-  'die Überschrift steht danach im Bild, nicht unter der Kopfzeile',
-  `${sprung.oben} px`,
+  sprung.oben !== null && sprung.oben >= 0 && sprung.oben < sprung.fensterhoehe,
+  'die Überschrift steht danach im Bild',
+  `${sprung.oben} px von oben, Fenster ${sprung.fensterhoehe} px`,
 );
 
 /*

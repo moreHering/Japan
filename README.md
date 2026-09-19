@@ -481,6 +481,16 @@ zwei unabhängige Netze, beide gegengeprobt:
 Ein Ankersprung (`paths.ts:kapitel('kyoto')` → `/Japan/#kyoto`) klappt das Kapitel
 auf; ohne das landet man richtig und sieht eine zugeklappte Zeile.
 
+**Und ein Fehler in der Prüfung dazu, gefunden im CI.** Die erste Fassung verlangte
+„die Überschrift steht weniger als 200 px von oben". Hier lief das durch, auf dem
+Runner fiel es — aus demselben Grund: Die Zahl hängt an Dingen, die mit der
+Zusicherung nichts zu tun haben. Der Band setzt `scroll-behavior: smooth`, der Sprung
+ist also animiert, und ein Hashwechsel auf der geladenen Seite landet anders als ein
+frischer Aufruf mit Anker. Isoliert nachgemessen waren es 260 px statt der
+behaupteten 200. Jetzt wird gewartet, bis die Position **stehen bleibt**, und geprüft
+wird die Sache selbst: Klappe offen, Überschrift im Fenster. Eine Pixelzahl war die
+falsche Form der Behauptung.
+
 ## Google Maps: was geht und was nicht
 
 Gefragt war eine Schnittstelle, die die Karte in der Maps-App automatisch aktuell

@@ -215,6 +215,11 @@ kaputte Koordinate nach einer halben Minute auffällt und nicht nach sechs:
    zusammen 327 Prüfungen — jede als eigener Schritt, damit ein Lauf alle
    Ergebnisse zeigt statt nur des ersten Fehlers.
 
+**Gemessen an Lauf 35**, dem ersten grünen: Der Wächter braucht **2 min 48 s**, mit
+Build und Veröffentlichung sind es **3 min 25 s** von Push bis live. Die zehn Suiten
+machen davon 1 min 53 s, Chromium 24 Sekunden, der Dev-Server drei. Im Plan hatte
+ich 4–7 Minuten geschätzt — das war zu pessimistisch.
+
 Die Kehrseite, damit sie nicht überrascht: Ein Fehlschlag blockiert dann auch eine
 harmlose Textänderung. Wer trotzdem veröffentlichen muss, startet `deploy.yml`
 über `workflow_dispatch` von einem Stand, der grün war — nicht indem er das
@@ -287,17 +292,18 @@ danach stehen im Protokoll als `skipped` — `build` übersprungen, `deploy`
   Hintergrunddienst, kehrt nach vier Sekunden mit Exit 0 zurück, und der Dienst
   überlebt die Schrittgrenze; ein `&` wäre überflüssig. **Auf dem Runner hängt
   derselbe Aufruf.** Woran, ist nicht geklärt: `CI=true` erklärt es nicht — damit
-  daemonisiert er hier weiterhin —, und das Protokoll eines laufenden Schrittes gibt
-  GitHub nicht her. Die plausibelste Erklärung ist, dass der Daemon-Start auf eine
-  Bereitschaftsmeldung wartet und die erste Übersetzung auf einem kalten Runner
-  länger dauert.
+  daemonisiert er auch damit. Die Erklärung ist inzwischen **belegt** und nicht mehr
+  vermutet: Auf dem Runner daemonisiert er gar nicht, er bleibt im Vordergrund. Mit
+  `&` war der Server im nächsten Lauf nach **drei Sekunden** erreichbar — es lag also
+  nicht an der Dauer einer kalten Erstübersetzung, wie ich zuerst geschrieben hatte.
 
   Der Punkt ist aber nicht die Erklärung: Die Form mit `&` ist unter **beiden**
   Verhaltensweisen richtig. Daemonisiert er, beendet sich die Hülle sofort und die
   Bereitschaftsprüfung findet den Dienst; bleibt er im Vordergrund, hält der
   Hintergrundprozess ihn am Leben. Eine Messung aus einer Umgebung gegen eine andere
   zu setzen war der Fehler — Robustheit gewinnt gegen die schönere Erklärung. Die
-  Wartezeit steht jetzt bei 180 Sekunden, und bei einem Fehlschlag gibt der Schritt
+  Wartezeit steht bei 180 Sekunden — reine Reserve, gemessen sind es drei —, und bei
+  einem Fehlschlag gibt der Schritt
   `astro dev status` und `astro dev logs` aus, damit der nächste Fall diagnostizierbar
   ist statt nur rot.
 

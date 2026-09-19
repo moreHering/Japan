@@ -136,6 +136,61 @@ Deklarationsblock von `.neu textarea, .neu input` mitgenommen — Rahmen, Polste
 die 16-px-Schrift gegen den iOS-Zoom waren weg, und gültiges CSS blieb es trotzdem.
 Gefunden hat es `npm run test:suche` an der Höhe der Tippziele.
 
+## Die Karte
+
+**Grundkarte: Vektorkacheln von OpenFreeMap, Beschriftung deutsch.** Das ist der
+Grund für den Vektorweg und nicht Geschmack: Bei Rasterkacheln entscheidet der
+Server über die Sprache — der OSM-Standardserver rendert den `name`-Tag, in Japan
+also 大阪 statt Osaka. Bei Vektorkacheln liegt die Beschriftung als Datenfeld vor,
+und `MapView.svelte` setzt sie auf `name:de`, sonst `name:en`, sonst lateinische
+Umschrift. Angewandt über **alle** Ebenen des Stils mit `text-field`, nicht über
+bekannte Ebenennamen: So hält es, wenn der Anbieter seinen Stil umbaut.
+
+**Rasterrückfall auf OSM.** Drei Dinge können den Vektoruntergrund verhindern —
+kein WebGL, der Stil lädt nicht, der Dienst ist aus. In allen drei Fällen entsteht
+die OSM-Rasterebene: dann japanisch beschriftet, aber sichtbar. OpenFreeMap ist
+kostenlos und gibt keine Zusage; für eine Reise, auf der die Karte zählt, wäre ein
+einzelner Anbieter ohne Rückfall die falsche Wahl.
+
+**Preis, gemessen:** Der maplibre-Brocken ist **273 KB gzip** und verdreifacht das
+JavaScript der Anwendung (137 → 412 KB). Er lädt erst, wenn eine Karte erscheint,
+und danach behält ihn der Browser. Stil und Paket werden **gleichzeitig** geholt,
+nicht nacheinander — sonst kostet es unterwegs eine volle Rundreise Wartezeit,
+bevor der Download überhaupt beginnt.
+
+### Wenn keine Kacheln kommen
+
+Vorher passierte dann **nichts**: `L.tileLayer(...)` hatte keinen
+`tileerror`-Zweig, übrig blieb die Hintergrundfarbe des Containers. Auf dem Telefon
+sah das aus wie eine kaputte Karte, und genau so wurde es gemeldet. Eine Karte, die
+nicht sagt, dass ihr der Untergrund fehlt, ist von einer kaputten nicht zu
+unterscheiden.
+
+Jetzt erscheint ein Hinweis, und zwei Dinge daran sind wichtiger als sein Aussehen:
+
+- **Er nennt den Host.** Steht dort `tiles.openfreemap.org`, ist der Dienst aus;
+  steht dort `tile.openstreetmap.org`, ist auch der Rückfall blockiert und die
+  Ursache liegt im Netz oder an einem Inhaltsblocker im Browser. Das ist die
+  Diagnose, die vorher fehlte.
+- **Er blockiert nichts.** `pointer-events: none` am Überzug, nur der Knopf nimmt
+  Tipps an. Marker, Popups und die Liste arbeiten ohne Untergrund weiter, und das
+  steht auch da.
+
+**Eine Falle, die zweimal zuschlägt:** Leaflets `load`-Ereignis feuert, wenn keine
+Kachel mehr *lädt* — auch dann, wenn jede einzelne gescheitert ist. Eine erste
+Fassung hat damit den Hinweis zurückgesetzt, den `tileerror` einen Moment vorher
+gesetzt hatte, und die Karte war wieder stumm grau. Deshalb hängt das Zurücksetzen
+an `tileload`, das je wirklich angekommener Kachel feuert. Gefunden wurde es nicht
+durch Nachdenken, sondern durch eine Spur im Browser: `tileerror gefeuert`, danach
+`load gefeuert, grund war fehler`.
+
+**Diese Umgebung ist für den Fehlerfall der bessere Prüfstand als ein echtes
+Telefon:** Der Egress-Proxy sperrt jeden Kachelhost (gemessen: OSM, CARTO,
+Wikimedia, Esri, OpenFreeMap). „Keine Kacheln" ist hier der Normalzustand, also
+zuverlässig prüfbar — `npm run test:karte`. Umgekehrt lässt sich von hier **nicht**
+zeigen, dass Kacheln ankommen oder in welcher Sprache sie beschriftet sind. Das
+sieht nur ein Gerät mit freiem Netz.
+
 ## Wo etwas steht — und warum dort
 
 Die Startseite trug unter dem Reiseband einmal drei Zusammenfassungsblöcke. Zwei
@@ -205,6 +260,7 @@ npm run test:all  # vitest plus die Browsertests (Dev-Server muss laufen)
 
 # einzeln, wenn nur eine Ansicht betroffen ist:
 npm run test:browser     # Orte und Karte
+npm run test:karte       # Kartenhintergrund: Fehlerfall, Rückfall, Hinweis
 npm run test:suche       # Suche gegen die Filter, Bildwahl
 npm run test:korrekturen # Orte bearbeiten und ausblenden
 npm run test:band        # das Reiseband auf der Startseite

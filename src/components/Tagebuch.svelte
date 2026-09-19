@@ -215,13 +215,18 @@
       <h2><Sticker name="torii" size={24} />Wo wir waren</h2>
       <p class="mini">
         Die gestrichelte Linie ist die <b>geplante</b> Route über die sechs Stationen.
-        Ein Kreis steht für einen Eintrag, nicht für einen Ort — zwei Einträge am
-        selben Ort sind zwei Kreise.
+        Ein Kreis steht für einen Ort; die Zahl dahinter sagt, wie viele Einträge
+        dort geschrieben wurden — alle stehen im Popup.
       </p>
 
       <!--
         `places={[]} visible={[]}`: Damit fallen die 164 Reiseführer-Marker und
         ihre Popups weg. Die Karte zeigt ausschließlich Route und Beiträge.
+
+        Eine Marke je **Ort**, nicht je Beitrag: Zwei Marker auf derselben
+        Koordinate verdecken einander vollständig, und der untere nimmt keine
+        Klicks mehr an. `markenFuer()` bündelt deshalb — siehe den Kopf der
+        Funktion in `src/lib/tagebuch.ts`.
       -->
       <div class="karterahmen">
         <MapView

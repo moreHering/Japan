@@ -13,6 +13,13 @@
   import 'leaflet/dist/leaflet.css';
   import { CATEGORIES, istEigen, plainText, type Category, type Place } from '../lib/places';
   import { maps } from '../lib/paths';
+  /*
+   * Beschriftungslogik und Hostauslesung stehen in `src/lib/karte.ts` und nicht
+   * hier: Ohne DOM und ohne Leaflet sind sie in vitest beweisbar. Aus dieser
+   * Umgebung ist kein Kachelhost erreichbar — was in der Komponente bleibt, kann
+   * ich nur im Fehlerfall prüfen, was dort steht, auch im Gutfall.
+   */
+  import { deutscheNamen, hostVon } from '../lib/karte';
 
   type Props = {
     /** Alle Orte, die die Karte kennen soll. */
@@ -94,6 +101,130 @@
   let linienZug: any = null;
   let markenLayer: any[] = [];
   let ready = $state(false);
+
+  /**
+   * Was mit dem Kartenhintergrund gerade los ist.
+   *
+   * Der Grund, warum es diesen Zustand gibt: Vorher hing hier ein `L.tileLayer`
+   * ohne `tileerror`-Zweig. Wenn Kacheln ausblieben, passierte **nichts** — kein
+   * Hinweis, kein Wiederholen, nur die Hintergrundfarbe des Containers. Eine
+   * Karte, die nicht sagt, dass ihr der Untergrund fehlt, ist von einer kaputten
+   * Karte nicht zu unterscheiden, und genau so ist sie auf dem Telefon
+   * angekommen.
+   */
+  let grund = $state<{ art: 'vektor' | 'raster' | 'fehler'; host: string; warum: string }>({
+    art: 'vektor',
+    host: '',
+    warum: '',
+  });
+  let rasterEbene: any = null;
+  let vektorEbene: any = null;
+
+  const VEKTOR_STIL = 'https://tiles.openfreemap.org/styles/liberty';
+  const RASTER_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  /** Rasterkarte als Rückfall. Sichtbar, aber japanisch beschriftet. */
+  function rasterAnhaengen(warum: string) {
+    rasterEbene = L.tileLayer(RASTER_URL, {
+      maxZoom: 19,
+      // `maxNativeZoom` fehlte: Jenseits von 19 holte Leaflet Kacheln, die es
+      // nicht gibt, und ein 404 ist von „kein Netz" nicht zu unterscheiden —
+      // wieder grau. Mit dieser Grenze skaliert Leaflet die letzte vorhandene.
+      maxNativeZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    });
+    // Erst die Zweige, dann anhängen — sonst entgeht der erste Fehlschlag.
+    rasterEbene.on('tileerror', () => {
+      grund = { art: 'fehler', host: hostVon(RASTER_URL), warum };
+    });
+    /*
+     * `tileload` und **nicht** `load`.
+     *
+     * Gemessen, nicht vermutet: Leaflets `load` feuert, wenn keine Kachel mehr
+     * *lädt* — auch dann, wenn jede einzelne gescheitert ist. Eine erste Fassung
+     * hat damit den Hinweis zurückgesetzt, den `tileerror` einen Moment vorher
+     * gesetzt hatte, und die Karte war wieder stumm grau. Die Spur im Browser
+     * zeigte genau das: `tileerror gefeuert`, danach `load gefeuert, grund war
+     * fehler`.
+     *
+     * `tileload` feuert je Kachel, die wirklich angekommen ist. Genau das ist die
+     * Bedingung, unter der der Hinweis verschwinden darf.
+     */
+    rasterEbene.on('tileload', () => {
+      if (grund.art === 'fehler') grund = { art: 'raster', host: '', warum };
+    });
+    rasterEbene.addTo(map);
+    grund = { art: 'raster', host: '', warum };
+  }
+
+  /**
+   * Grundkarte aufbauen: erst Vektor mit deutscher Beschriftung, bei jedem
+   * Fehlschlag Raster.
+   *
+   * Drei Dinge können den Vektoruntergrund verhindern — kein WebGL, der Stil lädt
+   * nicht, der Dienst ist aus. OpenFreeMap ist kostenlos und gibt keine Zusage;
+   * für eine Reise, auf der die Karte zählt, wäre ein einzelner Anbieter ohne
+   * Rückfall die falsche Wahl.
+   */
+  async function grundkarte() {
+    try {
+      /*
+       * Stil und Paket **gleichzeitig** holen, nicht nacheinander.
+       *
+       * Gemessen: Der maplibre-Brocken ist 273 KB gzip. Ihn erst nach dem
+       * Stil-Abruf anzufordern kostet unterwegs eine volle Rundreise Wartezeit,
+       * bevor überhaupt der Download beginnt. Beides parallel heißt: Ist der
+       * Dienst erreichbar, ist auch das Paket schon unterwegs.
+       *
+       * Der Preis: Fällt der Stil-Abruf aus, wurden die 273 KB umsonst geladen.
+       * Der Normalfall ist, dass es geht, und der Browser behält es danach.
+       */
+      const [antwort, maplibre] = await Promise.all([
+        fetch(VEKTOR_STIL),
+        import('maplibre-gl'),
+        import('@maplibre/maplibre-gl-leaflet'),
+      ]);
+      if (!antwort.ok) throw new Error(`Stil ${antwort.status}`);
+      const stil = deutscheNamen(await antwort.json());
+
+      const gl: any = maplibre.default ?? maplibre;
+      // Ältere maplibre-Fassungen hatten `supported()`, neuere werfen erst beim
+      // Erzeugen. Wo es die Funktion gibt, wird sie gefragt; sonst greift der
+      // `catch` unten.
+      if (typeof gl.supported === 'function' && !gl.supported()) {
+        throw new Error('WebGL fehlt');
+      }
+
+      vektorEbene = (L as any).maplibreGL({ style: stil, attribution: '&copy; OpenStreetMap' });
+      vektorEbene.addTo(map);
+      // Der Fehler kommt hier asynchron: Reißt die Verbindung erst beim Laden der
+      // Kacheln, ist die Ebene schon angehängt.
+      vektorEbene.getMaplibreMap?.()?.on('error', (e: any) => {
+        if (grund.art === 'vektor') {
+          map.removeLayer(vektorEbene);
+          vektorEbene = null;
+          rasterAnhaengen(`Vektorkarte: ${e?.error?.message ?? 'Fehler'}`);
+        }
+      });
+      grund = { art: 'vektor', host: '', warum: '' };
+    } catch (e) {
+      // Kein `console.error`: Der Rückfall ist der geplante Weg, keine Panne.
+      rasterAnhaengen(`Vektorkarte nicht verfügbar (${(e as Error).message})`);
+    }
+  }
+
+  /** Von Hand noch einmal versuchen, wenn das Netz zurück ist. */
+  async function nochmal() {
+    if (rasterEbene) {
+      map.removeLayer(rasterEbene);
+      rasterEbene = null;
+    }
+    if (vektorEbene) {
+      map.removeLayer(vektorEbene);
+      vektorEbene = null;
+    }
+    grund = { art: 'vektor', host: '', warum: '' };
+    await grundkarte();
+  }
 
   const colorOf = (cat: Category) => CATEGORIES.find((c) => c.key === cat)!.color;
 
@@ -190,10 +321,7 @@
         zoomControl: !L.Browser.mobile,
       });
 
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(map);
+      await grundkarte();
 
       /*
        * Eingebettete Karten (Tagesplan, Ortsbrowser) dürfen den Seitenscroll
@@ -593,6 +721,29 @@
   <div class="loading">Karte wird geladen …</div>
 {/if}
 
+<!--
+  Der Hinweis bei fehlendem Kartenhintergrund.
+
+  Zwei Dinge daran sind wichtiger als sein Aussehen:
+
+  1. **Er nennt den Host.** Das ist die Diagnose, die sonst fehlt: Steht dort
+     `tiles.openfreemap.org`, ist der Dienst aus; steht dort
+     `tile.openstreetmap.org`, ist auch der Rückfall blockiert und die Ursache
+     liegt im Netz oder an einem Inhaltsblocker im Browser.
+  2. **Er blockiert nichts.** `pointer-events: none` am Überzug, nur der Knopf
+     nimmt Tipps an. Marker, Popups und die Liste arbeiten ohne Untergrund
+     weiter — und das steht auch da, damit man weiß, dass die Orte stimmen und
+     bloß das Bild fehlt.
+-->
+{#if grund.art === 'fehler'}
+  <div class="kachelfehler" role="status">
+    <b>Kartenhintergrund lädt nicht</b>
+    <span>Die Orte und ihre Popups funktionieren weiter — nur das Kartenbild fehlt.</span>
+    <span class="khost">{grund.host} antwortet nicht{grund.warum ? ` · ${grund.warum}` : ''}</span>
+    <button type="button" onclick={nochmal}>nochmal versuchen</button>
+  </div>
+{/if}
+
 <style>
   .map {
     width: 100%;
@@ -600,6 +751,63 @@
     min-height: 260px;
     background: var(--washi-2);
     z-index: 0;
+  }
+
+  .kachelfehler {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 10px;
+    z-index: 600;
+    /* Der Überzug darf die Karte nicht schlucken — sonst wäre die Reparatur
+       schlimmer als der Fehler: Man sähe einen Hinweis und käme an keinen Marker
+       mehr. Nur der Knopf nimmt Tipps an. */
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    background: var(--card);
+    border: 1px solid var(--shu);
+    border-left: 4px solid var(--shu);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    box-shadow: 0 2px 10px rgba(22, 35, 60, 0.12);
+  }
+
+  .kachelfehler b {
+    font-family: var(--util);
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+    color: var(--shu-deep);
+  }
+
+  .kachelfehler span {
+    font-size: 0.8rem;
+    color: var(--ai-60);
+  }
+
+  .kachelfehler .khost {
+    font-family: var(--util);
+    font-size: 0.72rem;
+    color: var(--ai-40);
+    word-break: break-all;
+  }
+
+  .kachelfehler button {
+    pointer-events: auto;
+    align-self: flex-start;
+    margin-top: 4px;
+    /* 44 px wie überall — ein Knopf, den man bei schlechtem Netz dreimal
+       verfehlt, macht es nicht besser. */
+    min-height: 44px;
+    padding: 0 14px;
+    background: var(--shu);
+    color: #fff;
+    border: 0;
+    border-radius: var(--radius-sm);
+    font-family: var(--util);
+    font-size: 0.78rem;
+    cursor: pointer;
   }
 
   /* Im Erfassungsmodus soll klar sein, dass ein Tipp etwas anderes tut. */

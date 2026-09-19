@@ -13,7 +13,8 @@
     "test": "vitest run",
     "db:dashboard": "node scripts/migration-fuer-dashboard.mjs",
     "test:browser": "node test/browser-orte.mjs",
-    "test:all": "vitest run && node test/browser-orte.mjs && node test/browser-suche.mjs && node test/browser-korrekturen.mjs && node test/browser-reiseband.mjs && node test/browser-plan.mjs && node test/browser-freundebuch.mjs && node test/browser-tagebuch.mjs",
+    "test:karte": "node test/browser-karte.mjs",
+    "test:all": "vitest run && node test/browser-orte.mjs && node test/browser-karte.mjs && node test/browser-suche.mjs && node test/browser-korrekturen.mjs && node test/browser-reiseband.mjs && node test/browser-plan.mjs && node test/browser-freundebuch.mjs && node test/browser-tagebuch.mjs",
     "test:bild": "node test/browser-bild.mjs",
     "test:suche": "node test/browser-suche.mjs",
     "test:korrekturen": "node test/browser-korrekturen.mjs",
@@ -27,9 +28,11 @@
   },
   "dependencies": {
     "@astrojs/svelte": "^9.0.1",
+    "@maplibre/maplibre-gl-leaflet": "^0.1.4",
     "@supabase/supabase-js": "^2.116.0",
     "astro": "^7.3.3",
     "leaflet": "^1.9.4",
+    "maplibre-gl": "^6.10.0",
     "svelte": "^5.57.0"
   },
   "devDependencies": {

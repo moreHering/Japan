@@ -258,6 +258,124 @@ und `browser-orte.mjs` **schiebt den Stil unter** (`vektorStilUnterschieben()` i
 `browserlauf.mjs`), damit die Leinwand in beiden Umgebungen da ist, mit einer
 eigenen Zusicherung, dass das Unterschieben gewirkt hat.
 
+### Die Beschriftung: was der echte Stil wirklich sagt
+
+Der zweite Defekt aus demselben Bildschirmfoto: kein Name, kein Wasser, keine
+Straße — nur Landfarbe und Schummerung. `tiles.openfreemap.org` ist aus dieser
+Umgebung gesperrt, **`raw.githubusercontent.com` aber nicht**, und der Stil wird
+in `hyperknot/openfreemap-styles` gepflegt. Damit lag er zum ersten Mal vor:
+111 Ebenen, 23 mit `text-field`.
+
+**Was er über das Bildschirmfoto sagt.** Der Stil hat **zwei** Quellen:
+`ne2_shaded` — ein Natural-Earth-**Raster**, dessen Kachel-URLs inline stehen —
+und `openmaptiles`, die **Vektorquelle**, die erst ein TileJSON unter `/planet`
+holen muss. Bei Zoom 6 zeichnet der Stil `water` in `rgb(158,189,255)`, dazu
+`label_country_1/2/3`, `label_city`, `label_state`, Autobahnen und Grenzen. Auf
+dem Telefon war das Meer `#f8f4f0` — die `background-color` des Stils — und die
+Küstenlinie blockig verpixelt. **Es rendert ausschließlich das Rasterrelief; die
+Vektorquelle liefert nichts**, und kein `error` hat den Handler erreicht, sonst
+wäre die Ebene abgeworfen und die OSM-Rasterkarte eingehängt worden — und die hat
+kein Relief.
+
+**Zwei Defekte in `deutscheNamen()`, jetzt belegt statt vermutet.**
+
+- `SPRACHFOLGE` stand auf `['name:de', 'name:en', 'name:latin', 'name']`.
+  `name:de` und `name:en` kommen im echten Stil **null Mal** vor; benutzt werden
+  `name:latin` (20 ×), `name:nonlatin` (40 ×) und **`name_en` mit Unterstrich**
+  (20 ×). Der deutsche Name wurde also unter einem Schlüssel gesucht, den es
+  nicht gibt — unsichtbar, weil `coalesce` stillschweigend auf `name:latin`
+  durchfällt und die Karte dann richtig aussieht. Jetzt stehen beide
+  Schreibweisen drin; welche in den Kacheln liegt, ist von hier nicht messbar,
+  und ein Übermaß kostet bei `coalesce` nichts.
+- Die Umschreibung hat **jeden** `text-field` überschrieben. Drei Ebenen
+  (`highway-shield-non-us`, `highway-shield-us-interstate`, `road_shield_us`)
+  tragen `["to-string", ["get", "ref"]]` — die Nummer im Autobahnschild. Features
+  mit `ref` haben keinen `name`, die Schilder blieben danach **leer**. Ein leeres
+  Schild ist schlimmer als ein japanisches: Es sieht nach Darstellungsfehler aus
+  und sagt gar nichts. Umgeschrieben wird jetzt nur noch, wo der bisherige
+  Ausdruck `name` erwähnt.
+
+**Entwarnung an einer Stelle, damit der Verdacht nicht wiederkommt:** `text-font`
+steht in allen 23 Beschriftungsebenen als Geschwisterfeld (`Noto Sans
+Regular/Bold/Italic`) und nicht im Ausdruck. Die Umschreibung zerstört also
+keinen Fontstack — der naheliegende Glyphenverdacht ist **widerlegt**.
+
+**Die Prüfung hat all das verteidigt.** `test/karte.test.ts` arbeitete gegen
+einen erfundenen Sechs-Ebenen-Stil, dessen beide `text-field`-Formen
+(`['get', X]` und `'{name}'`) im echten Stil **gar nicht vorkommen** — alle 23
+tragen `case` oder `to-string`. Und `expect(texte).toHaveLength(3)` plus „jede
+Textebene gleich `SPRACHE`" machte das bedingungslose Überschreiben zur
+Zusicherung: Eine schonende Fassung wäre daran rot geworden. Beides ist ersetzt.
+Der echte Stil liegt als datierter Schnappschuss in
+`test/fixtures/liberty-stil.json` (Herkunft in `test/fixtures/LIES-MICH.md`), und
+die Prüfung **wertet den Ausdruck jetzt aus** statt ihn anzusehen — mit derselben
+Maschine, die MapLibre benutzt (`createPropertyExpression` aus
+`@maplibre/maplibre-gl-style-spec`, ohnehin eine Abhängigkeit von maplibre-gl):
+
+| Feature | vorher | nachher |
+|---|---|---|
+| `{name: 東京, name:latin: Tokyo}` | `Tokyo⏎東京` | `Tokyo` |
+| `{name: 大阪, name_de: Ōsaka}` | `大阪` | `Ōsaka` |
+| `{name: 京都}` | `京都` | `京都` |
+| `{ref: E1}` auf einem Schild | `E1` | `E1` — vorher wäre daraus `""` geworden |
+
+### Warum das niemand gemerkt hat — und was jetzt gezählt wird
+
+Im Quelltext von maplibre-gl 6.10 nachgelesen, nicht vermutet:
+
+- **Eine 404-Kachel ist kein Fehler.** `src/source/vector_tile_source.ts:253-256`:
+  `if (err && err.status !== 404) { throw err; }`, danach
+  `_afterTileLoadWorkerResponse(tile, null)`. Die Kachel bekommt den Zustand
+  `'loaded'` und ist leer. **Kein Ereignis, keine Meldung.** Ein Kartendienst,
+  der auf jede Kachelanfrage 404 antwortet, ist damit von einem funktionierenden
+  nicht zu unterscheiden.
+- **Eine gescheiterte Quelle meldet „geladen".** `src/tile/tile_manager.ts:155-157`,
+  erste Zeile von `loaded()`: `if (this._sourceErrored) { return true; }`. Und
+  `vector_tile_source.ts:132-134` setzt beim gescheiterten TileJSON ausdrücklich
+  `this._loaded = true; // let's pretend it's loaded so the source will be ignored`.
+  `isSourceLoaded()` und `areTilesLoaded()` taugen als Auskunft also **nicht**;
+  `'idle'` feuert im Fehlerfall sogar *früher* als im Gutfall.
+
+Deshalb zählt `MapView` jetzt, was die Karte **wirklich zeichnet** —
+`queryRenderedFeatures()`, getrennt nach allem und nach Symbolebenen, die auch
+ein `text-field` tragen. Drei Dinge daran sind bewusst so und nicht anders:
+
+1. **Erst Bereitschaft, dann zählen.** Symbolebenen kommen erst in den
+   Merkmalsindex, wenn die Platzierung festgeschrieben ist; vorher meldet
+   `queryRenderedFeatures` **null Beschriftungen, obwohl alle Kacheln da sind**.
+   Gewartet wird auf `loaded()` **und** `style.placement`, sekündlich nachgefragt.
+2. **Zwei Fristen.** `idle` ist der richtige Zeitpunkt, wenn alles gut geht —
+   bleibt das TileJSON aber stumm, kommt `idle` nie. Nach 12 s wird deshalb
+   gemessen, nach 24 s gilt „lädt noch" als Ausfall. Eine magere Verbindung
+   unterwegs soll nicht sofort auf die japanisch beschriftete Rasterkarte
+   zurückfallen.
+3. **Der Rückfall hängt an den Merkmalen der Vektorquelle, nicht an den Namen.**
+   Ein kleiner Ausschnitt über dem Meer hat zu Recht keine Beschriftung; eine
+   Karte, die sich deshalb selbst abschaltet, wäre schlimmer als das Problem.
+   Abgeworfen wird nur, wenn der Stil eine Vektorquelle hat und **kein einziges**
+   ihrer Merkmale gezeichnet wurde.
+
+`-1` heißt überall „noch nicht gemessen" und wird nie als `0` angezeigt. Eine
+Seite, die eine fehlende Messung als „nichts da" ausgibt, schlägt beim ersten
+Blick Alarm und wird danach nicht mehr gelesen.
+
+**Zwei Nebenreparaturen aus derselben Lesung:** Der `error`-Zweig hat bisher nur
+den **ersten** Fehler beachtet (`if (grund.art === 'vektor')`) und alle weiteren
+verworfen — jetzt stehen bis zu fünf Meldungen im Wortlaut auf `/wache/`. Und
+`gl.supported()` gibt es in maplibre-gl 6.10 nicht; die WebGL-Vorprüfung lief
+also nie. Eine Prüfung, die es nur scheinbar gibt, ist schlimmer als keine.
+
+**Geprüft wird das im CI** (`browser-wache.mjs`): Ein untergeschobener Stil mit
+einer Vektorquelle, die nie antwortet, muss nach der Frist den Rückfall auslösen
+und ihn beim Namen nennen. Gegenprobe ohne die Frist: Die Seite bleibt ewig bei
+„wird gemessen" — genau der stumme Zustand vom Telefon.
+
+**Was hier nicht prüfbar ist und deshalb nicht behauptet wird:** In dieser
+Umgebung fordert maplibre keine Vektorkacheln an, und die WebGL-Leinwand ist im
+Bildschirmfoto durchsichtig — **was die Karte malt, ist von hier nicht zu
+sehen**. Gemessen werden kann nur die Frist und der Rückfall. Ob die Beschriftung
+auf dem Gerät zurückkommt, sagt `/wache/` auf dem Gerät.
+
 ## Die Selbstprüfung `/wache/` — und die Lücke, die sie schließt
 
 Der Wächter im CI prüft die **Dateien**: `src/data/places.json`, die Orte aus dem

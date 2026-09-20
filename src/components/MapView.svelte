@@ -19,7 +19,7 @@
    * Umgebung ist kein Kachelhost erreichbar — was in der Komponente bleibt, kann
    * ich nur im Fehlerfall prüfen, was dort steht, auch im Gutfall.
    */
-  import { deutscheNamen, hostVon, type Kachelzustand } from '../lib/karte';
+  import { deutscheNamen, hostVon, kachelzustand, type Kachelzustand } from '../lib/karte';
 
   type Props = {
     /** Alle Orte, die die Karte kennen soll. */
@@ -118,6 +118,25 @@
   let ready = $state(false);
   /** Hält Leaflets Größen-Cache aktuell. Begründung an der Anlagestelle in `onMount`. */
   let groessenWaechter: ResizeObserver | null = null;
+  /** Notnagel für die Vektormessung, falls `idle` ausbleibt. */
+  let messUhr: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Wie lange die Vektorkarte Zeit bekommt, bevor Leere als Ausfall gilt.
+   *
+   * Zwölf Sekunden, weil unterwegs auch mal eine magere Verbindung anliegt und
+   * ein voreiliger Rückfall auf die japanisch beschriftete Rasterkarte
+   * ärgerlicher wäre als ein paar Sekunden Warten.
+   */
+  const MESSFRIST = 12_000;
+  /**
+   * Wann „lädt noch" aufhört, eine Auskunft zu sein.
+   *
+   * Bis dahin wird sekündlich nachgefragt, danach gilt die Vektorkarte als
+   * ausgefallen. Ohne diese zweite Frist könnte die Messung ewig auf eine
+   * Bereitschaft warten, die nicht mehr kommt — `idle` bleibt bei einer stumm
+   * hängenden Quelle aus.
+   */
+  const MESSFRIST_HART = 24_000;
 
   /**
    * Was mit dem Kartenhintergrund gerade los ist.
@@ -129,11 +148,7 @@
    * Karte nicht zu unterscheiden, und genau so ist sie auf dem Telefon
    * angekommen.
    */
-  let grund = $state<Kachelzustand>({
-    art: 'vektor',
-    host: '',
-    warum: '',
-  });
+  let grund = $state<Kachelzustand>(kachelzustand('vektor'));
   /*
    * Der Melder nach außen.
    *
@@ -147,7 +162,7 @@
    * („vektor") und nicht erst die erste Änderung.
    */
   $effect(() => {
-    onkachelzustand?.({ art: grund.art, host: grund.host, warum: grund.warum });
+    onkachelzustand?.({ ...grund, meldungen: [...grund.meldungen] });
   });
 
   let rasterEbene: any = null;
@@ -155,8 +170,19 @@
 
   const VEKTOR_STIL = 'https://tiles.openfreemap.org/styles/liberty';
   const RASTER_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-  /** Rasterkarte als Rückfall. Sichtbar, aber japanisch beschriftet. */
+  /**
+   * Rasterkarte als Rückfall. Sichtbar, aber japanisch beschriftet.
+   *
+   * Die gemessenen Zahlen und die Meldungen werden **mitgenommen**: Sie sind der
+   * Grund für den Rückfall, und ein Rückfall, der seinen Grund verliert, ist auf
+   * `/wache/` nicht mehr von einem gewöhnlichen zu unterscheiden.
+   */
   function rasterAnhaengen(warum: string) {
+    const mitnehmen = {
+      meldungen: grund.meldungen,
+      gezeichnet: grund.gezeichnet,
+      beschriftet: grund.beschriftet,
+    };
     rasterEbene = L.tileLayer(RASTER_URL, {
       maxZoom: 19,
       // `maxNativeZoom` fehlte: Jenseits von 19 holte Leaflet Kacheln, die es
@@ -167,7 +193,7 @@
     });
     // Erst die Zweige, dann anhängen — sonst entgeht der erste Fehlschlag.
     rasterEbene.on('tileerror', () => {
-      grund = { art: 'fehler', host: hostVon(RASTER_URL), warum };
+      grund = { ...kachelzustand('fehler', hostVon(RASTER_URL), warum), ...mitnehmen };
     });
     /*
      * `tileload` und **nicht** `load`.
@@ -183,10 +209,12 @@
      * Bedingung, unter der der Hinweis verschwinden darf.
      */
     rasterEbene.on('tileload', () => {
-      if (grund.art === 'fehler') grund = { art: 'raster', host: '', warum };
+      if (grund.art === 'fehler') {
+        grund = { ...kachelzustand('raster', '', warum), ...mitnehmen };
+      }
     });
     rasterEbene.addTo(map);
-    grund = { art: 'raster', host: '', warum };
+    grund = { ...kachelzustand('raster', '', warum), ...mitnehmen };
   }
 
   /**
@@ -211,7 +239,16 @@
        * Der Preis: Fällt der Stil-Abruf aus, wurden die 273 KB umsonst geladen.
        * Der Normalfall ist, dass es geht, und der Browser behält es danach.
        */
-      const [antwort, maplibre] = await Promise.all([
+      /*
+       * `maplibre` wird hier nicht mehr ausgepackt, und das ist eine Reparatur:
+       * An dieser Stelle stand eine Abfrage auf `gl.supported()`. Die Funktion
+       * gibt es in maplibre-gl 6.10 **nicht** (im Paket nachgesehen, kein
+       * `supported`-Export) — die Bedingung war immer falsch, die WebGL-Prüfung
+       * lief nie. Eine Prüfung, die es nur scheinbar gibt, ist schlimmer als
+       * keine. Fehlt WebGL wirklich, wirft der Aufbau, und der `catch` unten
+       * nimmt die Rasterkarte.
+       */
+      const [antwort] = await Promise.all([
         fetch(VEKTOR_STIL),
         import('maplibre-gl'),
         import('@maplibre/maplibre-gl-leaflet'),
@@ -219,26 +256,164 @@
       if (!antwort.ok) throw new Error(`Stil ${antwort.status}`);
       const stil = deutscheNamen(await antwort.json());
 
-      const gl: any = maplibre.default ?? maplibre;
-      // Ältere maplibre-Fassungen hatten `supported()`, neuere werfen erst beim
-      // Erzeugen. Wo es die Funktion gibt, wird sie gefragt; sonst greift der
-      // `catch` unten.
-      if (typeof gl.supported === 'function' && !gl.supported()) {
-        throw new Error('WebGL fehlt');
-      }
+      /*
+       * Welche Quellen des Stils Vektorkacheln liefern.
+       *
+       * Der Liberty-Stil hat **zwei**: `ne2_shaded` (ein Natural-Earth-Raster,
+       * dessen Kachel-URLs inline stehen) und `openmaptiles` (Vektor, holt erst
+       * ein TileJSON). Genau diese Trennung erklärt das Bild vom Telefon: Dort
+       * rendert das Relief und sonst nichts. Ohne diese Liste wüsste die Messung
+       * unten nicht, welcher Ausfall der schlimme ist.
+       */
+      const vektorQuellen = new Set(
+        Object.entries((stil as { sources?: Record<string, { type?: string }> }).sources ?? [])
+          .filter(([, q]) => q?.type === 'vector')
+          .map(([id]) => id),
+      );
 
       vektorEbene = (L as any).maplibreGL({ style: stil, attribution: '&copy; OpenStreetMap' });
       vektorEbene.addTo(map);
-      // Der Fehler kommt hier asynchron: Reißt die Verbindung erst beim Laden der
-      // Kacheln, ist die Ebene schon angehängt.
-      vektorEbene.getMaplibreMap?.()?.on('error', (e: any) => {
-        if (grund.art === 'vektor') {
-          map.removeLayer(vektorEbene);
-          vektorEbene = null;
-          rasterAnhaengen(`Vektorkarte: ${e?.error?.message ?? 'Fehler'}`);
-        }
+      const glKarte = vektorEbene.getMaplibreMap?.();
+      grund = { ...kachelzustand('vektor'), meldungen: [] };
+
+      /*
+       * Jede Meldung wird mitgeschrieben, nicht nur die erste.
+       *
+       * Vorher stand hier `if (grund.art === 'vektor')` als einzige Bedingung —
+       * nach dem ersten Fehler war `art` nicht mehr `'vektor'`, und **alle
+       * weiteren Meldungen gingen verloren**. Das ist genau der Stapel, den man
+       * auf `/wache/` lesen will, wenn die Karte sich merkwürdig verhält.
+       */
+      let abgeworfen = false;
+      const aufRaster = (warum: string) => {
+        if (abgeworfen || !vektorEbene) return;
+        abgeworfen = true;
+        map.removeLayer(vektorEbene);
+        vektorEbene = null;
+        rasterAnhaengen(warum);
+      };
+
+      glKarte?.on('error', (e: any) => {
+        const text = `${e?.sourceId ? `${e.sourceId}: ` : ''}${e?.error?.message ?? 'Fehler'}`;
+        grund = { ...grund, meldungen: [...grund.meldungen, text].slice(-5) };
+        // Der Fehler kommt asynchron: Reißt die Verbindung erst beim Laden der
+        // Kacheln, ist die Ebene längst angehängt.
+        aufRaster(`Vektorkarte: ${e?.error?.message ?? 'Fehler'}`);
       });
-      grund = { art: 'vektor', host: '', warum: '' };
+
+      /*
+       * **Die Messung, die diesem Durchgang seinen Namen gibt.**
+       *
+       * Bis hierher hieß `art: 'vektor'` nur „angehängt und nicht gemeckert".
+       * Auf dem Telefon war das gleichzeitig wahr und nutzlos: kein Wasser, keine
+       * Straße, kein Name — nur das Rasterrelief des Stils. Gezählt wird deshalb,
+       * was die Karte **wirklich zeichnet**.
+       *
+       * `queryRenderedFeatures()` und nicht `isSourceLoaded()`: Letzteres meldet
+       * `true`, wenn die Quelle **gescheitert** ist — nachgelesen in
+       * `maplibre-gl/src/tile/tile_manager.ts:155-157`, erste Zeile von
+       * `loaded()` ist `if (this._sourceErrored) return true`. Als Auskunft über
+       * „hat geliefert" taugt es damit nicht.
+       *
+       * Ausgelöst wird bei `idle` — dem Punkt, an dem maplibre nichts mehr zu tun
+       * hat — mit einer Frist als Notnagel, falls `idle` ausbleibt. Eine langsame
+       * Verbindung soll nicht als Ausfall gelten, ein stiller Ausfall aber auch
+       * nicht ewig warten.
+       */
+      let gemessen = false;
+      const bis = Date.now() + MESSFRIST_HART;
+      const messen = () => {
+        if (gemessen || !vektorEbene || !glKarte) return;
+
+        /*
+         * **Erst Bereitschaft, dann zählen — sonst zählt man Null und glaubt es.**
+         *
+         * Symbolebenen kommen erst in den Merkmalsindex, wenn maplibre die
+         * Platzierung festgeschrieben hat; vorher meldet `queryRenderedFeatures`
+         * **null Beschriftungen, obwohl alle Kacheln da sind**. Eine Messung zur
+         * falschen Zeit hätte also genau den Fehlalarm erzeugt, gegen den sie
+         * gebaut ist — und über den Rückfall unten eine heile Vektorkarte
+         * abgeworfen.
+         *
+         * `loaded()` und `style.placement` sind die beiden Bedingungen, an denen
+         * die Zahl hängt. Sind sie nicht erfüllt, wird nachgefragt statt geurteilt.
+         */
+        const bereit = !!(glKarte.loaded?.() && glKarte.style?.placement);
+        if (!bereit) {
+          if (Date.now() < bis) {
+            messUhr = setTimeout(messen, 1000);
+            return;
+          }
+          // Nach der harten Frist ist „lädt noch" keine Auskunft mehr, sondern
+          // ein Befund: Die Vektorkarte kommt nicht. `idle` bleibt in diesem
+          // Fall aus, deshalb gibt es diese Frist überhaupt.
+          gemessen = true;
+          setTimeout(
+            () => aufRaster(`Vektorkarte antwortet seit ${Math.round(MESSFRIST_HART / 1000)} s nicht`),
+            0,
+          );
+          return;
+        }
+
+        gemessen = true;
+        let alle: any[];
+        try {
+          // **Ohne Ebenenliste.** Eine unbekannte Ebenen-ID lässt maplibre ein
+          // Fehlerereignis feuern — das würde oben den Rückfall auslösen, und
+          // die Messung zerstörte ihr eigenes Messobjekt.
+          alle = glKarte.queryRenderedFeatures();
+        } catch {
+          // Nicht messbar ist **nicht** dasselbe wie „nichts da". Dann bleiben
+          // die −1 stehen, und `/wache/` sagt „nicht gemessen" statt Alarm.
+          return;
+        }
+        /*
+         * Nur Symbolebenen, **die auch Text tragen**. Eine reine Piktogrammebene
+         * ist ebenfalls vom Typ `symbol`; zählte man sie mit, hieße „Relief plus
+         * ein paar POI-Zeichen ohne einen einzigen Buchstaben" fälschlich
+         * „beschriftet".
+         */
+        const symbolEbenen = new Set(
+          ((glKarte.getStyle()?.layers ?? []) as {
+            id: string;
+            type: string;
+            layout?: Record<string, unknown>;
+          }[])
+            .filter((l) => l.type === 'symbol' && l.layout?.['text-field'] !== undefined)
+            .map((l) => l.id),
+        );
+        grund = {
+          ...grund,
+          gezeichnet: alle.length,
+          beschriftet: alle.filter((f) => symbolEbenen.has(f?.layer?.id)).length,
+        };
+
+        /*
+         * Der Rückfall bei stiller Leere.
+         *
+         * Nur wenn der Stil überhaupt eine Vektorquelle hat und **keines** ihrer
+         * Merkmale gezeichnet wurde. Nicht „keine Beschriftung": Ein kleiner
+         * Ausschnitt über dem Meer hat zu Recht keine, und eine Karte, die sich
+         * deshalb selbst abschaltet, wäre schlimmer als das Problem.
+         *
+         * Abgeworfen wird in einem eigenen Arbeitsschritt, nicht mitten im
+         * `idle`-Handler: `removeLayer` räumt die maplibre-Instanz ab, und das
+         * gehört nicht in deren eigenen Ereignislauf.
+         */
+        if (vektorQuellen.size && !alle.some((f) => vektorQuellen.has(f?.source))) {
+          setTimeout(
+            () => aufRaster('Vektordaten fehlen — es kam nur der Reliefhintergrund'),
+            0,
+          );
+        }
+      };
+      /*
+       * Zwei Auslöser, und beide werden gebraucht. `idle` ist der richtige
+       * Zeitpunkt, wenn alles gut geht. Bleibt aber das TileJSON stumm — ohne
+       * Antwort und ohne Fehler —, kommt `idle` **nie**; dann zieht die Frist.
+       */
+      glKarte?.once?.('idle', messen);
+      messUhr = setTimeout(messen, MESSFRIST);
     } catch (e) {
       // Kein `console.error`: Der Rückfall ist der geplante Weg, keine Panne.
       rasterAnhaengen(`Vektorkarte nicht verfügbar (${(e as Error).message})`);
@@ -255,7 +430,9 @@
       map.removeLayer(vektorEbene);
       vektorEbene = null;
     }
-    grund = { art: 'vektor', host: '', warum: '' };
+    if (messUhr) clearTimeout(messUhr);
+    messUhr = null;
+    grund = kachelzustand('vektor');
     await grundkarte();
   }
 
@@ -490,6 +667,8 @@
       disposed = true;
       groessenWaechter?.disconnect();
       groessenWaechter = null;
+      if (messUhr) clearTimeout(messUhr);
+      messUhr = null;
       map?.remove();
       map = null;
       markers.clear();

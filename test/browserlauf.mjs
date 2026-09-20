@@ -103,12 +103,54 @@ export const PROBESTIL = {
  * prüfen, dass `.maplibregl-canvas` wirklich da ist — sonst prüft man wieder nur,
  * was die Umgebung gerade zulässt.
  */
-export async function vektorStilUnterschieben(ctx) {
+export async function vektorStilUnterschieben(ctx, stil = PROBESTIL) {
   await ctx.route('**/styles/liberty', (r) =>
     r.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(PROBESTIL),
+      body: JSON.stringify(stil),
     }),
   );
 }
+
+/**
+ * Ein Stil mit einer **Vektorquelle, die nie antwortet** — der Fall vom Telefon.
+ *
+ * Genau dieser Zustand ist der App bis zum 20.09.2026 entgangen: Der Stil lädt,
+ * die Ebene hängt, kein Fehler wird gemeldet — und auf der Karte steht nichts.
+ * Die Rasterquelle des echten Liberty-Stils (ein Natural-Earth-Relief) kam an
+ * und sah aus wie eine Karte.
+ *
+ * Die leere GeoJSON-Quelle daneben ist nötig, damit `deutscheNamen()` eine
+ * Textebene findet und nicht wirft — sonst greift der Rasterrückfall schon vor
+ * der Messung, und die Prüfung prüfte den falschen Weg.
+ */
+export const STUMMER_VEKTORSTIL = {
+  version: 8,
+  glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+  sources: {
+    daten: {
+      type: 'vector',
+      tiles: ['https://tiles.openfreemap.org/stumm/{z}/{x}/{y}.pbf'],
+      minzoom: 0,
+      maxzoom: 14,
+    },
+    leer: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+  },
+  layers: [
+    { id: 'hintergrund', type: 'background', paint: { 'background-color': '#eef3ee' } },
+    {
+      id: 'wasser',
+      type: 'fill',
+      source: 'daten',
+      'source-layer': 'water',
+      paint: { 'fill-color': '#9ebdff' },
+    },
+    {
+      id: 'beschriftung',
+      type: 'symbol',
+      source: 'leer',
+      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'] },
+    },
+  ],
+};

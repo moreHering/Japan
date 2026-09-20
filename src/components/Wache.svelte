@@ -87,11 +87,24 @@
    */
   let kachel = $state<Kachelzustand | null>(null);
 
+  /*
+   * Die Texte sagen, was der Zustand **belegt** — nicht, was er nahelegt.
+   *
+   * Hier stand bei `vektor` „Vektorkarte, lateinisch beschriftet". Das war
+   * falsch, und zwar auf die unangenehme Art: Genau als auf dem Telefon kein
+   * einziger Name auf der Karte stand, hat diese Seite grün gemeldet, die
+   * Beschriftung laufe. Der Zustand `vektor` bedeutete nämlich nur „die Ebene
+   * wurde angehängt und hat nicht gemeckert". Die Beschriftung selbst hat nie
+   * jemand gezählt.
+   *
+   * Jetzt zählt `MapView` sie (`queryRenderedFeatures`), und der Text hier nennt
+   * nur noch, was die Quelle sagt. Was gezeichnet wurde, steht als Zahl darunter.
+   */
   const KARTE_TEXT: Record<Kachelzustand['art'], { ton: string; titel: string; was: string }> = {
     vektor: {
       ton: 'gut',
-      titel: 'Vektorkarte, lateinisch beschriftet',
-      was: 'OpenFreeMap antwortet, und die Beschriftung läuft über name:de / name:en / name:latin.',
+      titel: 'Vektorkarte von OpenFreeMap',
+      was: 'Der Stil ist geladen und die Beschriftung auf name_de / name_en / name:latin umgestellt. Ob wirklich etwas gezeichnet wird, steht in den Zahlen darunter.',
     },
     raster: {
       ton: 'warn',
@@ -220,6 +233,42 @@
       {#if kachel.warum}
         <p class="klein">Grund: {kachel.warum}</p>
       {/if}
+
+      <!--
+        Die Zahlen, die aus einer Behauptung eine Messung machen.
+
+        `-1` heißt „noch nicht gemessen" und wird ausdrücklich **nicht** als 0
+        angezeigt: Eine Seite, die eine fehlende Messung als „nichts da" ausgibt,
+        schlägt beim ersten Blick Alarm und wird danach nicht mehr gelesen.
+      -->
+      {#if kachel.gezeichnet >= 0}
+        <dl class="zahlen">
+          <div><dt>gezeichnet</dt><dd>{kachel.gezeichnet}</dd></div>
+          <div><dt>davon Namen</dt><dd>{kachel.beschriftet}</dd></div>
+        </dl>
+        {#if kachel.gezeichnet === 0}
+          <p class="klein schlecht">
+            Die Vektorquelle hat <b>nichts</b> geliefert. Genau dieser Fall sah auf dem Telefon
+            aus wie eine Karte: Der Stil bringt ein Natural-Earth-Reliefbild als eigene
+            Rasterquelle mit, und das kam an — Wasser, Straßen und Namen nicht.
+          </p>
+        {:else if kachel.beschriftet === 0}
+          <p class="klein mittel">
+            Es wird etwas gezeichnet, aber <b>kein einziger Name</b>. Bei einem kleinen
+            Ausschnitt über dem Meer ist das in Ordnung, sonst fehlen die Schriftzeichen
+            (Glyphen) des Kartendienstes.
+          </p>
+        {/if}
+      {:else if kachel.art === 'vektor'}
+        <p class="klein">Wird gerade gemessen …</p>
+      {/if}
+
+      {#if kachel.meldungen.length}
+        <p class="klein">Meldungen von maplibre, die neuesten zuletzt:</p>
+        <ul class="meldungen">
+          {#each kachel.meldungen as m}<li>{m}</li>{/each}
+        </ul>
+      {/if}
     {/if}
 
     <!--
@@ -325,9 +374,11 @@
         vor dem Parkhaus daneben sitzt, sagt nur ein Blick auf die Karte.
       </li>
       <li>
-        <b>Ob die Kartenbeschriftung wirklich lateinisch ankommt.</b> Gemeldet wird, welche
-        Kachelart läuft. Dass die Namen dann auch lesbar sind, ist die Einstellung, nicht die
-        Beobachtung.
+        <b>In welcher Schrift die Namen dastehen.</b> Gezählt wird, <i>wie viele</i>
+        Beschriftungen die Karte zeichnet — das ist seit dem Bildschirmfoto vom Telefon eine
+        Messung und keine Annahme mehr. Ob dort „Kyoto" oder „京都" steht, sagt weiter nur ein
+        Blick: Die Sprachfolge ist eine Einstellung, und welche Namensfelder in den Kacheln
+        stehen, entscheidet der Kartendienst.
       </li>
       <li>
         <b>Ob Google die Maps-Links annimmt.</b> Die Tagesroute und die KML sind nie gegen
@@ -470,6 +521,15 @@
   }
 
   /* ---------------------------------------------------------- Probekarte */
+
+  .meldungen {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    font-family: var(--util);
+    font-size: 0.78rem;
+    color: var(--ai-40);
+    word-break: break-word;
+  }
 
   .probekarte {
     /* Klein: Sie ist der Messfühler, nicht die Hauptsache. Groß genug, dass

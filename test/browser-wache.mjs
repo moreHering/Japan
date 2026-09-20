@@ -16,7 +16,7 @@
 
 import { chromium, devices } from 'playwright';
 
-import { BASIS, KACHELHOSTS, START } from './browserlauf.mjs';
+import { BASIS, KACHELHOSTS, START, STUMMER_VEKTORSTIL, vektorStilUnterschieben } from './browserlauf.mjs';
 
 let fehler = 0;
 const pruefe = (bedingung, text, zusatz = '') => {
@@ -265,6 +265,65 @@ const orgaZahl = await seite.locator('.wachelink a').count();
 pruefe(orgaZahl === 1, 'die Organisationsseite trägt genau einen Verweis', `${orgaZahl}`);
 const orgaLink = orgaZahl ? await seite.locator('.wachelink a').first().getAttribute('href') : null;
 pruefe(/\/wache\//.test(orgaLink ?? ''), 'die Organisationsseite verlinkt sie', orgaLink ?? '—');
+
+// ============================== 6b) Die stumme Vektorquelle vom Telefon ====
+
+/*
+ * Der Fall, der dieses ganze Kapitel ausgelöst hat.
+ *
+ * Auf dem Telefon zeigte die Karte ein Relief und sonst nichts: kein Wasser,
+ * keine Straße, kein Name. Der Grund steckt im Liberty-Stil selbst — er hat
+ * **zwei** Quellen, ein Natural-Earth-Raster und die Vektorquelle. Das Raster
+ * kam an und sah aus wie eine Karte; die Vektorquelle lieferte nichts, meldete
+ * aber auch keinen Fehler. `/wache/` schrieb zur selben Zeit grün
+ * „Vektorkarte, lateinisch beschriftet".
+ *
+ * Geprüft wird in einem **eigenen Fenster**: Der Stil wird untergeschoben, und
+ * die Routen des ersten Kontexts sollen davon nichts abbekommen.
+ *
+ * Die Prüfung dauert bewusst eine halbe Minute. Die Frist ist der Kern der
+ * Sache: Eine magere Verbindung unterwegs darf nicht sofort als Ausfall gelten,
+ * ein stiller Ausfall aber auch nicht ewig als „lädt noch" durchgehen.
+ */
+console.log('\nEine Vektorquelle, die nie antwortet:');
+{
+  const ctx2 = await browser.newContext({ ...devices['iPhone 13'] });
+  await vektorStilUnterschieben(ctx2, STUMMER_VEKTORSTIL);
+  await ctx2.route(KACHELHOSTS, (r) => (/styles\/liberty/.test(r.request().url()) ? r.fallback() : r.abort()));
+  const zweite = await ctx2.newPage();
+  await zweite.goto(`${BASIS}/wache/`, { waitUntil: 'load' });
+  await zweite.waitForSelector('.probekarte .leaflet-container', { timeout: 20000 });
+  await zweite.waitForTimeout(2500);
+
+  const frueh = await zweite.locator('.block').nth(1).innerText();
+  // Erst zählen, dann prüfen — ein fehlender Block würde sonst still bestehen.
+  pruefe(frueh.length > 20, 'der Kartenabschnitt ist da', `${frueh.length} Zeichen`);
+  pruefe(
+    !/lateinisch beschriftet/i.test(frueh),
+    'die Seite behauptet nicht mehr, die Beschriftung laufe',
+    frueh.replace(/\s+/g, ' ').slice(0, 100),
+  );
+  pruefe(
+    /gemessen/i.test(frueh),
+    'sie sagt stattdessen, dass noch gemessen wird',
+    frueh.replace(/\s+/g, ' ').slice(0, 100),
+  );
+
+  // Und nach der harten Frist ist „lädt noch" keine Auskunft mehr.
+  await zweite.waitForTimeout(26000);
+  const spaet = await zweite.locator('.block').nth(1).innerText();
+  pruefe(
+    /antwortet seit \d+ s nicht|Vektordaten fehlen/i.test(spaet),
+    'nach der Frist nennt sie den Ausfall der Vektorkarte beim Namen',
+    spaet.replace(/\s+/g, ' ').slice(0, 140),
+  );
+  pruefe(
+    /Kein Kartenhintergrund|Rasterr/i.test(spaet),
+    'und die Karte ist auf den Rasterrückfall gewechselt',
+    spaet.replace(/\s+/g, ' ').slice(0, 140),
+  );
+  await ctx2.close();
+}
 
 // ========================================================= 7) Layout =====
 

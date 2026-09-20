@@ -12,6 +12,8 @@
  *   node test/browser-orte.mjs
  */
 
+import { readFile } from 'node:fs/promises';
+
 import { chromium, devices } from 'playwright';
 
 import { BASIS, START } from './browserlauf.mjs';
@@ -26,6 +28,57 @@ const pruefe = (bedingung, text, zusatz = '') => {
     console.log(`  FEHL  ${text}${zusatz ? ` — ${zusatz}` : ''}`);
   }
 };
+
+/*
+ * Web-Mercator, wie Leaflet ihn rechnet (EPSG:3857, Kachelgröße 256).
+ *
+ * Das ist die **äußere** Wahrheit dieser Datei. Ohne sie prüft man die Karte
+ * nur gegen sich selbst: Marker und die Koordinatenwahl benutzen beide denselben
+ * Pixelursprung, und wenn der falsch ist, sind sie **miteinander** trotzdem
+ * einig. Genau daran ist der Fehler vorbeigekommen, der auf dem Telefon alle 141
+ * Marker in die linke obere Ecke geschoben hat.
+ */
+const WELT = (z) => 256 * 2 ** z;
+function projiziere(lat, lng, z) {
+  const s = Math.sin((lat * Math.PI) / 180);
+  const w = WELT(z);
+  return {
+    x: ((lng + 180) / 360) * w,
+    y: (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * w,
+  };
+}
+function entprojiziere(x, y, z) {
+  const w = WELT(z);
+  const n = Math.PI - 2 * Math.PI * (y / w);
+  return {
+    lat: (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))),
+    lng: (x / w) * 360 - 180,
+  };
+}
+/** Luftlinie in Kilometern (Haversine). */
+function km(aLat, aLng, bLat, bLng) {
+  const r = (g) => (g * Math.PI) / 180;
+  const dLat = r(bLat - aLat);
+  const dLng = r(bLng - aLng);
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(r(aLat)) * Math.cos(r(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/*
+ * Der Ausschnitt, mit dem `/orte/` startet — die Vorgaben aus `MapView.svelte`,
+ * die `PlaceExplorer` nicht überschreibt. Ändert jemand sie dort, fällt diese
+ * Datei laut um, und das ist erwünscht: Die Sollposition eines Markers lässt
+ * sich ohne Mittelpunkt und Zoom nicht ausrechnen.
+ */
+const START_MITTE = { lat: 36.2, lng: 137.5 };
+const START_ZOOM = 6;
+
+/** Orte aus den Stammdaten, um Marker gegen ihre echte Koordinate zu prüfen. */
+const orte = JSON.parse(
+  await readFile(new URL('../src/data/places.json', import.meta.url), 'utf8'),
+);
+const ortNach = new Map(orte.map((o) => [String(o.nr), o]));
 
 // Warum `START` und nicht einfach `chromium.launch()`: siehe `browserlauf.mjs`.
 // Kurz — hier braucht Playwright einen ausdrücklichen Pfad, auf einem Runner darf
@@ -63,6 +116,43 @@ async function kartenMitte() {
     x: Math.round(k.x + k.width / 2),
     y: Math.round((Math.max(k.y, 0) + Math.min(k.y + k.height, sicht.height)) / 2),
   };
+}
+
+/**
+ * Ein Punkt, an dem wirklich die Karte liegt — und kein Popup und kein Marker.
+ *
+ * Vorher hat diese Datei blind die Mitte angetippt. Das ging nur gut, solange
+ * der Größenfehler sämtliche Marker und Popups in die linke obere Ecke
+ * geschoben hat: Die Mitte war dadurch immer leer. Mit richtig sitzender Karte
+ * liegt über der Mitte das Popup des zuletzt angelegten Ortes, und Leaflet
+ * stoppt dort die Weitergabe von `touchstart` — der lange Druck käme nie an.
+ *
+ * Geprüft wird weiter dasselbe Verhalten, nur an einer Stelle, an der die Karte
+ * tatsächlich freiliegt.
+ */
+async function freieStelle() {
+  await zurKarte();
+  const k = await seite.locator('.leaflet-container').boundingBox();
+  const sicht = seite.viewportSize();
+  const oben = Math.max(k.y, 0) + 30;
+  const unten = Math.min(k.y + k.height, sicht.height) - 30;
+  const punkte = [];
+  for (let y = oben; y <= unten; y += 24) {
+    for (const x of [k.x + k.width * 0.2, k.x + k.width * 0.5, k.x + k.width * 0.8]) {
+      punkte.push({ x: Math.round(x), y: Math.round(y) });
+    }
+  }
+  const treffer = await seite.evaluate((kandidaten) => {
+    for (const p of kandidaten) {
+      const el = document.elementFromPoint(p.x, p.y);
+      if (el && el.classList.contains('leaflet-container')) return p;
+    }
+    return null;
+  }, punkte);
+  // Kein Rückfall auf die Mitte: Ein stiller Ersatzpunkt würde die folgende
+  // Prüfung fehlschlagen lassen, ohne den Grund zu nennen.
+  pruefe(treffer !== null, 'Auf der Karte ist eine freie Stelle zum Drücken erreichbar');
+  return treffer ?? { x: Math.round(k.x + k.width / 2), y: Math.round((oben + unten) / 2) };
 }
 
 /** Breite des Dokuments gegen das Fenster — misst Querscrollen. */
@@ -104,14 +194,98 @@ pruefe(
 
 // ------------------------------------------------- Erfassung auf der Karte ---
 
-console.log('\nEigenen Ort auf der Karte anlegen:');
 await seite.goto(`${BASIS}/orte/`, { waitUntil: 'load' });
 // Auf dem Handy startet die Ansicht in der Liste — die Karte ist dann
 // ausgeblendet und wird erst nach dem Umschalten sichtbar.
 await seite.waitForSelector('.switch .btn', { timeout: 15000 });
 await seite.locator('.switch .btn', { hasText: 'Karte' }).tap();
 await seite.waitForSelector('.leaflet-container', { state: 'visible', timeout: 15000 });
-await seite.waitForTimeout(500);
+await seite.waitForTimeout(700);
+
+// ------------------------------------------------ Die Marker sitzen richtig ---
+
+/*
+ * Der Block, den es vorher nicht gab — und der Fehler, den es deshalb bis auf
+ * das Telefon geschafft hat: Auf dem Handy startet `/orte/` auf dem Reiter
+ * „Liste", die Karte entsteht also in einem Container mit `display: none` und
+ * damit der Größe 0. Leaflet merkt sich diese Größe und zieht beim Pixelursprung
+ * keinen halben Bildschirm mehr ab; alle 141 Marker rutschen um rund 191/325 px
+ * nach links oben auf einen Haufen. Gemessen am ausgelieferten Stand, nicht
+ * vermutet.
+ *
+ * Geprüft wird gegen die **ausgerechnete** Position, nicht gegen die Nachbarn:
+ * Marker und Koordinatenwahl teilen sich den Pixelursprung und sind
+ * miteinander auch dann einig, wenn er falsch ist.
+ */
+console.log('\nMarker sitzen an der Stelle, die ihre Koordinate vorgibt:');
+{
+  const gezeichnet = await seite.evaluate(() => {
+    const c = document.querySelector('.leaflet-container');
+    const pane = document.querySelector('.leaflet-map-pane');
+    const versatz = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px/.exec(pane?.style.transform ?? '');
+    const ox = versatz ? +versatz[1] : 0;
+    const oy = versatz ? +versatz[2] : 0;
+    const marker = [...document.querySelectorAll('.leaflet-marker-icon')].map((el) => {
+      const m = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px/.exec(el.style.transform ?? '');
+      return m
+        ? { nr: (el.getAttribute('title') ?? '').split(' ')[0], x: +m[1] + ox, y: +m[2] + oy }
+        : null;
+    });
+    return {
+      breite: c.clientWidth,
+      hoehe: c.clientHeight,
+      marker: marker.filter(Boolean),
+    };
+  });
+
+  // Erst zählen, dann prüfen: Ein leeres Feld würde sonst jede folgende Prüfung
+  // stumm bestehen lassen — eine Gegenprobe, die nichts beweist.
+  pruefe(
+    gezeichnet.marker.length >= 100,
+    'Die Karte zeichnet die Marker überhaupt',
+    `${gezeichnet.marker.length} gefunden`,
+  );
+  pruefe(
+    gezeichnet.breite > 0 && gezeichnet.hoehe > 0,
+    'Die Karte kennt ihre eigene Größe',
+    `${gezeichnet.breite} × ${gezeichnet.hoehe} px`,
+  );
+
+  if (gezeichnet.marker.length >= 100 && gezeichnet.breite > 0) {
+    const drinnen = gezeichnet.marker.filter(
+      (m) => m.x >= 0 && m.y >= 0 && m.x <= gezeichnet.breite && m.y <= gezeichnet.hoehe,
+    );
+    pruefe(
+      drinnen.length >= gezeichnet.marker.length * 0.9,
+      'Fast alle Marker liegen innerhalb der Kartenfläche',
+      `${drinnen.length} von ${gezeichnet.marker.length}`,
+    );
+
+    // Die Sollposition: Weltpixel des Ortes minus Weltpixel des Mittelpunkts,
+    // plus die halbe Kartenfläche. Genau das, was Leaflet mit einer richtig
+    // gemessenen Größe täte.
+    const mitte = projiziere(START_MITTE.lat, START_MITTE.lng, START_ZOOM);
+    for (const nr of ['54', '98', '160']) {
+      const ist = gezeichnet.marker.find((m) => m.nr === nr);
+      const ort = ortNach.get(nr);
+      if (!ist || !ort) {
+        pruefe(false, `Marker ${nr} ist vorhanden`, ist ? 'Ort fehlt in places.json' : 'nicht gezeichnet');
+        continue;
+      }
+      const soll = projiziere(ort.lat, ort.lng, START_ZOOM);
+      const sx = soll.x - mitte.x + gezeichnet.breite / 2;
+      const sy = soll.y - mitte.y + gezeichnet.hoehe / 2;
+      const ab = Math.hypot(ist.x - sx, ist.y - sy);
+      pruefe(
+        ab <= 4,
+        `Marker ${nr} (${ort.name}) steht, wo seine Koordinate hingehört`,
+        `${Math.round(ab)} px daneben — ist ${Math.round(ist.x)}/${Math.round(ist.y)}, soll ${Math.round(sx)}/${Math.round(sy)}`,
+      );
+    }
+  }
+}
+
+console.log('\nEigenen Ort auf der Karte anlegen:');
 
 const plusKnopf = seite.locator('.rundknopf');
 pruefe(await plusKnopf.isVisible(), 'Der +-Knopf ist sichtbar');
@@ -129,11 +303,11 @@ pruefe(
   'Der Hinweis zum Antippen der Karte erscheint',
 );
 
-// Mitte der Karte antippen
-{
-  const m = await kartenMitte();
-  await seite.touchscreen.tap(m.x, m.y);
-}
+// Mitte der Karte antippen — und die Stelle merken, um die zurückgemeldete
+// Koordinate gegen sie halten zu können.
+const tippPunkt = await kartenMitte();
+const kartenRahmen = await seite.locator('.leaflet-container').boundingBox();
+await seite.touchscreen.tap(tippPunkt.x, tippPunkt.y);
 await seite.waitForTimeout(400);
 
 const maske = seite.locator('.erfassen form.maske');
@@ -144,11 +318,34 @@ pruefe(
 );
 
 const breite = await maske.locator('input[inputmode="decimal"]').first().inputValue();
+const laenge = await maske.locator('input[inputmode="decimal"]').nth(1).inputValue();
 pruefe(
   Number.isFinite(Number(breite)) && Number(breite) !== 0,
   'Die Koordinate ist aus der Karte übernommen',
   `Breite = ${breite}`,
 );
+/*
+ * Und sie muss die **angetippte** Stelle treffen.
+ *
+ * Vorher stand hier nur „endlich und ≠ 0". Mit dem Größenfehler kam ein Punkt
+ * rund 650 km nordöstlich heraus — irgendwo vor Aomori — und die Prüfung war
+ * grün. Ein falsch gesetzter Ort ist auf der Reise schlimmer als ein fehlender;
+ * genau deshalb wird hier jetzt gerechnet statt nur auf Plausibilität geschaut.
+ */
+{
+  const mitte = projiziere(START_MITTE.lat, START_MITTE.lng, START_ZOOM);
+  const soll = entprojiziere(
+    mitte.x + (tippPunkt.x - kartenRahmen.x) - kartenRahmen.width / 2,
+    mitte.y + (tippPunkt.y - kartenRahmen.y) - kartenRahmen.height / 2,
+    START_ZOOM,
+  );
+  const ab = km(Number(breite), Number(laenge), soll.lat, soll.lng);
+  pruefe(
+    Number.isFinite(ab) && ab <= 5,
+    'Die übernommene Koordinate gehört zur angetippten Stelle',
+    `${ab.toFixed(1)} km daneben — ist ${breite}/${laenge}, soll ${soll.lat.toFixed(4)}/${soll.lng.toFixed(4)}`,
+  );
+}
 
 // Eingabefelder müssen 16 px haben, sonst zoomt iOS beim Antippen hinein.
 const schriftgroessen = await maske.locator('input, select, textarea').evaluateAll((els) =>
@@ -210,7 +407,7 @@ async function langerDruck(x, y, ms = 750, versatz = 0) {
 }
 
 {
-  const m = await kartenMitte();
+  const m = await freieStelle();
   await langerDruck(m.x, m.y);
 }
 pruefe(
@@ -223,7 +420,7 @@ await seite.waitForTimeout(250);
 // Wischen darf nicht auslösen — sonst wäre jedes Verschieben der Karte ein
 // neuer Ort.
 {
-  const m = await kartenMitte();
+  const m = await freieStelle();
   await langerDruck(m.x, m.y, 750, 60);
 }
 pruefe(
@@ -233,7 +430,7 @@ pruefe(
 
 // Kurzes Antippen ohne Erfassungsmodus ebenfalls nicht.
 {
-  const m = await kartenMitte();
+  const m = await freieStelle();
   await seite.touchscreen.tap(m.x, m.y);
 }
 await seite.waitForTimeout(350);

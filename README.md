@@ -192,6 +192,59 @@ zuverlässig prüfbar — `npm run test:karte`. Umgekehrt lässt sich von hier *
 zeigen, dass Kacheln ankommen oder in welcher Sprache sie beschriftet sind. Das
 sieht nur ein Gerät mit freiem Netz.
 
+### Die Karte hatte keine Größe — und alle 141 Marker lagen in der Ecke
+
+Gemeldet von einem Bildschirmfoto vom Telefon, und das war die erste echte
+Gerätemessung in diesem Projekt. Reproduziert gegen den ausgelieferten
+`dist/`-Stand bei 412 × 760 px:
+
+| Zustand | Container | Kacheln | Kartenebene | Marker 54 / 98 / 160 |
+|---|---|---|---|---|
+| geladen, Reiter „Liste" | **0 × 0** | 1 | 0, 0 | −83/67 · 69/57 · 94/29 |
+| nach Tipp auf „Karte" | 382 × 650 | **1** | **0, 0** | **unverändert** |
+| nach echtem Fenster-Resize | 383 × 650 | **12** | **192, 325** | dadurch korrekt |
+
+**Die Kette.** `/orte/` startet auf dem Handy mit `mobileView = 'liste'`, und
+`.split[data-view='liste'] .mapwrap` steht auf `display: none`. Die Karte entsteht
+trotzdem — ihr Markup steht unbedingt da, ohne `{#if}`. Leaflet merkt sich die
+Größe beim ersten `getSize()` und löst den Cache nur bei `invalidateSize()` oder
+einem `window`-`resize`; ein Reiterwechsel per CSS ist keines von beidem.
+`invalidateSize` kam im ganzen Quelltext **nicht vor**. Bei Größe 0 zieht Leaflet
+beim Pixelursprung keinen halben Bildschirm ab — alles rutscht um 191/325 px nach
+links oben.
+
+**Die Maßstäbe stimmten die ganze Zeit.** 233 × 142 px Spanne für Kyoto bis Nikkō
+bei Zoom 6 ist auf den Pixel richtig. Es war kein Koordinaten- und kein
+Projektionsfehler, nur ein verschobener Ursprung — weshalb jede Prüfung, die
+Marker gegen Marker hält, blind dafür bleibt.
+
+**Die zu kleine gemalte Fläche war derselbe Fehler.** Mit untergeschobenem Stil
+gemessen: Der GL-Container steht auf `width: 0; height: 0`, maplibre fällt für
+seine Leinwand auf die Vorgabe **400 × 300 px** zurück. Genau dieser Ausschnitt war
+auf dem Telefon bemalt, der Rest des Rahmens blieb Hintergrundfarbe.
+
+**Die Reparatur** ist ein `ResizeObserver` auf dem Kartencontainer in
+`MapView.svelte`, der bei jeder Größe ≠ 0 `invalidateSize()` ruft. Nicht ein
+Aufruf beim Reiterwechsel: Der ist nur *ein* Weg zu einer neuen Größe, die anderen
+sind das Drehen des Telefons, die ein- und ausfahrende Browserleiste (`--app-h`
+hängt an `100dvh`) und das Erfassungsformular. Und nicht im Ortsbrowser, sondern in
+`MapView` — dann haben alle vier Karten der App ihn.
+
+**Warum keine Prüfung das gefunden hat.** Keine einzige las je die *Position* eines
+Markers. `browser-karte.mjs` benennt den Markerhaufen sogar ausdrücklich — und
+deutet ihn als Testhindernis statt als Befund. Und `browser-orte.mjs` prüfte die
+aus der Karte übernommene Koordinate nur auf „endlich und ≠ 0"; sie lag **683,7 km
+daneben** und war grün. Beides ist jetzt anders, und beides misst gegen die
+**ausgerechnete** Sollposition (Web-Mercator im Testkopf), nicht gegen die
+Nachbarn: Marker und Koordinatenwahl teilen sich den Pixelursprung und sind
+miteinander auch dann einig, wenn er falsch ist.
+
+**Ein Nebeneffekt, der die Prüfung selbst entlarvt hat:** Nach der Reparatur fiel
+der lange Druck auf die Karte durch — weil über der Kartenmitte jetzt das Popup des
+zuletzt angelegten Ortes liegt und Leaflet dort die Weitergabe von `touchstart`
+stoppt. Vorher lag das Popup mit allem anderen in der Ecke, und die Mitte war
+zufällig frei. Die Suite sucht sich die Stelle nun mit `freieStelle()`.
+
 ## Die Selbstprüfung `/wache/` — und die Lücke, die sie schließt
 
 Der Wächter im CI prüft die **Dateien**: `src/data/places.json`, die Orte aus dem
@@ -417,11 +470,13 @@ Ausnahmeeintrag, eine umbenannte Station.
 Damit der grüne Haken nicht mehr verspricht, als er hält:
 
 - **Eigene Orte ab Nr. 165, Korrekturen und Ausblendungen.** Die liegen im
-  localStorage und in Supabase, nicht in den Dateien. Wer in der App eine falsche
-  Koordinate einträgt, bekommt **keine** Warnung. Das ist die größte Lücke, und
-  schließen könnte sie nur eine Selbstprüfung im Gerät — die gibt es nicht.
+  localStorage und in Supabase, nicht in den Dateien. Der CI sieht sie nie; dafür
+  gibt es `/wache/` im Gerät, das dieselben Regeln aus `src/lib/wache.ts` auf den
+  gespeicherten Stand anwendet.
 - **Dass Kacheln ankommen und lateinisch beschriftet sind.** Geprüft wird der
-  Fehlerfall, und der wird jetzt sogar erzwungen.
+  Fehlerfall, und der wird jetzt sogar erzwungen. **Dass ein Marker an der Stelle
+  sitzt, die seine Koordinate vorgibt, wird dagegen seit der Größenreparatur
+  gerechnet** — gegen Web-Mercator, nicht gegen die Nachbarmarker.
 - **Dass Google die Maps-URLs annimmt.**
 - **Den Abgleich gegen echtes Supabase.** Läuft bis heute nur gegen die Attrappe.
 - **Das ausgelieferte Bundle in den Browsersuiten.** Sechs von zehn brauchen den

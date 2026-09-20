@@ -116,6 +116,8 @@
   let linienZug: any = null;
   let markenLayer: any[] = [];
   let ready = $state(false);
+  /** Hält Leaflets Größen-Cache aktuell. Begründung an der Anlagestelle in `onMount`. */
+  let groessenWaechter: ResizeObserver | null = null;
 
   /**
    * Was mit dem Kartenhintergrund gerade los ist.
@@ -352,6 +354,40 @@
         zoomControl: !L.Browser.mobile,
       });
 
+      /*
+       * Die Größe der Karte im Auge behalten — der Fehler, der auf dem Telefon
+       * alle 141 Marker in die linke obere Ecke geschoben hat.
+       *
+       * Gemessen, nicht vermutet: `/orte/` startet auf dem Reiter „Liste", und
+       * `.split[data-view='liste'] .mapwrap` steht dort auf `display: none`.
+       * Die Karte entsteht trotzdem — ihr Markup steht unbedingt da, ohne
+       * `{#if}`. Leaflet merkt sich die Größe beim ersten `getSize()` und löst
+       * den Cache nur bei `invalidateSize()` oder einem `window`-`resize`; ein
+       * Reiterwechsel per CSS ist keines von beidem. Bei Größe 0 zieht Leaflet
+       * beim Pixelursprung keinen halben Viewport ab, und alles rutscht um
+       * 191/325 px nach links oben auf einen Haufen. Dazu fällt maplibre für
+       * seine Leinwand auf 400 × 300 px zurück — das war die zu kleine gemalte
+       * Fläche im Kartenrahmen.
+       *
+       * Warum ein Beobachter und nicht ein Aufruf beim Reiterwechsel: Der
+       * Reiterwechsel ist nur *ein* Weg zu einer neuen Größe. Die anderen sind
+       * das Drehen des Telefons, die ein- und ausfahrende Browserleiste
+       * (`--app-h` hängt an `100dvh`) und das Erfassungsformular. Ein Aufruf an
+       * einer Stelle fängt eine Ursache, ein Beobachter fängt alle — und er
+       * steht hier in `MapView` und nicht im Ortsbrowser, damit alle vier
+       * Karten der App ihn haben.
+       *
+       * Größe 0 wird übersprungen: Sonst friert der Cache wieder auf 0 ein,
+       * sobald die Karte weggeblendet wird.
+       */
+      groessenWaechter = new ResizeObserver((eintraege) => {
+        for (const eintrag of eintraege) {
+          const { width, height } = eintrag.contentRect;
+          if (width > 0 && height > 0) map?.invalidateSize();
+        }
+      });
+      groessenWaechter.observe(host);
+
       await grundkarte();
 
       /*
@@ -452,6 +488,8 @@
 
     return () => {
       disposed = true;
+      groessenWaechter?.disconnect();
+      groessenWaechter = null;
       map?.remove();
       map = null;
       markers.clear();

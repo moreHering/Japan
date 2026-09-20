@@ -410,6 +410,17 @@ nicht zurück. Wer OSM gewählt hatte und dort *auch* keine Kacheln bekam, dreht
 sich im Kreis. Der Knopf stellt jetzt auf `'auto'` zurück; die Gegenprobe ohne
 diese Zeile lässt zwei Prüfungen namentlich fallen.
 
+**Und der zweite Anlauf ist im CI gefallen — an derselben Falle wie zwei
+Durchgänge vorher.** Die Prüfung verlangte den Knopf **im Hinweisbalken**. Den
+gibt es aber nur, wenn auch die OSM-Kacheln ausbleiben, und das ist allein hier
+so: Der Proxy dieser Umgebung sperrt sie. Auf dem Runner kommt die OSM-Karte an,
+der Balken erscheint nicht, der Rückweg hängt an der Pille. Verlangt wird jetzt,
+was gemeint war — **irgendein** Weg zurück, der nicht im Kreis führt —, und der
+zweite Zustand wird eigens hergestellt: Die Rasterkacheln werden mit einem
+1×1-Punkt beantwortet, damit auch der Fall „OSM kommt an" in beiden Umgebungen
+geprüft ist. Drei Mal derselbe Fehler in einer Sitzung; die Lehre steht jetzt an
+drei Stellen im Testcode.
+
 ## Die Selbstprüfung `/wache/` — und die Lücke, die sie schließt
 
 Der Wächter im CI prüft die **Dateien**: `src/data/places.json`, die Orte aus dem

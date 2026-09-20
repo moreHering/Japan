@@ -375,15 +375,23 @@ console.log('\nUmschalten zwischen lateinischer Karte und OSM:');
     );
 
     /*
-     * Und zurück. Hier sind die Kachelhosts gesperrt, die OSM-Karte kommt also
-     * auch nicht — dann steht statt des Umschalters der Hinweisbalken da. Sein
-     * Knopf muss die gemerkte Wahl mit zurücksetzen, sonst führt er im Kreis.
+     * Und zurück — **ohne** einen bestimmten Knopf zu verlangen.
+     *
+     * Die erste Fassung fragte nach dem Knopf im Hinweisbalken. Den gibt es aber
+     * nur, wenn auch die OSM-Kacheln ausbleiben, und das ist bloß hier so: Der
+     * Proxy dieser Umgebung sperrt sie. Auf einem Runner mit freiem Netz kommt
+     * die OSM-Karte an, der Balken erscheint nicht, und stattdessen steht die
+     * Pille da. Wächterlauf 42 ist genau daran gefallen — zum zweiten Mal an
+     * einer Zusicherung, die die Netzsperre dieser Umgebung voraussetzt.
+     *
+     * Verlangt ist, was wirklich gemeint war: **irgendein** Weg zurück zur
+     * lesbaren Karte, und er darf nicht im Kreis führen.
      */
-    const zurueck = seite.locator('.kachelfehler button');
+    const zurueck = seite.locator('.kartenwahl button, .kachelfehler button');
     const zurueckDa = await zurueck.count();
-    pruefe(zurueckDa === 1, 'bei fehlendem Hintergrund steht ein Weg zurück bereit', `${zurueckDa}`);
-    if (zurueckDa === 1) {
-      await zurueck.tap();
+    pruefe(zurueckDa >= 1, 'es gibt einen Weg zurück zur lateinischen Karte', `${zurueckDa} Knöpfe`);
+    if (zurueckDa >= 1) {
+      await zurueck.first().tap();
       await seite.waitForTimeout(2000);
       const danach = await seite.evaluate(() => {
         try {
@@ -399,6 +407,46 @@ console.log('\nUmschalten zwischen lateinischer Karte und OSM:');
       );
     }
   }
+}
+
+/*
+ * Und derselbe Weg noch einmal, diesmal mit **funktionierender** OSM-Karte.
+ *
+ * Damit beide Zustände geprüft sind und nicht nur der, den die Umgebung gerade
+ * hergibt: Kommen die Rasterkacheln an, gibt es keinen Hinweisbalken, und der
+ * Rückweg hängt allein an der Pille. Die Kacheln werden dafür mit einem
+ * 1×1-Punkt beantwortet — dieselbe Erzwingung wie die Kachelsperre in
+ * `browser-karte.mjs`, nur andersherum.
+ */
+console.log('\nDerselbe Rückweg, wenn die OSM-Karte ankommt:');
+{
+  const PUNKT = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  await ctx.route(/tile\.openstreetmap\.org/, (r) =>
+    r.fulfill({ status: 200, contentType: 'image/png', body: PUNKT }),
+  );
+  await zurKarte();
+  await seite.locator('.kartenwahl button').tap();
+  await seite.waitForTimeout(2500);
+
+  const balken = await seite.locator('.kachelfehler').count();
+  pruefe(balken === 0, 'bei ankommenden Kacheln steht kein Fehlerbalken da', `${balken}`);
+  const pille = seite.locator('.kartenwahl button');
+  const pilleDa = await pille.count();
+  pruefe(pilleDa === 1, 'der Rückweg hängt dann allein an der Pille', `${pilleDa}`);
+  if (pilleDa === 1) {
+    const text = await pille.innerText();
+    pruefe(/lateinisch/i.test(text), 'und sie bietet die lateinische Karte an', text);
+    await pille.tap();
+    await seite.waitForTimeout(2500);
+    pruefe(
+      (await seite.locator('.maplibregl-canvas').count()) === 1,
+      'ein Tipp bringt die Vektorkarte zurück',
+    );
+  }
+  await ctx.unroute(/tile\.openstreetmap\.org/);
 }
 
 console.log('\nEigenen Ort auf der Karte anlegen:');

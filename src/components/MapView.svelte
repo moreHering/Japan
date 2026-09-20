@@ -85,6 +85,19 @@
      * Rein additiv: Ohne diese Prop verhält sich die Komponente wie vorher.
      */
     onkachelzustand?: (z: Kachelzustand) => void;
+    /**
+     * Zeigt den Umschalter zwischen lateinischer Vektorkarte und OSM-Raster.
+     *
+     * Nur dort, wo die Karte groß genug ist, dass ein Knopf nicht stört — also
+     * auf `/orte/`. Die Probekarte auf `/wache/` ist 180 px hoch, die im
+     * Tagesplan 300; dort wäre er im Weg.
+     *
+     * Warum es ihn überhaupt gibt: Der Rasterrückfall war eine Einbahnstraße.
+     * Fiel die Vektorquelle einmal aus, blieb die Karte japanisch beschriftet,
+     * bis jemand die Seite neu lud — und dass Neuladen hilft, muss man erst
+     * einmal wissen.
+     */
+    kartenwahl?: boolean;
   };
 
 
@@ -103,6 +116,7 @@
     linie = null,
     marken = [],
     onkachelzustand,
+    kartenwahl = false,
   }: Props = $props();
 
   let host: HTMLDivElement;
@@ -137,6 +151,48 @@
    * hängenden Quelle aus.
    */
   const MESSFRIST_HART = 24_000;
+
+  /*
+   * Die Kartenart als Gerätevorliebe.
+   *
+   * Nicht im Plan-Store: Der gehört der Reise und wird zwischen den drei
+   * Telefonen abgeglichen. Ob auf **diesem** Gerät die Vektorkarte läuft, ist
+   * eine Eigenschaft dieses Geräts und seiner Verbindung — es wäre störend, wenn
+   * eine Notumstellung unterwegs auf den anderen beiden landete.
+   *
+   * `'auto'` heißt: Vektor versuchen, bei Ausfall Raster. `'raster'` heißt:
+   * gar nicht erst versuchen — das spart die 273 KB gzip von maplibre und
+   * bringt bei magerer Verbindung schneller ein Bild.
+   */
+  const ARTSCHLUESSEL = 'japan2026:kartenart';
+  type Kartenart = 'auto' | 'raster';
+  function gemerkteArt(): Kartenart {
+    try {
+      return localStorage.getItem(ARTSCHLUESSEL) === 'raster' ? 'raster' : 'auto';
+    } catch {
+      // Privates Fenster: Dann gilt die Vorgabe. Ein Wurf hier dürfte nie die
+      // Karte verhindern.
+      return 'auto';
+    }
+  }
+  function merkeArt(a: Kartenart) {
+    try {
+      localStorage.setItem(ARTSCHLUESSEL, a);
+    } catch {
+      /* siehe oben */
+    }
+  }
+  let kartenart = $state<Kartenart>('auto');
+  /** Wann zuletzt eine Vektorkarte versucht wurde — gegen Dauerversuche. */
+  let letzterVersuch = 0;
+  /**
+   * Mindestabstand zwischen zwei selbsttätigen Versuchen.
+   *
+   * Eine halbe Minute: lang genug, dass ein Hin und Her zwischen Liste und Karte
+   * nicht jedes Mal den 273-KB-Brocken und einen Stilabruf auslöst, kurz genug,
+   * dass man nach einer Funklochfahrt nicht ewig auf der Notkarte sitzt.
+   */
+  const VERSUCHSPAUSE = 30_000;
 
   /**
    * Was mit dem Kartenhintergrund gerade los ist.
@@ -227,6 +283,14 @@
    * Rückfall die falsche Wahl.
    */
   async function grundkarte() {
+    letzterVersuch = Date.now();
+    if (kartenart === 'raster') {
+      // Ausdrücklich gewählt: gar nicht erst versuchen. Das spart die 273 KB
+      // gzip von maplibre vollständig — bei magerer Verbindung der Unterschied
+      // zwischen „Karte da" und „Karte kommt gleich".
+      rasterAnhaengen('OSM-Karte ausgewählt');
+      return;
+    }
     try {
       /*
        * Stil und Paket **gleichzeitig** holen, nicht nacheinander.
@@ -420,6 +484,19 @@
     }
   }
 
+  /**
+   * Zwischen lateinischer Vektorkarte und OSM-Raster umschalten.
+   *
+   * Die Wahl wird gemerkt, und zwar in beide Richtungen: Wer unterwegs auf die
+   * OSM-Karte geht, weil die Vektorkarte hakt, will nicht bei jedem Seitenwechsel
+   * wieder zwölf Sekunden auf den Rückfall warten.
+   */
+  async function artWaehlen(a: Kartenart) {
+    kartenart = a;
+    merkeArt(a);
+    await nochmal();
+  }
+
   /** Von Hand noch einmal versuchen, wenn das Netz zurück ist. */
   async function nochmal() {
     if (rasterEbene) {
@@ -557,14 +634,47 @@
        * Größe 0 wird übersprungen: Sonst friert der Cache wieder auf 0 ein,
        * sobald die Karte weggeblendet wird.
        */
+      let warVerborgen = false;
       groessenWaechter = new ResizeObserver((eintraege) => {
         for (const eintrag of eintraege) {
           const { width, height } = eintrag.contentRect;
-          if (width > 0 && height > 0) map?.invalidateSize();
+          if (width <= 0 || height <= 0) {
+            warVerborgen = true;
+            continue;
+          }
+          map?.invalidateSize();
+
+          /*
+           * Beim Wiedersichtbarwerden die Vektorkarte noch einmal versuchen.
+           *
+           * Der Grund: OpenFreeMap betreibt zwei Server im Round-Robin. Ein
+           * Ausfall kann den einen treffen und den anderen nicht — dann hilft
+           * schon der nächste Versuch. Ohne das bliebe die Karte bis zum
+           * Neuladen japanisch beschriftet, und dass Neuladen hilft, muss man
+           * erst einmal wissen.
+           *
+           * Drei Bedingungen, damit daraus kein Dauerversuch wird: Der Container
+           * war wirklich verborgen (ein Reiterwechsel, nicht die ein- und
+           * ausfahrende Browserleiste), wir sind auf dem Rückfall gelandet statt
+           * ihn gewählt zu haben, und der letzte Versuch ist eine Weile her.
+           */
+          if (
+            warVerborgen &&
+            kartenart === 'auto' &&
+            grund.art !== 'vektor' &&
+            Date.now() - letzterVersuch > VERSUCHSPAUSE
+          ) {
+            warVerborgen = false;
+            void nochmal();
+          }
+          warVerborgen = false;
         }
       });
       groessenWaechter.observe(host);
 
+      // Erst die gemerkte Wahl, dann die Karte — sonst lädt bei „Raster
+      // ausgewählt" trotzdem einmal maplibre, und genau das soll sie sparen.
+      kartenart = gemerkteArt();
       await grundkarte();
 
       /*
@@ -983,12 +1093,53 @@
      weiter — und das steht auch da, damit man weiß, dass die Orte stimmen und
      bloß das Bild fehlt.
 -->
+<!--
+  Der Umschalter.
+
+  Nur wenn er etwas nützt: Bei `fehler` steht ohnehin der Hinweisbalken mit
+  seinem eigenen Knopf da, und zwei Knöpfe übereinander wären eine Falle statt
+  einer Hilfe.
+
+  Die Beschriftung sagt, was ein Tipp **bewirkt**, nicht welcher Zustand gerade
+  gilt — „Vektorkarte" und „Rasterkarte" sind Fachwörter, die unterwegs niemand
+  gegeneinander abwägt. Was zählt, ist die Schrift auf der Karte.
+-->
+{#if kartenwahl && ready && grund.art !== 'fehler'}
+  <div class="kartenwahl">
+    {#if grund.art === 'vektor'}
+      <button
+        type="button"
+        onclick={() => artWaehlen('raster')}
+        title="OpenStreetMap-Karte: japanisch beschriftet, lädt aber ohne den großen Kartenbaustein"
+      >
+        OSM-Karte
+      </button>
+    {:else}
+      <button
+        type="button"
+        class="werben"
+        onclick={() => artWaehlen('auto')}
+        title="Noch einmal die Vektorkarte holen — die ist lateinisch beschriftet"
+      >
+        Lateinische Karte
+      </button>
+    {/if}
+  </div>
+{/if}
+
 {#if grund.art === 'fehler'}
   <div class="kachelfehler" role="status">
     <b>Kartenhintergrund lädt nicht</b>
     <span>Die Orte und ihre Popups funktionieren weiter — nur das Kartenbild fehlt.</span>
     <span class="khost">{grund.host} antwortet nicht{grund.warum ? ` · ${grund.warum}` : ''}</span>
-    <button type="button" onclick={nochmal}>nochmal versuchen</button>
+    <!--
+      Setzt die gemerkte Kartenart mit zurück, und das ist kein Nebenher.
+      Ohne das wäre „OSM-Karte gewählt, und OSM kommt auch nicht" eine
+      Sackgasse: Der Umschalter ist in diesem Zustand ausgeblendet, damit er
+      nicht über dem Hinweis liegt — es gäbe also keinen Weg zurück zur
+      lateinischen Karte außer die Seite neu zu laden.
+    -->
+    <button type="button" onclick={() => artWaehlen('auto')}>nochmal versuchen</button>
   </div>
 {/if}
 
@@ -999,6 +1150,38 @@
     min-height: 260px;
     background: var(--washi-2);
     z-index: 0;
+  }
+
+  .kartenwahl {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 600;
+  }
+
+  .kartenwahl button {
+    /* 44 px, wie jedes Tippziel in dieser App — nicht die 36 px der kleinen
+       Knöpfe: Dieser hier sitzt auf einer Karte, die man gleichzeitig schiebt. */
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--card);
+    color: var(--ai);
+    font-family: var(--util);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.16);
+    cursor: pointer;
+  }
+
+  .kartenwahl button.werben {
+    /* Der Weg zurück zur lesbaren Karte darf auffallen. Der Weg weg von ihr
+       nicht — sonst tippt man ihn versehentlich an. */
+    background: var(--shu);
+    border-color: var(--shu);
+    color: #fff;
   }
 
   .kachelfehler {

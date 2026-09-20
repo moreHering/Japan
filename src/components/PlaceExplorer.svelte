@@ -653,6 +653,7 @@
       {pickMode}
       onselect={(nr) => (selected = nr)}
       onpick={stelleGewaehlt}
+      kartenwahl
     />
 
     <!-- Auf dem Handy scrollt die Werkzeugleiste weg, sobald die Karte den

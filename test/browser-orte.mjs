@@ -327,6 +327,80 @@ console.log('\nMarker sitzen an der Stelle, die ihre Koordinate vorgibt:');
   }
 }
 
+// ------------------------------------------- Zwischen den Kartenarten ---
+
+/*
+ * Der Weg zurück zur lesbaren Karte.
+ *
+ * Vorgeschichte: Der Rasterrückfall war eine Einbahnstraße. Fiel die
+ * Vektorquelle aus — auf dem Telefon ist das passiert —, blieb die Karte
+ * japanisch beschriftet, bis jemand die Seite neu lud. Und dass Neuladen hilft,
+ * muss man erst einmal wissen.
+ *
+ * Geprüft wird die ganze Runde und nicht nur der Hinknopf: Der Rückweg war beim
+ * ersten Anlauf eine Sackgasse, weil der Knopf im Hinweisbalken die gemerkte
+ * Wahl nicht zurücksetzte.
+ */
+console.log('\nUmschalten zwischen lateinischer Karte und OSM:');
+{
+  const pille = seite.locator('.kartenwahl button');
+  const anzahl = await pille.count();
+  pruefe(anzahl === 1, 'auf der Karte steht ein Umschalter', `${anzahl} gefunden`);
+  if (anzahl === 1) {
+    const kasten = await pille.boundingBox();
+    pruefe(
+      kasten !== null && kasten.height >= 44,
+      'er ist mindestens 44 px hoch — er sitzt auf einer Fläche, die man schiebt',
+      kasten ? `${Math.round(kasten.height)} px` : 'nicht gefunden',
+    );
+    pruefe(
+      /OSM/i.test(await pille.innerText()),
+      'und bietet bei laufender Vektorkarte den Wechsel zu OSM an',
+      await pille.innerText(),
+    );
+
+    await pille.tap();
+    await seite.waitForTimeout(1500);
+    const gemerkt = await seite.evaluate(() => {
+      try {
+        return localStorage.getItem('japan2026:kartenart');
+      } catch {
+        return 'wirft';
+      }
+    });
+    pruefe(gemerkt === 'raster', 'die Wahl wird für dieses Gerät gemerkt', `${gemerkt}`);
+    pruefe(
+      (await seite.locator('.maplibregl-canvas').count()) === 0,
+      'die Vektorebene ist wirklich weg und nicht nur ausgeblendet',
+    );
+
+    /*
+     * Und zurück. Hier sind die Kachelhosts gesperrt, die OSM-Karte kommt also
+     * auch nicht — dann steht statt des Umschalters der Hinweisbalken da. Sein
+     * Knopf muss die gemerkte Wahl mit zurücksetzen, sonst führt er im Kreis.
+     */
+    const zurueck = seite.locator('.kachelfehler button');
+    const zurueckDa = await zurueck.count();
+    pruefe(zurueckDa === 1, 'bei fehlendem Hintergrund steht ein Weg zurück bereit', `${zurueckDa}`);
+    if (zurueckDa === 1) {
+      await zurueck.tap();
+      await seite.waitForTimeout(2000);
+      const danach = await seite.evaluate(() => {
+        try {
+          return localStorage.getItem('japan2026:kartenart');
+        } catch {
+          return 'wirft';
+        }
+      });
+      pruefe(danach === 'auto', 'und er führt nicht im Kreis, sondern zur Vektorkarte', `${danach}`);
+      pruefe(
+        (await seite.locator('.maplibregl-canvas').count()) === 1,
+        'die Vektorebene ist wieder da',
+      );
+    }
+  }
+}
+
 console.log('\nEigenen Ort auf der Karte anlegen:');
 
 const plusKnopf = seite.locator('.rundknopf');

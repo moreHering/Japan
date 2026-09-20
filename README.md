@@ -376,6 +376,40 @@ Bildschirmfoto durchsichtig — **was die Karte malt, ist von hier nicht zu
 sehen**. Gemessen werden kann nur die Frist und der Rückfall. Ob die Beschriftung
 auf dem Gerät zurückkommt, sagt `/wache/` auf dem Gerät.
 
+### Der Weg zurück zur lesbaren Karte
+
+Der Rasterrückfall war eine **Einbahnstraße**. Auf dem Telefon lieferte die
+Vektorquelle nichts, die App schaltete wie vorgesehen auf OpenStreetMap um — und
+damit war die Karte japanisch beschriftet, bis jemand die Seite neu lud. Dass
+Neuladen hilft, muss man erst einmal wissen.
+
+Drei Dinge dagegen:
+
+- **Ein Umschalter auf der Karte** (`kartenwahl`-Prop, nur auf `/orte/`; die
+  Probekarte auf `/wache/` ist 180 px hoch, da wäre er im Weg). Die Beschriftung
+  sagt, was ein Tipp *bewirkt* — „OSM-Karte" beziehungsweise „Lateinische Karte"
+  —, nicht welcher Zustand gerade gilt. „Vektor" und „Raster" sind Fachwörter,
+  die unterwegs niemand gegeneinander abwägt; was zählt, ist die Schrift auf der
+  Karte.
+- **Die Wahl wird gemerkt**, in `localStorage` unter `japan2026:kartenart`, und
+  ausdrücklich **nicht** im Plan-Store: Der gehört der Reise und wird zwischen
+  den drei Telefonen abgeglichen. Ob auf *diesem* Gerät die Vektorkarte läuft,
+  ist eine Eigenschaft dieses Geräts und seiner Verbindung. Bei `'raster'` wird
+  maplibre **gar nicht erst geladen** — das spart die vollen 273 KB gzip.
+- **Ein neuer Versuch beim Wiedersichtbarwerden.** OpenFreeMap betreibt laut
+  eigenem Repo zwei Server im Round-Robin; ein Ausfall kann den einen treffen und
+  den anderen nicht. Drei Bedingungen, damit daraus kein Dauerversuch wird: Der
+  Container war wirklich verborgen (ein Reiterwechsel, nicht die ein- und
+  ausfahrende Browserleiste), wir sind auf dem Rückfall *gelandet* statt ihn
+  gewählt zu haben, und der letzte Versuch ist über 30 s her.
+
+**Eine Sackgasse, die beim ersten Anlauf entstanden ist und die Prüfung gefunden
+hat:** Im Fehlerzustand ist der Umschalter ausgeblendet — sonst läge er über dem
+Hinweisbalken. Dessen Knopf „nochmal versuchen" setzte die gemerkte Wahl aber
+nicht zurück. Wer OSM gewählt hatte und dort *auch* keine Kacheln bekam, drehte
+sich im Kreis. Der Knopf stellt jetzt auf `'auto'` zurück; die Gegenprobe ohne
+diese Zeile lässt zwei Prüfungen namentlich fallen.
+
 ## Die Selbstprüfung `/wache/` — und die Lücke, die sie schließt
 
 Der Wächter im CI prüft die **Dateien**: `src/data/places.json`, die Orte aus dem

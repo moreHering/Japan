@@ -64,7 +64,8 @@ export const START = existsSync(browserPfad) ? { executablePath: browserPfad } :
  * einer dazu, gehört er hierher — sonst prüft die Suite einen Fehlerfall, den sie
  * nur halb hergestellt hat.
  */
-export const KACHELHOSTS = /tiles\.openfreemap\.org|tile\.openstreetmap\.org|basemaps\.cartocdn\.com/;
+export const KACHELHOSTS =
+  /tiles\.openfreemap\.org|tiles\.versatiles\.org|tile\.openstreetmap\.org|basemaps\.cartocdn\.com/;
 
 /**
  * Ein winziger, gültiger MapLibre-Stil, der **statt** des echten ausgeliefert wird.
@@ -104,13 +105,14 @@ export const PROBESTIL = {
  * was die Umgebung gerade zulässt.
  */
 export async function vektorStilUnterschieben(ctx, stil = PROBESTIL) {
-  await ctx.route('**/styles/liberty', (r) =>
-    r.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(stil),
-    }),
-  );
+  const antwort = (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(stil) });
+  // **Beide** Vektoranbieter, nicht nur einer. Sonst gewinnt auf einem Runner mit
+  // freiem Netz der erste der Kette mit seinem echten Stil, und die Suite prüft
+  // eine andere Karte als hier — genau der Unterschied, an dem schon zwei
+  // Wächterläufe gefallen sind.
+  await ctx.route('**/karte-versatiles.json', antwort);
+  await ctx.route('**/styles/liberty', antwort);
 }
 
 /**

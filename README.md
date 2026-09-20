@@ -421,6 +421,63 @@ zweite Zustand wird eigens hergestellt: Die Rasterkacheln werden mit einem
 geprüft ist. Drei Mal derselbe Fehler in einer Sitzung; die Lehre steht jetzt an
 drei Stellen im Testcode.
 
+### Drei Anbieter statt einem
+
+Der Ausfall vom 20.09.2026 hatte eine Ursache, die keine Reparatur am Code
+beheben kann: **Die Karte hing an einem einzigen Dienst.** Als dessen
+Vektorkacheln ausblieben, war sie tot — und niemand merkte es, weil maplibre so
+einen Ausfall nicht meldet.
+
+Jetzt wird nicht mehr gehofft, sondern durchprobiert. `ANBIETER` in
+`src/lib/karte.ts`:
+
+| | Anbieter | Stil kommt von | Beschriftung |
+|---|---|---|---|
+| 1 | **VersaTiles** | `public/karte-versatiles.json`, also von **dieser** Seite | lateinisch |
+| 2 | **OpenFreeMap** | `tiles.openfreemap.org` | lateinisch |
+| 3 | **OpenStreetMap** | — (Rasterkacheln) | japanisch |
+
+Jeder Vektoranbieter wird angehängt und muss **beweisen**, dass er zeichnet
+(`queryRenderedFeatures`). Tut er das nicht, kommt der nächste. Der zuletzt
+erfolgreiche wird gemerkt (`japan2026:kartenanbieter`) und beim nächsten Mal
+zuerst gefragt — unterwegs zählt die erste Sekunde, nicht die Ordnung der Liste.
+
+**Warum VersaTiles zuerst und warum sein Stil im Repo liegt.** Jeder Abruf, den
+die Karte zum Zeichnen braucht, ist eine Stelle, an der genau das passieren kann,
+was passiert ist. Der Stil wird deshalb beim Bauen erzeugt
+(`npm run data` → `scripts/karte-stil.mjs`, aus `@versatiles/style`) und liegt in
+`public/`. Ist die Seite da, ist der Stil da; nur die Kacheln hängen noch am
+fremden Server.
+
+**Eine Falle des VersaTiles-Stils**, gemessen und abgefangen: Sein deutscher
+Stil erzeugt `["coalesce", ["get","name_de"], ["get","name"]]` — ein japanischer
+Ort ohne deutschen Namen stünde damit wieder auf Japanisch da. `deutscheNamen()`
+schreibt das zur Laufzeit für **jeden** Anbieter gleich um, statt zwei Regeln zu
+führen, die auseinanderlaufen.
+
+**Zwei Fehler beim Bauen, beide von den eigenen Prüfungen gefunden:**
+
+1. **Die Bereitschaftsprüfung war zu streng.** Erste Fassung: erst messen, wenn
+   `loaded()` *und* `style.placement` stehen, sonst durchgefallen. Ergebnis: ein
+   **gültiger** Stil fiel mit „antwortet seit 10 s nicht" durch, weil `loaded()`
+   erst wahr wird, wenn *jede* Quelle fertig ist. Auf einer mageren Verbindung
+   hätte das einen Anbieter weggeworfen, der gleich geliefert hätte. Jetzt gilt:
+   **verworfen wird nur bei Beweis, nicht bei fehlendem Beweis** — ein Fehler
+   oder nachweislich null Merkmale. Alles andere bleibt stehen.
+2. **Die Marker warteten auf die Kette.** `grundkarte()` stand hinter einem
+   `await`, und die Kette kann zwanzig Sekunden brauchen. Eine Karte, die erst
+   dann auf einen Finger reagiert, ist unterwegs unbrauchbar. Sie läuft jetzt
+   nebenher; Marker und Antippen hängen an nichts davon. Gefunden hat es die
+   Prüfung, die nach 700 ms keinen einzigen Marker mehr fand.
+
+**Was im CI prüfbar ist und was nicht.** Prüfbar: dass die Kette weitergeht,
+wenn ein Stilabruf scheitert, dass sie beim Raster landet und dass sie alle
+Durchgefallenen samt Grund benennt (erzwungen über 503-Antworten, die brauchen
+kein maplibre). **Nicht** prüfbar ist der stille Fall vom Telefon: In dieser
+Umgebung fordert maplibre überhaupt keine Kacheln an — der Worker arbeitet hier
+nicht —, es gibt also weder Daten noch Fehler. Dass die Kette *dort* weitergeht,
+sagt nur `/wache/` auf dem Gerät.
+
 ## Die Selbstprüfung `/wache/` — und die Lücke, die sie schließt
 
 Der Wächter im CI prüft die **Dateien**: `src/data/places.json`, die Orte aus dem

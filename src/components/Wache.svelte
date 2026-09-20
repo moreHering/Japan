@@ -103,8 +103,8 @@
   const KARTE_TEXT: Record<Kachelzustand['art'], { ton: string; titel: string; was: string }> = {
     vektor: {
       ton: 'gut',
-      titel: 'Vektorkarte von OpenFreeMap',
-      was: 'Der Stil ist geladen und die Beschriftung auf name_de / name_en / name:latin umgestellt. Ob wirklich etwas gezeichnet wird, steht in den Zahlen darunter.',
+      titel: 'Vektorkarte, lateinisch beschriftbar',
+      was: 'Der Stil ist geladen und die Beschriftung auf name_de / name_en / name:latin umgestellt. Welcher Anbieter zeichnet und ob er wirklich etwas liefert, steht darunter.',
     },
     raster: {
       ton: 'warn',
@@ -241,11 +241,14 @@
         angezeigt: Eine Seite, die eine fehlende Messung als „nichts da" ausgibt,
         schlägt beim ersten Blick Alarm und wird danach nicht mehr gelesen.
       -->
-      {#if kachel.gezeichnet >= 0}
-        <dl class="zahlen">
+      <dl class="zahlen">
+        <div><dt>Anbieter</dt><dd>{kachel.anbieter || '—'}</dd></div>
+        {#if kachel.gezeichnet >= 0}
           <div><dt>gezeichnet</dt><dd>{kachel.gezeichnet}</dd></div>
           <div><dt>davon Namen</dt><dd>{kachel.beschriftet}</dd></div>
-        </dl>
+        {/if}
+      </dl>
+      {#if kachel.gezeichnet >= 0}
         {#if kachel.gezeichnet === 0}
           <p class="klein schlecht">
             Die Vektorquelle hat <b>nichts</b> geliefert. Genau dieser Fall sah auf dem Telefon

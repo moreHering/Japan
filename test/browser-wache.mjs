@@ -266,61 +266,63 @@ pruefe(orgaZahl === 1, 'die Organisationsseite trägt genau einen Verweis', `${o
 const orgaLink = orgaZahl ? await seite.locator('.wachelink a').first().getAttribute('href') : null;
 pruefe(/\/wache\//.test(orgaLink ?? ''), 'die Organisationsseite verlinkt sie', orgaLink ?? '—');
 
-// ============================== 6b) Die stumme Vektorquelle vom Telefon ====
+// ================================ 6b) Die Anbieterkette geht weiter =========
 
 /*
- * Der Fall, der dieses ganze Kapitel ausgelöst hat.
+ * Der Fall, der dieses Kapitel ausgelöst hat.
  *
  * Auf dem Telefon zeigte die Karte ein Relief und sonst nichts: kein Wasser,
  * keine Straße, kein Name. Der Grund steckt im Liberty-Stil selbst — er hat
  * **zwei** Quellen, ein Natural-Earth-Raster und die Vektorquelle. Das Raster
  * kam an und sah aus wie eine Karte; die Vektorquelle lieferte nichts, meldete
- * aber auch keinen Fehler. `/wache/` schrieb zur selben Zeit grün
- * „Vektorkarte, lateinisch beschriftet".
+ * aber auch keinen Fehler. Seitdem hängt die Karte nicht mehr an einem Dienst,
+ * sondern probiert mehrere durch.
  *
- * Geprüft wird in einem **eigenen Fenster**: Der Stil wird untergeschoben, und
- * die Routen des ersten Kontexts sollen davon nichts abbekommen.
+ * **Was hier geprüft wird und was nicht.** Prüfbar ist, dass die Kette
+ * weitergeht, wenn ein Anbieter ausfällt, und dass sie am Ende beim Raster
+ * landet und alle Durchgefallenen benennt. Erzwungen wird das über
+ * fehlschlagende Stilabrufe — die gehen über `fetch` und brauchen kein maplibre.
  *
- * Die Prüfung dauert bewusst eine halbe Minute. Die Frist ist der Kern der
- * Sache: Eine magere Verbindung unterwegs darf nicht sofort als Ausfall gelten,
- * ein stiller Ausfall aber auch nicht ewig als „lädt noch" durchgehen.
+ * **Nicht** prüfbar ist der stille Fall vom Telefon: In dieser Umgebung fordert
+ * maplibre überhaupt keine Kacheln an (der Worker arbeitet hier nicht), es gibt
+ * also weder Daten noch Fehler. Dass die Kette *dort* weitergeht, sagt nur
+ * `/wache/` auf dem Gerät.
  */
-console.log('\nEine Vektorquelle, die nie antwortet:');
+console.log('\nWenn die Vektoranbieter ausfallen:');
 {
   const ctx2 = await browser.newContext({ ...devices['iPhone 13'] });
-  await vektorStilUnterschieben(ctx2, STUMMER_VEKTORSTIL);
-  await ctx2.route(KACHELHOSTS, (r) => (/styles\/liberty/.test(r.request().url()) ? r.fallback() : r.abort()));
+  // Beide Stilabrufe scheitern — einmal der eigene aus public/, einmal der fremde.
+  await ctx2.route('**/karte-versatiles.json', (r) => r.fulfill({ status: 503, body: 'weg' }));
+  await ctx2.route('**/styles/liberty', (r) => r.fulfill({ status: 503, body: 'weg' }));
+  await ctx2.route(KACHELHOSTS, (r) => r.abort());
   const zweite = await ctx2.newPage();
   await zweite.goto(`${BASIS}/wache/`, { waitUntil: 'load' });
   await zweite.waitForSelector('.probekarte .leaflet-container', { timeout: 20000 });
-  await zweite.waitForTimeout(2500);
+  await zweite.waitForTimeout(3000);
 
-  const frueh = await zweite.locator('.block').nth(1).innerText();
-  // Erst zählen, dann prüfen — ein fehlender Block würde sonst still bestehen.
-  pruefe(frueh.length > 20, 'der Kartenabschnitt ist da', `${frueh.length} Zeichen`);
+  const text = await zweite.locator('.block').nth(1).innerText();
+  const flach = text.replace(/\s+/g, ' ');
+  // Erst zählen, dann prüfen — ein fehlender Block bestünde sonst still.
+  pruefe(flach.length > 20, 'der Kartenabschnitt ist da', `${flach.length} Zeichen`);
   pruefe(
-    !/lateinisch beschriftet/i.test(frueh),
+    !/lateinisch beschriftet/i.test(flach),
     'die Seite behauptet nicht mehr, die Beschriftung laufe',
-    frueh.replace(/\s+/g, ' ').slice(0, 100),
+    flach.slice(0, 100),
   );
   pruefe(
-    /gemessen/i.test(frueh),
-    'sie sagt stattdessen, dass noch gemessen wird',
-    frueh.replace(/\s+/g, ' ').slice(0, 100),
-  );
-
-  // Und nach der harten Frist ist „lädt noch" keine Auskunft mehr.
-  await zweite.waitForTimeout(26000);
-  const spaet = await zweite.locator('.block').nth(1).innerText();
-  pruefe(
-    /antwortet seit \d+ s nicht|Vektordaten fehlen/i.test(spaet),
-    'nach der Frist nennt sie den Ausfall der Vektorkarte beim Namen',
-    spaet.replace(/\s+/g, ' ').slice(0, 140),
+    /OpenStreetMap/.test(flach),
+    'die Kette landet beim Rasteranbieter',
+    flach.slice(0, 160),
   );
   pruefe(
-    /Kein Kartenhintergrund|Rasterr/i.test(spaet),
-    'und die Karte ist auf den Rasterrückfall gewechselt',
-    spaet.replace(/\s+/g, ' ').slice(0, 140),
+    /VersaTiles/.test(flach) && /OpenFreeMap/.test(flach),
+    'und benennt beide Vektoranbieter, die durchgefallen sind',
+    flach.slice(0, 220),
+  );
+  pruefe(
+    /503/.test(flach),
+    'samt dem Grund im Wortlaut, nicht nur „ging nicht"',
+    flach.slice(0, 220),
   );
   await ctx2.close();
 }

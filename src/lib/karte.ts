@@ -52,15 +52,87 @@ export type Kachelzustand = {
   beschriftet: number;
   /** Die Meldungen von maplibre im Wortlaut, höchstens fünf. */
   meldungen: string[];
+  /** Welcher Anbieter gerade zeichnet — für `/wache/`. */
+  anbieter: string;
 };
+
+/**
+ * Ein Kartenanbieter.
+ *
+ * `vonHier` heißt: Die Stil-Datei liegt in `public/` und kommt damit vom selben
+ * Server wie die App. Ist die Seite da, ist der Stil da — ein Netzabruf weniger,
+ * der schiefgehen kann.
+ */
+export type Anbieter = {
+  id: string;
+  /** Wie er auf `/wache/` heißt. */
+  name: string;
+  art: 'vektor' | 'raster';
+  /** Vektor: Adresse der Stil-JSON. Bei `vonHier` relativ zu `public/`. */
+  stil?: string;
+  vonHier?: boolean;
+  /** Raster: die Kachelvorlage. */
+  kacheln?: string;
+  attribution: string;
+};
+
+/**
+ * Die Anbieter, der Reihe nach — **der Kern der Reparatur vom 20.09.2026**.
+ *
+ * Vorher hing die Karte an einem einzigen Dienst. Als dessen Vektorkacheln
+ * ausblieben, war die Karte tot, und niemand merkte es: Eine 404-Kachel gilt
+ * maplibre als geladen, und ein gescheiterter Abruf meldet `loaded() === true`.
+ * Sichtbar blieb nur das Reliefbild aus der zweiten, funktionierenden Quelle
+ * desselben Stils — das sah aus wie eine Karte und war keine.
+ *
+ * Deshalb wird jetzt nicht mehr *gehofft*, sondern **durchprobiert**: Jeder
+ * Anbieter wird angehängt und muss beweisen, dass er wirklich etwas zeichnet
+ * (`queryRenderedFeatures`). Tut er das nicht, kommt der nächste. Der letzte ist
+ * die OSM-Rasterkarte — japanisch beschriftet, aber sie kommt an.
+ *
+ * Die Reihenfolge ist begründet, nicht beliebig:
+ *
+ * 1. **VersaTiles** zuerst, weil sein Stil aus `public/` kommt und damit gar
+ *    nicht ausfallen kann; nur die Kacheln hängen am fremden Server.
+ * 2. **OpenFreeMap** als zweite Vektorquelle — dieselbe Art Karte von einem
+ *    unabhängigen Betreiber. Dass beide gleichzeitig ausfallen, ist der Fall,
+ *    für den es Punkt 3 gibt.
+ * 3. **OpenStreetMap** als Raster. Kein Schlüssel, kein Stil, kein WebGL —
+ *    das, was am wenigsten kaputtgehen kann.
+ */
+export const ANBIETER: readonly Anbieter[] = [
+  {
+    id: 'versatiles',
+    name: 'VersaTiles',
+    art: 'vektor',
+    stil: 'karte-versatiles.json',
+    vonHier: true,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  },
+  {
+    id: 'openfreemap',
+    name: 'OpenFreeMap',
+    art: 'vektor',
+    stil: 'https://tiles.openfreemap.org/styles/liberty',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  },
+  {
+    id: 'osm',
+    name: 'OpenStreetMap',
+    art: 'raster',
+    kacheln: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  },
+];
 
 /** Ein frischer, noch ungemessener Zustand. */
 export function kachelzustand(
   art: Kachelzustand['art'],
   host = '',
   warum = '',
+  anbieter = '',
 ): Kachelzustand {
-  return { art, host, warum, gezeichnet: -1, beschriftet: -1, meldungen: [] };
+  return { art, host, warum, anbieter, gezeichnet: -1, beschriftet: -1, meldungen: [] };
 }
 
 /**

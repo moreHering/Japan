@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "data": "node scripts/build-data.mjs",
+    "data": "node scripts/build-data.mjs && node scripts/karte-stil.mjs",
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
@@ -27,7 +27,8 @@
     "db:regionen": "supabase/test/regionssuche-probe.sh",
     "test:maps": "node test/browser-maps.mjs",
     "wache:daten": "vitest run test/orte-plausibel.test.ts",
-    "test:wache": "node test/browser-wache.mjs"
+    "test:wache": "node test/browser-wache.mjs",
+    "karte:stil": "node scripts/karte-stil.mjs"
   },
   "dependencies": {
     "@astrojs/svelte": "^9.0.1",
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.1",
+    "@versatiles/style": "^6.0.1",
     "playwright": "^1.63.0",
     "vitest": "^5.0.1"
   }

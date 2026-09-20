@@ -16,7 +16,7 @@ import { readFile } from 'node:fs/promises';
 
 import { chromium, devices } from 'playwright';
 
-import { BASIS, START } from './browserlauf.mjs';
+import { BASIS, START, vektorStilUnterschieben } from './browserlauf.mjs';
 const iPhone = devices['iPhone 13'];
 
 let fehler = 0;
@@ -85,6 +85,12 @@ const ortNach = new Map(orte.map((o) => [String(o.nr), o]));
 // es keinen bekommen.
 const browser = await chromium.launch({ ...START });
 const ctx = await browser.newContext({ ...iPhone });
+/*
+ * Die Vektorebene wird erzwungen, nicht vorgefunden — siehe `browserlauf.mjs`.
+ * Ohne das prüft diese Datei hier eine Karte ohne Leinwand und auf dem Runner
+ * eine mit, und die beiden verhalten sich beim Antippen verschieden.
+ */
+await vektorStilUnterschieben(ctx);
 const seite = await ctx.newPage();
 
 const meldungen = [];
@@ -142,17 +148,47 @@ async function freieStelle() {
       punkte.push({ x: Math.round(x), y: Math.round(y) });
     }
   }
+  /*
+   * „Frei" heißt **nicht** „`elementFromPoint` liefert genau `.leaflet-container`".
+   * Das war die erste Fassung, und sie ist im CI gefallen: Hier sperrt der Proxy
+   * jeden Kachelhost, die Karte bleibt leer und der Container liegt selbst
+   * obenauf. Auf einem Runner mit freiem Netz lädt die Vektorkarte, und dann
+   * deckt die maplibre-Leinwand die ganze Fläche ab — sie hat kein
+   * `pointer-events: none`. Es gab also **keine** freie Stelle, und die Suite
+   * fiel an einem Unterschied der Umgebung, nicht an einem Fehler der App.
+   *
+   * Richtig gefragt ist: Liegt hier etwas **darüber**, das den Druck schluckt?
+   * Marker, Popups und Leaflets Bedienknöpfe tun das, die Kartenfläche nicht —
+   * egal ob sie aus Kacheln, aus einer Leinwand oder aus nichts besteht.
+   */
   const treffer = await seite.evaluate((kandidaten) => {
+    const IM_WEG = '.leaflet-marker-icon, .leaflet-popup, .leaflet-control-container';
+    let letzterHinderer = 'nichts getroffen';
     for (const p of kandidaten) {
       const el = document.elementFromPoint(p.x, p.y);
-      if (el && el.classList.contains('leaflet-container')) return p;
+      if (!el) continue;
+      if (!el.closest('.leaflet-container')) {
+        letzterHinderer = `außerhalb der Karte: ${el.className}`;
+        continue;
+      }
+      const drueber = el.closest(IM_WEG);
+      if (drueber) {
+        letzterHinderer = `verdeckt von ${drueber.className}`;
+        continue;
+      }
+      return { punkt: p, hinderer: null };
     }
-    return null;
+    return { punkt: null, hinderer: letzterHinderer };
   }, punkte);
-  // Kein Rückfall auf die Mitte: Ein stiller Ersatzpunkt würde die folgende
-  // Prüfung fehlschlagen lassen, ohne den Grund zu nennen.
-  pruefe(treffer !== null, 'Auf der Karte ist eine freie Stelle zum Drücken erreichbar');
-  return treffer ?? { x: Math.round(k.x + k.width / 2), y: Math.round((oben + unten) / 2) };
+
+  // Kein stiller Ersatzpunkt: Der würde die folgende Prüfung fehlschlagen
+  // lassen, ohne den Grund zu nennen. Deshalb steht hier, was im Weg lag.
+  pruefe(
+    treffer.punkt !== null,
+    'Auf der Karte ist eine freie Stelle zum Drücken erreichbar',
+    treffer.hinderer ?? '',
+  );
+  return treffer.punkt ?? { x: Math.round(k.x + k.width / 2), y: Math.round((oben + unten) / 2) };
 }
 
 /** Breite des Dokuments gegen das Fenster — misst Querscrollen. */
@@ -218,6 +254,12 @@ await seite.waitForTimeout(700);
  * miteinander auch dann einig, wenn er falsch ist.
  */
 console.log('\nMarker sitzen an der Stelle, die ihre Koordinate vorgibt:');
+{
+  // Erst nachweisen, dass das Unterschieben gewirkt hat. Sonst prüft die Suite
+  // bloß wieder, was die Umgebung gerade zulässt — und meldet es als Erfolg.
+  const leinwand = await seite.locator('.maplibregl-canvas').count();
+  pruefe(leinwand === 1, 'Die untergeschobene Vektorebene liegt auf der Karte', `${leinwand} Leinwände`);
+}
 {
   const gezeichnet = await seite.evaluate(() => {
     const c = document.querySelector('.leaflet-container');

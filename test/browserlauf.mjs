@@ -65,3 +65,50 @@ export const START = existsSync(browserPfad) ? { executablePath: browserPfad } :
  * nur halb hergestellt hat.
  */
 export const KACHELHOSTS = /tiles\.openfreemap\.org|tile\.openstreetmap\.org|basemaps\.cartocdn\.com/;
+
+/**
+ * Ein winziger, gültiger MapLibre-Stil, der **statt** des echten ausgeliefert wird.
+ *
+ * Der Grund ist derselbe wie bei der erzwungenen Kachelsperre in
+ * `browser-karte.mjs`, nur andersherum: Hier ist `tiles.openfreemap.org` gesperrt,
+ * die Vektorebene kommt also nie zustande. Auf einem GitHub-Runner ist das Netz
+ * frei, maplibre hängt seine Leinwand über die ganze Kartenfläche — und die hat
+ * **kein** `pointer-events: none`. Eine Suite, die Punkte auf der Karte antippt,
+ * sieht damit in den beiden Umgebungen zwei verschiedene Welten. Genau daran ist
+ * Wächterlauf 39 gefallen.
+ *
+ * Der Stil hat eine leere GeoJSON-Quelle: Es werden keine Kacheln und keine
+ * Glyphen nachgeladen, und `deutscheNamen()` findet trotzdem seine Textebene und
+ * wirft nicht.
+ */
+export const PROBESTIL = {
+  version: 8,
+  glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+  sources: { leer: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } } },
+  layers: [
+    { id: 'hintergrund', type: 'background', paint: { 'background-color': '#eef3ee' } },
+    {
+      id: 'beschriftung',
+      type: 'symbol',
+      source: 'leer',
+      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'] },
+    },
+  ],
+};
+
+/**
+ * Schiebt `PROBESTIL` unter, damit die Vektorebene in jeder Umgebung entsteht.
+ *
+ * Muss **vor** dem ersten `goto` gerufen werden. Wer sie benutzt, sollte danach
+ * prüfen, dass `.maplibregl-canvas` wirklich da ist — sonst prüft man wieder nur,
+ * was die Umgebung gerade zulässt.
+ */
+export async function vektorStilUnterschieben(ctx) {
+  await ctx.route('**/styles/liberty', (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(PROBESTIL),
+    }),
+  );
+}

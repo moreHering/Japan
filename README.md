@@ -245,6 +245,19 @@ zuletzt angelegten Ortes liegt und Leaflet dort die Weitergabe von `touchstart`
 stoppt. Vorher lag das Popup mit allem anderen in der Ecke, und die Mitte war
 zufällig frei. Die Suite sucht sich die Stelle nun mit `freieStelle()`.
 
+**Und `freieStelle()` fiel beim ersten Anlauf im CI — am selben Fehlertyp wie die
+Kachelprüfung ein Durchgang vorher.** Die erste Fassung verlangte, dass
+`elementFromPoint` genau den `.leaflet-container` liefert. Das stimmt **nur hier**:
+Der Proxy sperrt jeden Kachelhost, die Vektorebene kommt nie zustande, die
+Kartenfläche ist der Container selbst. Auf einem Runner mit freiem Netz lädt die
+Vektorkarte, und die maplibre-Leinwand deckt alles ab — sie hat kein
+`pointer-events: none`. Es gab dort **keine** freie Stelle, und der Wächter hielt
+das Tor zu. Zwei Lehren, beide eingebaut: Gefragt wird jetzt, ob etwas
+**darüber** liegt (Marker, Popup, Bedienknopf), nicht woraus die Fläche besteht —
+und `browser-orte.mjs` **schiebt den Stil unter** (`vektorStilUnterschieben()` in
+`browserlauf.mjs`), damit die Leinwand in beiden Umgebungen da ist, mit einer
+eigenen Zusicherung, dass das Unterschieben gewirkt hat.
+
 ## Die Selbstprüfung `/wache/` — und die Lücke, die sie schließt
 
 Der Wächter im CI prüft die **Dateien**: `src/data/places.json`, die Orte aus dem

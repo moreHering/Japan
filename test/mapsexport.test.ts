@@ -24,6 +24,7 @@ import {
   MAX_ZWISCHENZIELE,
   abschnitte,
   cdata,
+  kartenLink,
   kml,
   kmlDateiname,
   kmlFarbe,
@@ -344,5 +345,36 @@ describe('Dateiname', () => {
     expect(kmlDateiname('2026-09-19')).toBe('japan-2026-orte-2026-09-19.kml');
     // Auch mit einem vollen Zeitstempel — `new Date().toISOString()` liegt nahe.
     expect(kmlDateiname('2026-09-19T08:12:00.000Z')).toBe('japan-2026-orte-2026-09-19.kml');
+  });
+});
+
+describe('Kartenausschnitt in Google Maps öffnen', () => {
+  it('benutzt die dokumentierte Schnittstelle, nicht die /maps/@-Gewohnheit', () => {
+    const u = kartenLink(34.6873, 135.5259, 12);
+    expect(u).toContain('api=1');
+    expect(u).toContain('map_action=map');
+    expect(u).toContain('center=34.687300,135.525900');
+    expect(u).toContain('zoom=12');
+  });
+
+  it('lässt das Komma lesbar, statt es zu maskieren', () => {
+    // Eine URL, die man nicht lesen kann, kann man auch nicht von Hand prüfen.
+    expect(kartenLink(35, 135, 10)).not.toContain('%2C');
+  });
+
+  it('begrenzt den Zoom auf das, was Google annimmt', () => {
+    // Außerhalb 0…21 verwirft Google die Adresse **still** und öffnet irgendeinen
+    // Ausschnitt — schlimmer als ein grober, weil es wie ein Fehler der App aussieht.
+    expect(kartenLink(35, 135, 99)).toContain('zoom=21');
+    expect(kartenLink(35, 135, -4)).toContain('zoom=0');
+    expect(kartenLink(35, 135, Number.NaN)).toContain('zoom=12');
+  });
+
+  it('rundet Nachkommastellen, statt sie voll auszuschreiben', () => {
+    // Leaflet liefert 15 Stellen; sechs sind auf zehn Zentimeter genau und machen
+    // die Adresse lesbar.
+    expect(kartenLink(34.68725714285, 135.52591234567, 14)).toContain(
+      'center=34.687257,135.525912',
+    );
   });
 });

@@ -478,6 +478,52 @@ Umgebung fordert maplibre überhaupt keine Kacheln an — der Worker arbeitet hi
 nicht —, es gibt also weder Daten noch Fehler. Dass die Kette *dort* weitergeht,
 sagt nur `/wache/` auf dem Gerät.
 
+### Zuerst eine Karte, die da ist — dann erst die schönere
+
+Am 21.09.2026 kam auf dem Telefon eine **weiße** Karte an: Marker an der
+richtigen Stelle, Untergrund nichts. Die Ursache war eine Regel, die einen Tag
+vorher als Vorsicht gedacht war — „im Zweifel den Anbieter behalten", damit eine
+magere Verbindung keinen funktionierenden verliert. Das Ergebnis: Wer nichts
+beweist, deckt trotzdem alles zu.
+
+Die Reihenfolge ist deshalb umgedreht:
+
+1. Die **OSM-Rasterkarte hängt sofort** unten drin. Japanisch beschriftet, aber
+   sie kommt an — auf dem Gerät gemessen. Gemessen auch hier: Kacheln nach
+   **800 ms**, 141 Marker, keine leere Fläche.
+2. Die lateinischen Vektoranbieter werden **darüber** geprüft, und zwar
+   **durchsichtig** (`opacity: 0`), damit ein stummer Anbieter die Rasterkarte
+   nicht zudeckt.
+3. Sichtbar wird einer erst, wenn er nachweislich zeichnet. Dann verschwindet die
+   Rasterkarte darunter. Beweist sich keiner, bleibt sie einfach liegen.
+
+Damit ist die Strenge wieder möglich, die vorher gefährlich war: Ohne Beweis kein
+Wechsel — der Preis dafür ist nur noch „japanisch" statt „weiß".
+
+**Der Umschalter zeigt jetzt die Einstellung, nicht den Momentzustand.** Vorher
+hing seine Beschriftung an `grund.art`: Sie wechselte während der Anbieterkette
+unter dem Finger, und auf der OSM-Karte bot er „Lateinische Karte" an, obwohl
+genau das eingestellt war — ein Knopf, der nichts ändert.
+
+### Der Knopf führt in die Maps-App, nicht in einen Download
+
+Statt „KML für Google My Maps" steht dort jetzt **„In Google Maps öffnen"**: Die
+Maps-App geht an derselben Stelle und im selben Maßstab auf, den die Karte
+gerade zeigt — für Suche, Verkehr und Navigation von dort aus.
+
+**Was dabei nicht geht, und warum:** Google Maps kennt keinen Weg, per Adresse
+141 eigene Marker zu setzen. Möglich sind genau drei Dinge — ein Ort, eine Route
+mit höchstens zehn Punkten, ein Ausschnitt. Für „ich will da jetzt in Maps
+weiterschauen" ist der Ausschnitt das Richtige; für die Marker bleibt der Umweg
+über KML und My Maps, und der steht als Textlink daneben.
+
+Benutzt wird die **dokumentierte** Maps-URLs-Schnittstelle (`map_action=map`) und
+nicht die verbreitete `/maps/@lat,lng,17z`-Form. Letztere funktioniert auch, ist
+aber nirgends zugesagt — auf einer Reise ist ein Link, der sich auf eine Zusage
+stützt, mehr wert als einer, der sich auf Gewohnheit stützt. Der Zoom wird auf
+0…21 begrenzt: Außerhalb verwirft Google die Adresse **still** und öffnet
+irgendeinen Ausschnitt, was schlimmer ist als ein grober.
+
 ## Die Selbstprüfung `/wache/` — und die Lücke, die sie schließt
 
 Der Wächter im CI prüft die **Dateien**: `src/data/places.json`, die Orte aus dem

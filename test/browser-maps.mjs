@@ -250,7 +250,10 @@ await seite.evaluate(async () => {
 });
 await seite.waitForTimeout(600);
 
-const knopf = seite.locator('.kmlzeile button');
+// Seit dem 21.09.2026 stehen zwei Knöpfe in der Zeile — voran der Sprung in die
+// Maps-App, dahinter der KML-Weg. Hier geht es um den KML-Weg, also ausdrücklich
+// `.alslink` statt „irgendein Knopf".
+const knopf = seite.locator('.kmlzeile .alslink');
 pruefe(await knopf.isVisible(), 'der Knopf ist da, auch bei 390 px mit zugeklappten Filtern');
 /*
  * Die Höhe gegen die **Projektvorgabe**, nicht gegen Apples 44 pt: `tokens.css:318`

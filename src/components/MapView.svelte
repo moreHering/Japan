@@ -340,6 +340,9 @@
    */
   async function vektorVersuch(a: Anbieter): Promise<Versuch> {
     const durchgefallen = (warum: string, gezeichnet = -1, beschriftet = -1): Versuch => {
+      // Die Probe war erfolglos — die Ebene verschwindet vollständig, nicht nur
+      // optisch. Eine durchsichtige Ebene, die liegen bleibt, fängt weiter
+      // Berührungen ab.
       if (vektorEbene) {
         try {
           map.removeLayer(vektorEbene);
@@ -385,7 +388,17 @@
 
       vektorEbene = (L as any).maplibreGL({ style: stil, attribution: a.attribution });
       vektorEbene.addTo(map);
-      grund = { ...kachelzustand('vektor', '', '', a.name), meldungen: grund.meldungen };
+      /*
+       * **Unsichtbar, bis er sich bewiesen hat.**
+       *
+       * Die Vektorebene liegt in derselben Ebene wie die Rasterkacheln und würde
+       * sie verdecken — samt ihrer eigenen leeren Hintergrundfarbe. Genau so kam
+       * am 21.09.2026 eine **weiße Karte** auf dem Telefon an: Ein Anbieter, der
+       * nichts zeichnet, hat trotzdem alles zugedeckt. Während der Probe bleibt
+       * er deshalb durchsichtig; sichtbar wird er erst, wenn die Messung steht.
+       */
+      const behaelter = vektorEbene.getContainer?.();
+      if (behaelter) behaelter.style.opacity = '0';
 
       const glKarte = vektorEbene.getMaplibreMap?.();
       if (!glKarte) return durchgefallen('keine maplibre-Instanz');
@@ -429,9 +442,16 @@
         await new Promise((r) => setTimeout(r, 250));
       }
       if (!glKarte.loaded?.()) {
-        // Lädt noch und hat nichts zu meckern: behalten, aber ausdrücklich als
-        // ungemessen melden. `/wache/` sagt dann „wird gemessen", nicht „0".
-        return { warum: null, gezeichnet: -1, beschriftet: -1 };
+        /*
+         * Nicht fertig geworden — und damit **durchgefallen**.
+         *
+         * Gestern stand hier „im Zweifel behalten", damit eine magere Verbindung
+         * keinen funktionierenden Anbieter verliert. Das Ergebnis war eine weiße
+         * Karte: Wer nichts beweist, deckt trotzdem alles zu. Streng sein kostet
+         * hier nichts mehr, weil die Rasterkarte schon darunter liegt und
+         * liegen bleibt — schlimmstenfalls bleibt es bei ihr.
+         */
+        return durchgefallen(`antwortet seit ${Math.round(PROBEFRIST / 1000)} s nicht`);
       }
 
       let alle: any[];
@@ -441,10 +461,9 @@
         // Messobjekt beschädigt.
         alle = glKarte.queryRenderedFeatures();
       } catch {
-        // Nicht messbar ist **nicht** dasselbe wie „nichts da". Im Zweifel
-        // durchlassen: Eine Karte wegzuwerfen, die vielleicht funktioniert, ist
-        // der teurere Fehler.
-        return { warum: null, gezeichnet: -1, beschriftet: -1 };
+        // Nicht messbar heißt nicht beweisbar, und ohne Beweis kein Wechsel —
+        // die Rasterkarte darunter ist das sichere Ergebnis.
+        return durchgefallen('nicht messbar');
       }
       /*
        * Nur Symbolebenen, **die auch Text tragen**. Eine reine Piktogrammebene
@@ -485,25 +504,45 @@
    */
   async function grundkarte() {
     letzterVersuch = Date.now();
-    if (kartenart === 'raster') {
-      // Ausdrücklich gewählt: gar nicht erst versuchen. Das spart die 273 KB
-      // gzip von maplibre vollständig — bei magerer Verbindung der Unterschied
-      // zwischen „Karte da" und „Karte kommt gleich".
-      const osm = ANBIETER.find((a) => a.art === 'raster') as Anbieter;
-      rasterAnhaengen('OSM-Karte ausgewählt', osm);
-      return;
-    }
+
+    /*
+     * **Zuerst eine Karte, die da ist — und dann erst die schönere.**
+     *
+     * Das ist die Lehre aus dem 21.09.2026. Vorher lief die Anbieterkette, und
+     * solange sie lief, war die Fläche leer; blieb sie erfolglos, blieb sie leer.
+     * Eine Reiseapp, die eine halbe Minute nichts zeigt und im schlechten Fall
+     * gar nichts, ist unterwegs wertlos.
+     *
+     * Jetzt hängt die OSM-Rasterkarte **sofort** unten drin. Sie ist japanisch
+     * beschriftet, aber sie kommt an — das ist auf dem Gerät gemessen. Die
+     * lateinischen Vektoranbieter werden darüber geprüft und nur dann
+     * eingewechselt, wenn sie nachweislich zeichnen. Der schlechteste Fall ist
+     * damit nicht mehr „weiß", sondern „japanisch".
+     */
+    const osm = ANBIETER.find((a) => a.art === 'raster') as Anbieter;
+    rasterAnhaengen(
+      kartenart === 'raster' ? 'OSM-Karte ausgewählt' : 'Grundkarte, bis eine lateinische steht',
+      osm,
+    );
+    if (kartenart === 'raster') return;
 
     for (const a of anbieterReihe()) {
       if (disposed) return;
-      if (a.art === 'raster') {
-        rasterAnhaengen('Keine Vektorkarte erreichbar', a);
-        return;
-      }
+      if (a.art !== 'vektor') continue;
       const versuch = await vektorVersuch(a);
       if (!versuch.warum) {
+        // Bewiesen: Die Vektorebene wird sichtbar, die Rasterkarte darunter
+        // verschwindet. Erst jetzt — vorher wäre die Fläche kurz leer.
+        vektorEbene?.getContainer?.()?.style?.setProperty('opacity', '1');
+        if (rasterEbene) {
+          map.removeLayer(rasterEbene);
+          rasterEbene = null;
+        }
         grund = {
           ...grund,
+          art: 'vektor',
+          host: '',
+          warum: '',
           anbieter: a.name,
           gezeichnet: versuch.gezeichnet,
           beschriftet: versuch.beschriftet,
@@ -517,8 +556,8 @@
       };
     }
 
-    // Kommt nur vor, wenn jemand die Rasterkarte aus der Liste nimmt.
-    rasterAnhaengen('Keine Vektorkarte erreichbar');
+    // Keiner hat sich bewiesen — die Rasterkarte von oben bleibt einfach liegen.
+    grund = { ...grund, warum: 'Keine lateinische Karte erreichbar, OSM-Karte bleibt' };
   }
 
   /**
@@ -1049,6 +1088,18 @@
     map.fitBounds(L.latLngBounds(punkte), { padding: [36, 36], maxZoom: 15 });
   }
 
+  /**
+   * Mittelpunkt und Maßstab der Karte — für den Sprung nach Google Maps.
+   *
+   * Gibt `null`, solange die Karte noch nicht steht. Der Aufrufer muss das
+   * behandeln; ein erfundener Mittelpunkt wäre schlimmer als kein Sprung.
+   */
+  export function ansicht(): { lat: number; lng: number; zoom: number } | null {
+    if (!map) return null;
+    const m = map.getCenter();
+    return { lat: m.lat, lng: m.lng, zoom: map.getZoom() };
+  }
+
   export function flyTo(target: [number, number], z = 12) {
     map?.setView(target, z, { animate: true });
   }
@@ -1148,9 +1199,17 @@
   gilt — „Vektorkarte" und „Rasterkarte" sind Fachwörter, die unterwegs niemand
   gegeneinander abwägt. Was zählt, ist die Schrift auf der Karte.
 -->
-{#if kartenwahl && ready && grund.art !== 'fehler'}
+{#if kartenwahl && ready}
   <div class="kartenwahl">
-    {#if grund.art === 'vektor'}
+    <!--
+      Die Pille zeigt **deine Einstellung**, nicht den Momentzustand.
+
+      Vorher hing sie an `grund.art`: Während die Anbieterkette lief, wechselte
+      die Beschriftung unter dem Finger, und auf der OSM-Karte stand „Lateinische
+      Karte", obwohl die Einstellung längst auf „automatisch" stand — ein Knopf,
+      der nichts ändert. Jetzt sagt sie schlicht, was ein Tipp umstellt.
+    -->
+    {#if kartenart === 'auto'}
       <button
         type="button"
         onclick={() => artWaehlen('raster')}
@@ -1172,7 +1231,8 @@
 {/if}
 
 {#if grund.art === 'fehler'}
-  <div class="kachelfehler" role="status">
+  <!-- Rückt nach unten, wo der Umschalter steht — sonst liegen beide übereinander. -->
+  <div class="kachelfehler" class:mitwahl={kartenwahl} role="status">
     <b>Kartenhintergrund lädt nicht</b>
     <span>Die Orte und ihre Popups funktionieren weiter — nur das Kartenbild fehlt.</span>
     <span class="khost">{grund.host} antwortet nicht{grund.warum ? ` · ${grund.warum}` : ''}</span>
@@ -1233,6 +1293,18 @@
     left: 10px;
     right: 10px;
     top: 10px;
+  }
+
+  /*
+   * Nicht nach unten schieben, sondern rechts Platz machen.
+   *
+   * Die erste Fassung setzte `top: 62px` — damit rutschte der Hinweis mitten in
+   * die Karte und sein Knopf über eine Stelle, die man antippen will. Die
+   * Browserprüfung, die genau das abfragt, ist prompt umgefallen. So bleibt er
+   * oben und die Pille daneben.
+   */
+  .kachelfehler.mitwahl {
+    padding-right: 136px;
     z-index: 600;
     /* Der Überzug darf die Karte nicht schlucken — sonst wäre die Reparatur
        schlimmer als der Fehler: Man sähe einen Hinweis und käme an keinen Marker

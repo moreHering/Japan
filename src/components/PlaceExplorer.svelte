@@ -51,7 +51,7 @@
    * also in vitest beweisbar — und aus dieser Umgebung ist My Maps ohnehin nicht
    * erreichbar, ich kann über den Import dort nichts prüfen.
    */
-  import { kml, kmlDateiname } from '../lib/mapsexport';
+  import { kartenLink, kml, kmlDateiname } from '../lib/mapsexport';
 
   type Props = { places: Place[] };
   let { places }: Props = $props();
@@ -84,6 +84,23 @@
    * Der Reisetag kommt aus dem Plan dazu, damit sich in My Maps nach ihm
    * gruppieren lässt.
    */
+  /**
+   * Die Maps-App an der Stelle öffnen, die die Karte gerade zeigt.
+   *
+   * **Nicht** „alle 141 Orte in Maps" — das kann Google nicht: Per Adresse lassen
+   * sich ein Ort, eine Route mit höchstens zehn Punkten oder ein Ausschnitt
+   * öffnen, aber keine eigenen Marker setzen. Dafür gibt es nur den Umweg über
+   * eine KML-Datei und My Maps, und der steht als zweite Möglichkeit daneben.
+   */
+  function inMapsOeffnen() {
+    const a = mapRef?.ansicht();
+    // Steht die Karte noch nicht, wird nichts geöffnet. Ein erfundener
+    // Mittelpunkt schickt einen unterwegs an die falsche Stelle — der eine
+    // Fehler, den diese App nicht machen darf.
+    if (!a) return;
+    window.open(kartenLink(a.lat, a.lng, a.zoom), '_blank', 'noopener');
+  }
+
   function kmlHerunterladen() {
     const mitTag = alle.map((p) => ({ ...p, reisetag: dayOfPlace(p.nr) }));
     const blob = new Blob([kml(mitTag, 'Japan 2026 — Orte')], {
@@ -692,12 +709,15 @@
   kommen.
 -->
 <div class="kmlzeile">
-  <button class="btn small" onclick={kmlHerunterladen}>
-    KML für Google My Maps ({alle.length} Orte)
-  </button>
+  <button class="btn primary" onclick={inMapsOeffnen}>In Google Maps öffnen</button>
   <span class="kmlhinweis">
-    Mit euren Korrekturen und eigenen Orten, ohne die ausgeblendeten. Ein Import in
-    My Maps <b>ergänzt</b> eine Ebene — die alte müsst ihr dort löschen.
+    Öffnet die Maps-App an derselben Stelle und im selben Maßstab, den die Karte oben
+    gerade zeigt — für Suche, Verkehr und Navigation von dort aus.
+    <br />
+    <button class="alslink" onclick={kmlHerunterladen}
+      >Stattdessen alle {alle.length} Orte als KML für Google My Maps</button
+    > — mit euren Korrekturen und eigenen Orten, ohne die ausgeblendeten. Ein Import
+    dort <b>ergänzt</b> eine Ebene, die alte müsst ihr löschen.
   </span>
 </div>
 
@@ -778,6 +798,20 @@
     font-size: 0.8rem;
     color: var(--ai-60);
     line-height: 1.45;
+  }
+
+  /* Der KML-Weg bleibt erreichbar, tritt aber zurück: Er war die Hauptsache und
+     ist jetzt die Ausnahme. */
+  .alslink {
+    display: inline;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--ai);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
   }
 
   .versteckliste {

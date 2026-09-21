@@ -465,9 +465,17 @@ pruefe((await kml.count()) === 1, 'die statische KML steht genau einmal auf der 
  * und eigenen Orten. Was die Datei enthält, prüft `browser-maps.mjs`; hier geht es
  * nur darum, dass beide Wege da sind und man sie unterscheiden kann.
  */
+/*
+ * Seit dem 21.09.2026 stehen in der Zeile **zwei** Knöpfe, und die Reihenfolge
+ * ist die Aussage: Voran der Sprung in die Maps-App — das war der Wunsch —,
+ * dahinter als Textlink der KML-Weg für alle Orte. Gezählt wird beides einzeln,
+ * damit ein verschwundener Knopf nicht vom anderen gedeckt wird.
+ */
+const mapsKnopf = await seite.locator('.kmlzeile .btn.primary').count();
+pruefe(mapsKnopf === 1, 'die Zeile führt zuerst in die Maps-App', `${mapsKnopf}`);
 pruefe(
-  (await seite.locator('.kmlzeile button').count()) === 1,
-  'und der Knopf für den Live-Stand steht als zweiter Weg daneben',
+  (await seite.locator('.kmlzeile .alslink').count()) === 1,
+  'und der Weg zum Live-KML steht als zweiter daneben',
 );
 pruefe(
   (await seite.locator('.lesehinweis').count()) === 1,

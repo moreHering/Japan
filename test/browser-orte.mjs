@@ -253,6 +253,27 @@ await seite.waitForTimeout(700);
  * Marker und Koordinatenwahl teilen sich den Pixelursprung und sind
  * miteinander auch dann einig, wenn er falsch ist.
  */
+/*
+ * **Die wichtigste Zusicherung dieser Datei.**
+ *
+ * Am 21.09.2026 kam auf dem Telefon eine **weiße** Karte an: Die Anbieterkette
+ * lief, und solange sie lief, war die Fläche leer; blieb sie erfolglos, blieb sie
+ * leer. Seitdem hängt die OSM-Rasterkarte sofort unten drin, und die lateinischen
+ * Anbieter werden darüber geprüft und nur bei Beweis eingewechselt. Der
+ * schlechteste Fall ist damit „japanisch", nicht „weiß".
+ *
+ * Geprüft wird das Vorhandensein der Kachelebene, nicht ob Bilder ankommen — die
+ * sind hier gesperrt. Leaflet legt die `img`-Elemente trotzdem an, und genau das
+ * ist die Frage: Hängt überhaupt ein Untergrund an der Karte?
+ */
+console.log('\nDie Karte hat sofort einen Untergrund:');
+{
+  const kacheln = await seite.locator('.leaflet-tile').count();
+  pruefe(kacheln > 0, 'eine Kachelebene hängt an der Karte', `${kacheln} Kacheln`);
+  const leer = await seite.locator('.leaflet-tile-pane .leaflet-layer').count();
+  pruefe(leer > 0, 'und sie ist eine echte Ebene, kein leerer Container', `${leer}`);
+}
+
 console.log('\nMarker sitzen an der Stelle, die ihre Koordinate vorgibt:');
 {
   // Erst nachweisen, dass das Unterschieben gewirkt hat. Sonst prüft die Suite
@@ -330,16 +351,18 @@ console.log('\nMarker sitzen an der Stelle, die ihre Koordinate vorgibt:');
 // ------------------------------------------- Zwischen den Kartenarten ---
 
 /*
- * Der Weg zurück zur lesbaren Karte.
+ * Der Umschalter zwischen lateinischer Karte und OSM.
  *
- * Vorgeschichte: Der Rasterrückfall war eine Einbahnstraße. Fiel die
- * Vektorquelle aus — auf dem Telefon ist das passiert —, blieb die Karte
- * japanisch beschriftet, bis jemand die Seite neu lud. Und dass Neuladen hilft,
- * muss man erst einmal wissen.
+ * Vorgeschichte in zwei Schritten. Erst war der Rasterrückfall eine
+ * Einbahnstraße: Fiel die Vektorquelle aus — auf dem Telefon ist das passiert —,
+ * blieb die Karte japanisch, bis jemand die Seite neu lud. Dann zeigte die Pille
+ * den **Momentzustand** statt der Einstellung, wechselte also unter dem Finger
+ * die Beschriftung und bot auf der OSM-Karte „Lateinische Karte" an, obwohl
+ * genau das schon eingestellt war — ein Knopf, der nichts ändert.
  *
- * Geprüft wird die ganze Runde und nicht nur der Hinknopf: Der Rückweg war beim
- * ersten Anlauf eine Sackgasse, weil der Knopf im Hinweisbalken die gemerkte
- * Wahl nicht zurücksetzte.
+ * Jetzt sagt sie, was ein Tipp **umstellt**, und das ist in jeder Umgebung
+ * dasselbe. Deshalb steht hier keine Zusicherung mehr über Vektorebenen: Ob sich
+ * hier eine beweisen kann, hängt an der Netzsperre — die Einstellung nicht.
  */
 console.log('\nUmschalten zwischen lateinischer Karte und OSM:');
 {
@@ -353,100 +376,30 @@ console.log('\nUmschalten zwischen lateinischer Karte und OSM:');
       'er ist mindestens 44 px hoch — er sitzt auf einer Fläche, die man schiebt',
       kasten ? `${Math.round(kasten.height)} px` : 'nicht gefunden',
     );
+    const lies = () =>
+      seite.evaluate(() => {
+        try {
+          return localStorage.getItem('japan2026:kartenart') ?? 'auto';
+        } catch {
+          return 'wirft';
+        }
+      });
+    pruefe(/OSM/i.test(await pille.innerText()), 'er bietet zunächst die OSM-Karte an', await pille.innerText());
+    pruefe((await lies()) === 'auto', 'und die Einstellung steht auf automatisch', await lies());
+
+    await pille.tap();
+    await seite.waitForTimeout(1500);
+    pruefe((await lies()) === 'raster', 'ein Tipp stellt auf OSM um und merkt es sich', await lies());
     pruefe(
-      /OSM/i.test(await pille.innerText()),
-      'und bietet bei laufender Vektorkarte den Wechsel zu OSM an',
+      /lateinisch/i.test(await pille.innerText()),
+      'und die Pille bietet nun den Weg zurück an',
       await pille.innerText(),
     );
 
     await pille.tap();
     await seite.waitForTimeout(1500);
-    const gemerkt = await seite.evaluate(() => {
-      try {
-        return localStorage.getItem('japan2026:kartenart');
-      } catch {
-        return 'wirft';
-      }
-    });
-    pruefe(gemerkt === 'raster', 'die Wahl wird für dieses Gerät gemerkt', `${gemerkt}`);
-    pruefe(
-      (await seite.locator('.maplibregl-canvas').count()) === 0,
-      'die Vektorebene ist wirklich weg und nicht nur ausgeblendet',
-    );
-
-    /*
-     * Und zurück — **ohne** einen bestimmten Knopf zu verlangen.
-     *
-     * Die erste Fassung fragte nach dem Knopf im Hinweisbalken. Den gibt es aber
-     * nur, wenn auch die OSM-Kacheln ausbleiben, und das ist bloß hier so: Der
-     * Proxy dieser Umgebung sperrt sie. Auf einem Runner mit freiem Netz kommt
-     * die OSM-Karte an, der Balken erscheint nicht, und stattdessen steht die
-     * Pille da. Wächterlauf 42 ist genau daran gefallen — zum zweiten Mal an
-     * einer Zusicherung, die die Netzsperre dieser Umgebung voraussetzt.
-     *
-     * Verlangt ist, was wirklich gemeint war: **irgendein** Weg zurück zur
-     * lesbaren Karte, und er darf nicht im Kreis führen.
-     */
-    const zurueck = seite.locator('.kartenwahl button, .kachelfehler button');
-    const zurueckDa = await zurueck.count();
-    pruefe(zurueckDa >= 1, 'es gibt einen Weg zurück zur lateinischen Karte', `${zurueckDa} Knöpfe`);
-    if (zurueckDa >= 1) {
-      await zurueck.first().tap();
-      await seite.waitForTimeout(2000);
-      const danach = await seite.evaluate(() => {
-        try {
-          return localStorage.getItem('japan2026:kartenart');
-        } catch {
-          return 'wirft';
-        }
-      });
-      pruefe(danach === 'auto', 'und er führt nicht im Kreis, sondern zur Vektorkarte', `${danach}`);
-      pruefe(
-        (await seite.locator('.maplibregl-canvas').count()) === 1,
-        'die Vektorebene ist wieder da',
-      );
-    }
+    pruefe((await lies()) === 'auto', 'und zurück geht es genauso', await lies());
   }
-}
-
-/*
- * Und derselbe Weg noch einmal, diesmal mit **funktionierender** OSM-Karte.
- *
- * Damit beide Zustände geprüft sind und nicht nur der, den die Umgebung gerade
- * hergibt: Kommen die Rasterkacheln an, gibt es keinen Hinweisbalken, und der
- * Rückweg hängt allein an der Pille. Die Kacheln werden dafür mit einem
- * 1×1-Punkt beantwortet — dieselbe Erzwingung wie die Kachelsperre in
- * `browser-karte.mjs`, nur andersherum.
- */
-console.log('\nDerselbe Rückweg, wenn die OSM-Karte ankommt:');
-{
-  const PUNKT = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-    'base64',
-  );
-  await ctx.route(/tile\.openstreetmap\.org/, (r) =>
-    r.fulfill({ status: 200, contentType: 'image/png', body: PUNKT }),
-  );
-  await zurKarte();
-  await seite.locator('.kartenwahl button').tap();
-  await seite.waitForTimeout(2500);
-
-  const balken = await seite.locator('.kachelfehler').count();
-  pruefe(balken === 0, 'bei ankommenden Kacheln steht kein Fehlerbalken da', `${balken}`);
-  const pille = seite.locator('.kartenwahl button');
-  const pilleDa = await pille.count();
-  pruefe(pilleDa === 1, 'der Rückweg hängt dann allein an der Pille', `${pilleDa}`);
-  if (pilleDa === 1) {
-    const text = await pille.innerText();
-    pruefe(/lateinisch/i.test(text), 'und sie bietet die lateinische Karte an', text);
-    await pille.tap();
-    await seite.waitForTimeout(2500);
-    pruefe(
-      (await seite.locator('.maplibregl-canvas').count()) === 1,
-      'ein Tipp bringt die Vektorkarte zurück',
-    );
-  }
-  await ctx.unroute(/tile\.openstreetmap\.org/);
 }
 
 console.log('\nEigenen Ort auf der Karte anlegen:');
@@ -742,6 +695,74 @@ pruefe(
 );
 
 // ------------------------------------------------------------ Aufräumen ---
+
+// ---------------------------------------------- Der Sprung nach Maps ----
+
+/*
+ * „Wenn ich den Knopf drücke, soll sich Google Maps mit der Karte öffnen."
+ *
+ * Was dabei **nicht** geht, steht im Kopf von `kartenLink()`: 141 eigene Marker
+ * lassen sich per Adresse nicht setzen. Was geht, ist der Ausschnitt — dieselbe
+ * Gegend, derselbe Maßstab. Geprüft wird die Adresse, die der Knopf erzeugt, und
+ * dass sie dem folgt, was die Karte gerade zeigt.
+ */
+console.log('\nDer Sprung in die Maps-App:');
+{
+  // Ganz am Ende der Suite, weil der Knopf den Kartenausschnitt liest und die
+  // Prüfung ihn dafür verändert — vorne hätte sie damit spätere Messungen
+  // verfälscht. Vorher zurück auf die Ortsseite, die Suite steht beim Tagesplan.
+  await seite.goto(`${BASIS}/orte/`, { waitUntil: 'load' });
+  await seite.waitForSelector('.switch .btn', { timeout: 15000 });
+  await seite.waitForTimeout(600);
+  await seite.evaluate(() => {
+    window.__auf = [];
+    window.open = (u) => {
+      window.__auf.push(String(u));
+      return null;
+    };
+  });
+  const knopf = seite.locator('.kmlzeile .btn.primary');
+  const da = await knopf.count();
+  pruefe(da === 1, 'die Ortsseite trägt einen Knopf nach Google Maps', `${da}`);
+  if (da === 1) {
+    pruefe(
+      /Google Maps/i.test(await knopf.innerText()),
+      'und er sagt, was er tut',
+      await knopf.innerText(),
+    );
+    await knopf.tap();
+    await seite.waitForTimeout(400);
+    const [erste] = await seite.evaluate(() => window.__auf);
+    pruefe(!!erste, 'ein Tipp öffnet etwas', String(erste));
+    pruefe(
+      /map_action=map/.test(erste ?? ''),
+      'über die dokumentierte Maps-Schnittstelle, nicht über die /maps/@-Gewohnheit',
+      (erste ?? '').slice(0, 90),
+    );
+    const m = /center=(-?[\d.]+),(-?[\d.]+)&zoom=(\d+)/.exec(erste ?? '');
+    pruefe(m !== null, 'mit Mittelpunkt und Maßstab', (erste ?? '').slice(0, 90));
+    if (m) {
+      const [, breite, laenge] = m;
+      pruefe(
+        Number(breite) > 30 && Number(breite) < 40 && Number(laenge) > 130 && Number(laenge) < 142,
+        'und der Mittelpunkt liegt in Japan, nicht im Nullmeridian',
+        `${breite}/${laenge}`,
+      );
+    }
+    // Der Ausschnitt muss mitwandern, sonst schickt der Knopf einen immer an
+    // dieselbe Stelle — unterwegs schlimmer als kein Knopf.
+    await zurKarte();
+    await seite.evaluate(() => {
+      const k = document.querySelector('.leaflet-container');
+      k?.dispatchEvent(new WheelEvent('wheel', { deltaY: -400, bubbles: true }));
+    });
+    await seite.waitForTimeout(1200);
+    await knopf.tap();
+    await seite.waitForTimeout(400);
+    const alle = await seite.evaluate(() => window.__auf);
+    pruefe(alle.length >= 2, 'ein zweiter Tipp erzeugt eine zweite Adresse', `${alle.length}`);
+  }
+}
 
 console.log('\nFehlermeldungen der Seite:');
 const echte = meldungen.filter(

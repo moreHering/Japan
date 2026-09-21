@@ -117,6 +117,37 @@ export function routenLinks(halte: Halt[], modus: Modus = 'walking'): string[] {
   });
 }
 
+/**
+ * Google Maps an derselben Stelle öffnen, die die App gerade zeigt.
+ *
+ * **Warum nicht „die ganze Karte mit allen Orten".** Das gibt es nicht: Google
+ * Maps kennt keinen Weg, per Adresse 141 eigene Marker zu setzen. Was geht, ist
+ * genau dreierlei — ein Ort, eine Route mit höchstens zehn Punkten, oder ein
+ * Kartenausschnitt. Für „ich will da jetzt in Maps weiterschauen" ist der
+ * Ausschnitt das Richtige: dieselbe Gegend, derselbe Maßstab, und von dort aus
+ * greifen Suche, Verkehr, Straßenansicht und Navigation.
+ *
+ * Benutzt wird die **dokumentierte** Maps-URLs-Schnittstelle
+ * (`map_action=map`), nicht die verbreitete `/maps/@lat,lng,17z`-Form. Letztere
+ * funktioniert auch, ist aber nirgends zugesagt — und auf einer Reise ist ein
+ * Link, der sich auf eine Zusage stützt, mehr wert als einer, der sich auf
+ * Gewohnheit stützt.
+ *
+ * Der Zoom wird auf 0…21 begrenzt: Google verwirft die Adresse sonst still und
+ * öffnet irgendeinen Ausschnitt, was schlimmer ist als ein grober.
+ */
+export function kartenLink(lat: number, lng: number, zoom: number): string {
+  const z = Math.min(21, Math.max(0, Math.round(Number.isFinite(zoom) ? zoom : 12)));
+  const p = new URLSearchParams({
+    api: '1',
+    map_action: 'map',
+    center: `${lat.toFixed(6)},${lng.toFixed(6)}`,
+    zoom: String(z),
+  });
+  // `,` bleibt lesbar — siehe `routenLinks()`.
+  return `https://www.google.com/maps/@?${p.toString()}`.replace(/%2C/g, ',');
+}
+
 // ====================================================================== KML ===
 
 /**

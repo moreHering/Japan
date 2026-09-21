@@ -334,12 +334,18 @@
   /**
    * Wie lange ein einzelner Anbieter Zeit bekommt, bevor der nächste drankommt.
    *
-   * Zehn Sekunden: lang genug für eine magere Mobilverbindung, kurz genug, dass
-   * eine Kette aus zwei Vektorversuchen plus Rasterrückfall nicht zur Geduldsprobe
-   * wird. Ein Anbieter, der einen Fehler meldet, fällt sofort durch und wartet
-   * die Frist gar nicht erst ab.
+   * Zwanzig Sekunden, und das ist bewusst großzügig: Die Frist kostet niemanden
+   * mehr etwas, seit die Rasterkarte von der ersten Sekunde an unten liegt. Wer
+   * wartet, sieht eine Karte — nur eine japanisch beschriftete. Vorher standen
+   * hier zehn Sekunden, und bei einer mageren Mobilverbindung war das der
+   * Unterschied zwischen lateinisch und japanisch.
+   *
+   * Aufgebraucht wird sie ohnehin nur von einem Anbieter, der **nichts**
+   * liefert: Sobald ein Merkmal seiner Vektorquelle im Bild ist, ist er
+   * angenommen, und sobald er fertig geladen hat, ohne eines zu zeigen, ist er
+   * durchgefallen.
    */
-  const PROBEFRIST = 10_000;
+  const PROBEFRIST = 20_000;
 
   /**
    * Was bei einem Vektorversuch herauskam.
@@ -445,9 +451,12 @@
       const glKarte = vektorEbene.getMaplibreMap?.();
       if (!glKarte) return durchgefallen('keine maplibre-Instanz');
       /*
-       * Jede Meldung wird mitgeschrieben, nicht nur die erste — die späteren
-       * sind oft die aussagekräftigen. Abgeworfen wird hier **nicht**: Darüber
-       * entscheidet die Kette, sonst räumt ein Handler mitten im Versuch auf.
+       * Jede Meldung wird mitgeschrieben, nicht nur die erste — die späteren sind
+       * oft die aussagekräftigen. **Verworfen wird hier nichts**, und das ist
+       * keine Bequemlichkeit, sondern die Lehre vom 21.09.2026: Eine maplibre-
+       * Meldung ist so oft ein fehlender Glyphenbereich oder ein 404 auf ein
+       * Sprite wie ein echter Ausfall. Über Bestehen entscheidet allein die
+       * Messung weiter unten.
        */
       glKarte.on('error', (e: any) => {
         const text = `${e?.sourceId ? `${e.sourceId}: ` : ''}${e?.error?.message ?? 'Fehler'}`;
@@ -455,83 +464,107 @@
         grund = { ...grund, meldungen: [...grund.meldungen, `${a.name}: ${text}`].slice(-5) };
       });
 
-      /*
-       * Warten, bis gemessen werden **darf** — und im Zweifel nicht urteilen.
+      /**
+       * Einmal nachsehen, was gerade auf dem Schirm steht.
        *
-       * Zwei Fallen stecken hier, und die erste Fassung ist in beide getappt:
+       * `null` heißt „jetzt nicht messbar" — das ist ein Zwischenstand, kein
+       * Ergebnis. **Ohne Ebenenliste** gefragt: Eine unbekannte Ebenen-ID lässt
+       * maplibre ein Fehlerereignis feuern, und das wäre eine Messung, die ihr
+       * eigenes Messobjekt beschädigt.
+       */
+      const messen = (): { gezeichnet: number; beschriftet: number; hatVektor: boolean } | null => {
+        let alle: any[];
+        try {
+          alle = glKarte.queryRenderedFeatures();
+        } catch {
+          return null;
+        }
+        /*
+         * Nur Symbolebenen, **die auch Text tragen**. Eine reine Piktogrammebene
+         * ist ebenfalls vom Typ `symbol`; zählte man sie mit, hieße „ein paar
+         * Zeichen ohne einen einzigen Buchstaben" fälschlich „beschriftet".
+         */
+        const symbolEbenen = new Set(
+          ((glKarte.getStyle()?.layers ?? []) as {
+            id: string;
+            type: string;
+            layout?: Record<string, unknown>;
+          }[])
+            .filter((l) => l.type === 'symbol' && l.layout?.['text-field'] !== undefined)
+            .map((l) => l.id),
+        );
+        return {
+          gezeichnet: alle.length,
+          // Ohne festgeschriebene Platzierung ist die Beschriftungszahl bedeutungslos
+          // — dann lieber −1 („nicht gemessen") als eine Null, die nach Ausfall aussieht.
+          beschriftet: glKarte.style?.placement
+            ? alle.filter((f) => symbolEbenen.has(f?.layer?.id)).length
+            : -1,
+          hatVektor: alle.some((f) => vektorQuellen.has(f?.source)),
+        };
+      };
+
+      /*
+       * **Die Entscheidung ist eine Messung — und nur die Messung.**
+       *
+       * Drei Fassungen sind an dieser Stelle gescheitert, jede an ihrer eigenen
+       * Falle:
        *
        * 1. Symbolebenen kommen erst in den Merkmalsindex, wenn maplibre seine
        *    Platzierung festgeschrieben hat. Zu früh gefragt meldet
        *    `queryRenderedFeatures` **null** Beschriftungen, obwohl alle Kacheln
        *    da sind.
-       * 2. `loaded()` wird nie wahr, solange irgendeine Quelle noch lädt. Wer
-       *    daraus „durchgefallen" macht, wirft bei einer mageren Verbindung
-       *    einen Anbieter weg, der gleich geliefert hätte. Gemessen in der
-       *    Entwicklungsumgebung: Dort arbeitet maplibres Worker nicht, `loaded()`
-       *    bleibt dauerhaft falsch — und ein **gültiger** Stil fiel durch.
+       * 2. `loaded()` wird nie wahr, solange irgendeine Quelle noch lädt — in
+       *    dieser Entwicklungsumgebung wird es bei gesperrten Kachelhosts nie
+       *    wahr. „Nicht fertig" als „durchgefallen" zu lesen wirft einen
+       *    Anbieter weg, der zeichnet.
+       * 3. **Ein gemeldeter Fehler ist kein Ausfall.** Die vorige Fassung hat den
+       *    Anbieter beim *ersten* `error` verworfen. Bei maplibre ist ein `error`
+       *    aber auch ein fehlender Glyphenbereich, ein 404 auf ein Sprite oder
+       *    eine einzelne Kachel am Rand — die Karte steht trotzdem. Solange der
+       *    Worker tot war, kam nie eine Meldung; seit er läuft, kommen welche,
+       *    und deshalb fiel auf dem Telefon **jeder** Vektoranbieter durch
+       *    („OSM-Rasterkarte steht unten", 21.09.2026). Meldungen werden jetzt
+       *    nur noch mitgeschrieben und auf `/wache/` gezeigt.
        *
-       * Deshalb gilt: **Verworfen wird nur bei Beweis, nicht bei fehlendem
-       * Beweis.** Ein Anbieter scheitert, wenn er einen Fehler meldet oder wenn
-       * nachweislich kein einziges Merkmal seiner Vektorquelle gezeichnet wurde.
-       * Alles andere bleibt stehen — eine langsame Karte ist besser als ein
-       * Wechsel weg von einer, die gleich da ist.
+       * Übrig bleibt ein einziges Kriterium: **Kommt ein Merkmal aus einer
+       * `type: 'vector'`-Quelle im Bild an?** Gefragt wird währenddessen, nicht
+       * erst am Ende — ein Anbieter, der liefert, wird sofort eingewechselt, und
+       * die Frist kostet nur den, der nichts liefert. Streng sein ist hier
+       * gefahrlos, weil die Rasterkarte schon darunter liegt.
+       *
+       * Ein Stil **ohne** Vektorquelle (nur in Prüfungen) hat nichts zu beweisen;
+       * für ihn bleibt `loaded()` das Maß.
        */
       const bis = Date.now() + PROBEFRIST;
-      while (Date.now() < bis) {
+      let letzte: { gezeichnet: number; beschriftet: number } | null = null;
+      for (;;) {
         if (disposed) return durchgefallen('abgebrochen');
-        if (fehlerTexte.length) return durchgefallen(fehlerTexte[0]);
-        if (glKarte.loaded?.()) break;
+        const fertig = glKarte.loaded?.() === true;
+        const jetzt = messen();
+        if (jetzt) letzte = { gezeichnet: jetzt.gezeichnet, beschriftet: jetzt.beschriftet };
+        if (vektorQuellen.size === 0 ? fertig : (jetzt?.hatVektor ?? false)) {
+          return { warum: null, gezeichnet: letzte?.gezeichnet ?? -1, beschriftet: letzte?.beschriftet ?? -1 };
+        }
+        // Fertig geladen und trotzdem kein Merkmal der Vektorquelle im Bild: Das
+        // ist ein Ergebnis, kein Zwischenstand — länger warten ändert nichts.
+        if (fertig && jetzt) break;
+        if (Date.now() >= bis) break;
         await new Promise((r) => setTimeout(r, 250));
       }
-      if (!glKarte.loaded?.()) {
-        /*
-         * Nicht fertig geworden — und damit **durchgefallen**.
-         *
-         * Gestern stand hier „im Zweifel behalten", damit eine magere Verbindung
-         * keinen funktionierenden Anbieter verliert. Das Ergebnis war eine weiße
-         * Karte: Wer nichts beweist, deckt trotzdem alles zu. Streng sein kostet
-         * hier nichts mehr, weil die Rasterkarte schon darunter liegt und
-         * liegen bleibt — schlimmstenfalls bleibt es bei ihr.
-         */
-        return durchgefallen(`antwortet seit ${Math.round(PROBEFRIST / 1000)} s nicht`);
-      }
-
-      let alle: any[];
-      try {
-        // **Ohne Ebenenliste.** Eine unbekannte Ebenen-ID lässt maplibre ein
-        // Fehlerereignis feuern, und das wäre eine Messung, die ihr eigenes
-        // Messobjekt beschädigt.
-        alle = glKarte.queryRenderedFeatures();
-      } catch {
-        // Nicht messbar heißt nicht beweisbar, und ohne Beweis kein Wechsel —
-        // die Rasterkarte darunter ist das sichere Ergebnis.
-        return durchgefallen('nicht messbar');
-      }
       /*
-       * Nur Symbolebenen, **die auch Text tragen**. Eine reine Piktogrammebene
-       * ist ebenfalls vom Typ `symbol`; zählte man sie mit, hieße „ein paar
-       * Zeichen ohne einen einzigen Buchstaben" fälschlich „beschriftet".
+       * Der Grund, der auf `/wache/` steht. Die erste maplibre-Meldung ist dabei
+       * aussagekräftiger als „liefert keine Kartendaten" — sie nennt meist Quelle
+       * und Statuscode.
        */
-      const symbolEbenen = new Set(
-        ((glKarte.getStyle()?.layers ?? []) as {
-          id: string;
-          type: string;
-          layout?: Record<string, unknown>;
-        }[])
-          .filter((l) => l.type === 'symbol' && l.layout?.['text-field'] !== undefined)
-          .map((l) => l.id),
+      return durchgefallen(
+        fehlerTexte[0] ??
+          (letzte
+            ? 'liefert keine Kartendaten'
+            : `antwortet seit ${Math.round(PROBEFRIST / 1000)} s nicht`),
+        letzte?.gezeichnet ?? -1,
+        letzte?.beschriftet ?? -1,
       );
-      const gezeichnet = alle.length;
-      // Ohne festgeschriebene Platzierung ist die Beschriftungszahl bedeutungslos
-      // — dann lieber −1 („nicht gemessen") als eine Null, die nach Ausfall aussieht.
-      const beschriftet = glKarte.style?.placement
-        ? alle.filter((f) => symbolEbenen.has(f?.layer?.id)).length
-        : -1;
-
-      if (vektorQuellen.size && !alle.some((f) => vektorQuellen.has(f?.source))) {
-        return durchgefallen('liefert keine Kartendaten', gezeichnet, beschriftet);
-      }
-      return { warum: null, gezeichnet, beschriftet };
     } catch (e) {
       return durchgefallen((e as Error).message);
     }

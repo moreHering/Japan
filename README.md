@@ -455,16 +455,39 @@ Ort ohne deutschen Namen stünde damit wieder auf Japanisch da. `deutscheNamen()
 schreibt das zur Laufzeit für **jeden** Anbieter gleich um, statt zwei Regeln zu
 führen, die auseinanderlaufen.
 
-**Zwei Fehler beim Bauen, beide von den eigenen Prüfungen gefunden:**
+**Drei Fehler beim Bauen, alle von den eigenen Prüfungen gefunden:**
 
 1. **Die Bereitschaftsprüfung war zu streng.** Erste Fassung: erst messen, wenn
    `loaded()` *und* `style.placement` stehen, sonst durchgefallen. Ergebnis: ein
    **gültiger** Stil fiel mit „antwortet seit 10 s nicht" durch, weil `loaded()`
    erst wahr wird, wenn *jede* Quelle fertig ist. Auf einer mageren Verbindung
-   hätte das einen Anbieter weggeworfen, der gleich geliefert hätte. Jetzt gilt:
-   **verworfen wird nur bei Beweis, nicht bei fehlendem Beweis** — ein Fehler
-   oder nachweislich null Merkmale. Alles andere bleibt stehen.
-2. **Die Marker warteten auf die Kette.** `grundkarte()` stand hinter einem
+   hätte das einen Anbieter weggeworfen, der gleich geliefert hätte.
+2. **Ein gemeldeter Fehler galt als Ausfall — und hat die Karte drei Tage
+   japanisch gehalten.** In der Probeschleife stand
+   `if (fehlerTexte.length) return durchgefallen(fehlerTexte[0])`. Das klingt
+   vernünftig und ist falsch: Bei maplibre ist ein `error` auch ein fehlender
+   Glyphenbereich, ein 404 auf ein Sprite oder eine einzelne Kachel am Rand — die
+   Karte steht trotzdem. Solange der Worker fehlte (siehe unten), wurde nie eine
+   Kachel, nie ein Glyph, nie ein Sprite angefordert; es kam nie eine Meldung, der
+   Abbruch lief ins Leere und fiel niemandem auf. Mit laufendem Worker kamen
+   Meldungen — und auf dem Telefon fiel **jeder** Vektoranbieter durch. Unter der
+   Karte stand „OSM-Rasterkarte", mit genau den japanischen Städtenamen, gegen die
+   der ganze Vektorweg gebaut ist.
+
+   Jetzt entscheidet **allein die Messung**: Kommt ein Merkmal aus einer
+   `type: 'vector'`-Quelle im Bild an? Gefragt wird währenddessen, nicht erst am
+   Ende — ein Anbieter, der liefert, wird sofort eingewechselt, und die Frist
+   (20 s) kostet nur den, der nichts liefert. Meldungen werden mitgeschrieben und
+   stehen auf `/wache/` im Wortlaut; über Bestehen entscheiden sie nicht.
+
+   Geprüft wird das mit `MELDENDER_STIL` in `test/browserlauf.mjs`: ein Stil, der
+   zeichnet **und** meckert (ein Sprite, das es nicht gibt). Warum ein Sprite und
+   nicht die Glyphen: Der Zeitpunkt muss feststehen — `Style#_load` fordert das
+   Sprite an, bevor irgendetwas gezeichnet ist, der Fehler ist also garantiert vor
+   der ersten Messung da. Der Glyphenfehler kommt irgendwann, und genau dieses
+   Rennen ist der Grund, warum die alte Fassung in der Entwicklungsumgebung
+   *bestand* und auf dem Gerät nicht.
+3. **Die Marker warteten auf die Kette.** `grundkarte()` stand hinter einem
    `await`, und die Kette kann zwanzig Sekunden brauchen. Eine Karte, die erst
    dann auf einen Finger reagiert, ist unterwegs unbrauchbar. Sie läuft jetzt
    nebenher; Marker und Antippen hängen an nichts davon. Gefunden hat es die
@@ -473,10 +496,12 @@ führen, die auseinanderlaufen.
 **Was im CI prüfbar ist und was nicht.** Prüfbar: dass die Kette weitergeht,
 wenn ein Stilabruf scheitert, dass sie beim Raster landet und dass sie alle
 Durchgefallenen samt Grund benennt (erzwungen über 503-Antworten, die brauchen
-kein maplibre). **Nicht** prüfbar ist der stille Fall vom Telefon: In dieser
-Umgebung fordert maplibre überhaupt keine Kacheln an — der Worker arbeitet hier
-nicht —, es gibt also weder Daten noch Fehler. Dass die Kette *dort* weitergeht,
-sagt nur `/wache/` auf dem Gerät.
+kein maplibre); und seit dem Worker auch, dass eine Vektorebene sich überhaupt
+durchsetzen kann und dass eine maplibre-Meldung sie nicht kostet (`MELDENDER_STIL`).
+**Nicht** prüfbar bleibt der Fall echter Vektorkacheln: Alle Kachelhosts sind hier
+gesperrt, und ein `.pbf` von Hand zu fälschen wäre eine Prüfung gegen die eigene
+Fälschung. Ob auf dem Gerät Daten ankommen, sagt `/wache/` — Anbieter, gezeichnete
+Merkmale, gezählte Namen, die letzten fünf Meldungen im Wortlaut.
 
 ### Die eigentliche Ursache: eine Datei, die beim Bündeln verlorenging
 

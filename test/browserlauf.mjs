@@ -133,6 +133,35 @@ export const PROBESTIL = {
 };
 
 /**
+ * `PROBESTIL` **plus ein Sprite, das es nicht gibt** — ein Stil, der zeichnet und
+ * trotzdem meckert.
+ *
+ * Dieser Stil ist die Prüfvorlage für den Fehler vom 21.09.2026. Bis dahin hat
+ * `vektorVersuch()` einen Anbieter beim **ersten** `error` von maplibre verworfen.
+ * Das klang vernünftig und war falsch: Ein `error` ist bei maplibre auch ein
+ * fehlender Glyphenbereich, ein 404 auf ein Sprite oder eine einzelne Kachel am
+ * Rand. Auf dem Telefon fiel deshalb jeder Vektoranbieter durch, und unten stand
+ * „OSM-Rasterkarte" — mit japanischen Städtenamen, also genau dem, was weg
+ * sollte.
+ *
+ * Warum ein Sprite und nicht die Glyphen: Der Zeitpunkt muss **feststehen**.
+ * `Style#_load` fordert das Sprite an, bevor irgendetwas gezeichnet ist
+ * (`style.ts:486`), der Fehler ist also garantiert vor der ersten Messung da.
+ * Der Glyphenfehler von `PROBESTIL` kommt dagegen irgendwann — er ist der Grund,
+ * warum die alte Fassung in dieser Umgebung *bestand* und auf dem Gerät nicht.
+ * Eine Prüfung, die ein Rennen austrägt, prüft nichts.
+ *
+ * Belegt ist auch, dass der Fehler harmlos ist: `_loaded = true` steht schon vor
+ * dem Sprite-Abruf, und `_loadSprite` setzt im `finally` `imageManager.setLoaded(true)`
+ * (`node_modules/maplibre-gl/src/style/style.ts:478`, `534-568`). Der Stil lädt
+ * fertig, die Fläche wird gezeichnet — nur eine Bilddatei fehlt.
+ */
+export const MELDENDER_STIL = {
+  ...PROBESTIL,
+  sprite: 'https://tiles.openfreemap.org/sprites/gibtsnicht',
+};
+
+/**
  * Schiebt `PROBESTIL` unter, damit die Vektorebene in jeder Umgebung entsteht.
  *
  * Muss **vor** dem ersten `goto` gerufen werden. Wer sie benutzt, sollte danach

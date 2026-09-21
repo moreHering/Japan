@@ -16,7 +16,13 @@
 
 import { chromium, devices } from 'playwright';
 
-import { BASIS, KACHELHOSTS, START, STUMMER_VEKTORSTIL, vektorStilUnterschieben } from './browserlauf.mjs';
+import {
+  BASIS,
+  KACHELHOSTS,
+  MELDENDER_STIL,
+  START,
+  vektorStilUnterschieben,
+} from './browserlauf.mjs';
 
 let fehler = 0;
 const pruefe = (bedingung, text, zusatz = '') => {
@@ -325,6 +331,82 @@ console.log('\nWenn die Vektoranbieter ausfallen:');
     flach.slice(0, 220),
   );
   await ctx2.close();
+}
+
+/*
+ * **Eine maplibre-Meldung ist kein Ausfall.**
+ *
+ * Das ist der Fehler, der diese Karte drei Tage japanisch gehalten hat. Die
+ * Messung war richtig, aber davor stand ein Abbruch: `if (fehlerTexte.length)
+ * return durchgefallen(...)` — der erste `error` von maplibre warf den Anbieter
+ * weg. Solange der Worker fehlte, wurde nie eine Kachel, nie ein Glyph, nie ein
+ * Sprite angefordert, also kam auch nie eine Meldung; der Abbruch lief ins Leere
+ * und fiel niemandem auf. Seit der Worker läuft, kommen Meldungen — und am
+ * 21.09.2026 stand auf dem Telefon „OSM-Rasterkarte" unter der Karte, mit genau
+ * den japanischen Städtenamen, gegen die das Ganze gebaut ist.
+ *
+ * Geprüft wird deshalb ein Stil, der **zeichnet und meldet**: ein fehlendes
+ * Sprite. Zwei Zusicherungen, und beide sind nötig:
+ *
+ * 1. Die Vektorebene setzt sich durch — sichtbar, Rasterkarte abgeräumt.
+ * 2. `/wache/` zeigt mindestens eine maplibre-Meldung.
+ *
+ * Ohne (2) wäre (1) wertlos: Ein Stil, der gar nichts meldet, würde ebenfalls
+ * bestehen, und die Prüfung hätte nichts geprüft. Erst zusammen sagen sie „es
+ * gab einen Fehler, und er hat den Anbieter nicht gekostet".
+ *
+ * Gegenprobe: Die Zeile oben wieder einsetzen — dann fällt (1).
+ */
+console.log('\nEin gemeldeter Fehler kostet den Anbieter nicht:');
+{
+  const ctx3 = await browser.newContext({ ...devices['iPhone 13'] });
+  // Reihenfolge: Playwright nimmt die **zuletzt** angemeldete passende Route.
+  // Die Kachelsperre zuerst, damit das Sprite darunter seinen eigenen 404 bekommt
+  // und nicht bloß abgebrochen wird — ein Abbruch und ein 404 sind verschiedene
+  // Meldungen, und geprüft werden soll die, die ein Server schickt.
+  await ctx3.route(KACHELHOSTS, (r) => r.abort());
+  await ctx3.route('**/sprites/**', (r) => r.fulfill({ status: 404, body: 'weg' }));
+  await vektorStilUnterschieben(ctx3, MELDENDER_STIL);
+  const dritte = await ctx3.newPage();
+  await dritte.goto(`${BASIS}/wache/`, { waitUntil: 'load' });
+  await dritte.waitForSelector('.probekarte .leaflet-container', { timeout: 20000 });
+  // Auf das Ergebnis warten, nicht auf die Uhr — derselbe Grund wie im Block
+  // „Der Kartenmotor hat seinen Worker" in `browser-orte.mjs`. Die Schranke liegt
+  // unter der Probefrist von 20 s, wer hineinläuft hat wirklich nicht geliefert.
+  await dritte
+    .waitForFunction(
+      () => {
+        const n = document.querySelector('.probekarte .maplibregl-canvas');
+        if (!n) return false;
+        const huelle = n.closest('.leaflet-gl-layer') ?? n.parentElement;
+        return getComputedStyle(huelle).opacity === '1';
+      },
+      { timeout: 12000 },
+    )
+    .catch(() => {});
+
+  const leinwand = await dritte.locator('.probekarte .maplibregl-canvas').count();
+  pruefe(
+    leinwand === 1,
+    'die Vektorebene setzt sich durch, obwohl maplibre gemeckert hat',
+    `${leinwand} Leinwände`,
+  );
+  if (leinwand === 1) {
+    const deckkraft = await dritte
+      .locator('.probekarte .maplibregl-canvas')
+      .evaluate((n) => getComputedStyle(n.closest('.leaflet-gl-layer') ?? n.parentElement).opacity);
+    pruefe(deckkraft === '1', 'und sie ist sichtbar, nicht die durchsichtige Probe', `Deckkraft ${deckkraft}`);
+    const rest = await dritte.locator('.probekarte .leaflet-tile').count();
+    pruefe(rest === 0, 'die Rasterkarte darunter ist abgeräumt', `${rest} Kacheln übrig`);
+  }
+
+  const kartentext = (await dritte.locator('.block').nth(1).innerText()).replace(/\s+/g, ' ');
+  pruefe(
+    /gibtsnicht|404|sprite/i.test(kartentext),
+    'und die Meldung steht trotzdem auf der Seite — verschwiegen wird sie nicht',
+    kartentext.slice(0, 220),
+  );
+  await ctx3.close();
 }
 
 // ========================================================= 7) Layout =====

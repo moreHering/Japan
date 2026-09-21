@@ -300,6 +300,30 @@ console.log('\nDie Karte hat sofort einen Untergrund:');
  */
 console.log('\nDer Kartenmotor hat seinen Worker:');
 {
+  /*
+   * **Auf das Ergebnis warten, nicht auf die Uhr.**
+   *
+   * Hier stand nur die feste Wartezeit von oben (rund 1,6 s nach dem
+   * Reiterwechsel). Das ging gut, solange die Probe nach dem ersten `loaded()`
+   * entschied — seit sie in einer Schleife misst, entscheidet sie einen Takt
+   * später, und unter Last reichte die Zeitspanne nicht mehr: Die Suite bestand
+   * einzeln und fiel in `npm run test:all`. Eine Prüfung, die ein Rennen gegen
+   * den Rechner austrägt, meldet Last als Fehler.
+   *
+   * Die Schranke bleibt bei 12 s, also deutlich unter der Probefrist von 20 s:
+   * Wer hier hineinläuft, hat wirklich nicht geliefert.
+   */
+  await seite
+    .waitForFunction(
+      () => {
+        const n = document.querySelector('.maplibregl-canvas');
+        if (!n) return false;
+        const huelle = n.closest('.leaflet-gl-layer') ?? n.parentElement;
+        return getComputedStyle(huelle).opacity === '1';
+      },
+      { timeout: 12000 },
+    )
+    .catch(() => {});
   pruefe(
     workerAbrufe.length > 0,
     'maplibre holt seine Worker-Datei',

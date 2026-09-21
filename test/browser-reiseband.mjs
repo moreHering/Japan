@@ -444,76 +444,22 @@ pruefe(
   'die Kategoriechips im Ortspool tragen Zahlen',
 );
 
-await seite.goto(`${BASIS}/orte/`, { waitUntil: 'load' });
-await seite.waitForTimeout(700);
-const kml = seite.locator('a[href$=".kml"][download]');
-pruefe((await kml.count()) === 1, 'die statische KML steht genau einmal auf der Orte-Seite',
-  `${await kml.count()}`);
-// Er stand vorher **nur** in der entfernten Section — repoweit die einzige Stelle,
-// die `trip.kmlFile` verlinkt. Ohne diese Prüfung wäre die Datei von nirgends mehr
-// erreichbar gewesen, und kein Test hätte angeschlagen.
-
 /*
- * Seit dem Google-Export gibt es **zwei** KML-Wege, und die Prüfung oben trifft nur
- * den einen: Der neue Knopf ist ein `<button>` mit Blob-URL und fällt nicht unter
- * `a[href$=".kml"][download]`. Dass die „genau einmal"-Zusicherung dadurch stehen
- * blieb, ist Glück und keine Absicht — also wird der zweite Weg hier ausdrücklich
- * mitgezählt, statt sich darauf zu verlassen.
+ * Hier stand bis zum 21.09.2026 ein knappes Dutzend Prüfungen zum Erklärkasten
+ * „Woher die Zahlen kommen" auf der Orte-Seite: dass er da ist, wie hoch er
+ * zugeklappt ist, was aufgeklappt darin steht, und dass er die statische
+ * `Japan-Karte-2026.kml` verlinkt.
  *
- * Die zwei sind nicht dasselbe: Der Link gibt den ursprünglichen My-Maps-Export
- * (bytegleich mit `data/source/`), der Knopf euren aktuellen Stand mit Korrekturen
- * und eigenen Orten. Was die Datei enthält, prüft `browser-maps.mjs`; hier geht es
- * nur darum, dass beide Wege da sind und man sie unterscheiden kann.
+ * Der Kasten ist weg, auf ausdrücklichen Wunsch: Nachschlagetext, den man einmal
+ * liest und danach wegklickt, kostet auf einem 390-px-Schirm jeden Tag Platz.
+ * Mit ihm ist der Verweis auf die alte KML verschwunden — und das ist kein
+ * Verlust, den eine Prüfung einfangen müsste: Die Datei, die der Knopf erzeugt,
+ * enthält alles, was die alte enthält, plus Korrekturen und eigene Orte. Die
+ * alte liegt weiter unter `/Japan/Japan-Karte-2026.kml`.
+ *
+ * Was von den Prüfungen bleibt, steht in `browser-orte.mjs`: die drei Knöpfe und
+ * wohin sie führen.
  */
-/*
- * Seit dem 21.09.2026 stehen in der Zeile **zwei** Knöpfe, und die Reihenfolge
- * ist die Aussage: Voran der Sprung in die Maps-App — das war der Wunsch —,
- * dahinter als Textlink der KML-Weg für alle Orte. Gezählt wird beides einzeln,
- * damit ein verschwundener Knopf nicht vom anderen gedeckt wird.
- */
-const mapsKnopf = await seite.locator('.kmlzeile .btn.primary').count();
-pruefe(mapsKnopf === 1, 'die Zeile führt zuerst in die Maps-App', `${mapsKnopf}`);
-pruefe(
-  (await seite.locator('.kmlzeile .alslink').count()) === 1,
-  'und der Weg zum Live-KML steht als zweiter daneben',
-);
-pruefe(
-  (await seite.locator('.lesehinweis').count()) === 1,
-  'und die zwei Erklärtexte sind dort gelandet',
-);
-// Zugeklappt kostet der Kasten eine Zeile — die Werkzeugleiste bleibt frei.
-const zu = await seite.locator('.lesehinweis').evaluate((n) => Math.round(n.getBoundingClientRect().height));
-pruefe(zu < 70, 'zugeklappt kostet er kaum Höhe', `${zu} px`);
-
-// Aufklappen und erst dann lesen: `innerText` gibt bei zugeklapptem `<details>`
-// nur die Zusammenfassung her, der Rest ist nicht gerendert. Damit ist gleich
-// mitgeprüft, dass sich der Kasten überhaupt öffnen lässt.
-await seite.locator('.lesehinweis summary').tap();
-await seite.waitForTimeout(300);
-const offen = (await seite.locator('.lesehinweis').innerText()).replace(/\s+/g, ' ');
-
-/*
- * Der Unterschied zwischen den zwei KML-Wegen, und zwar **hier** geprüft und nicht
- * oben: Der Erklärtext steht im `<details>`, und `innerText` gibt bei zugeklapptem
- * Kasten nur die Zusammenfassung her. Die erste Fassung dieser Prüfung stand vor
- * dem `tap()` und hätte über einen leeren Text geurteilt — dieselbe Falle, die
- * weiter unten schon einen Kommentar hat.
- */
-const kmlTexte = `${offen} ${(await seite.locator('.kmlzeile').innerText()).replace(/\s+/g, ' ')}`;
-pruefe(
-  /ursprünglich|unverändert/i.test(kmlTexte) && /aktuell/i.test(kmlTexte),
-  'der Text sagt, welcher der zwei KML-Wege welcher ist',
-);
-pruefe(
-  /Korrektur/i.test(kmlTexte) && /eigene/i.test(kmlTexte),
-  'und woran man den Live-Stand erkennt',
-);
-// Groß-klein-unempfindlich: Die Überschrift trägt `text-transform: uppercase`,
-// und `innerText` gibt den **gerenderten** Text — also „NUMMERN WIE IM BUCH".
-pruefe(/nummern wie im buch/i.test(offen), 'aufgeklappt steht die Erklärung zu den Nummern da');
-pruefe(/Ryokan/.test(offen), 'und die zu den erledigten Unterkunftsvorschlägen');
-const auf = await seite.locator('.lesehinweis').evaluate((n) => Math.round(n.getBoundingClientRect().height));
-pruefe(auf > zu + 40, 'und er wird dabei wirklich größer', `${zu} → ${auf} px`);
 
 // ---------------------------------------------------------------- Aufräumen ---
 

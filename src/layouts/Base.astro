@@ -142,23 +142,6 @@ const path = Astro.url.pathname.replace(import.meta.env.BASE_URL, '').replace(/\
       <slot />
     </main>
 
-    {
-      !full && (
-        <footer>
-          <div class="inner">
-            <p>
-              Angemeldet gleicht sich der Plan zwischen euren Geräten ab. Über{' '}
-              <a href={url('organisation')}>Organisation</a> gibt es ihn zusätzlich als Datei zum
-              Sichern.
-            </p>
-            <p class="dim">
-              164 Orte aus dem Reiseband, dazu eure eigenen · Karte:{' '}
-              <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>
-            </p>
-          </div>
-        </footer>
-      )
-    }
 
     <!-- Feste Leiste am unteren Rand — nur auf dem Handy sichtbar -->
     <nav class="tabbar" aria-label="Hauptnavigation">
@@ -333,21 +316,6 @@ const path = Astro.url.pathname.replace(import.meta.env.BASE_URL, '').replace(/\
         overflow: hidden;
       }
 
-      footer {
-        border-top: 1px solid var(--line);
-        padding: 22px 0 34px;
-        font-size: 0.84rem;
-        color: var(--ai-60);
-      }
-      footer p {
-        margin: 0 0 5px;
-        max-width: 70ch;
-      }
-      footer .dim {
-        color: var(--ai-40);
-        font-size: 0.78rem;
-      }
-
       /* ------------------------------------------------- Leiste am Fußrand */
 
       .tabbar {
@@ -436,9 +404,6 @@ const path = Astro.url.pathname.replace(import.meta.env.BASE_URL, '').replace(/\
         /* Platz schaffen, damit die Leiste nichts verdeckt. */
         main:not(.full) {
           padding-bottom: calc(var(--tabbar-h) + 20px);
-        }
-        footer {
-          padding-bottom: calc(var(--tabbar-h) + 24px);
         }
 
         /* Auf schmalen Schirmen bis an den Rand statt zentrierter Spalte. */

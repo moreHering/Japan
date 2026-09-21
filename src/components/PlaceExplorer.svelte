@@ -749,28 +749,18 @@
   statt seiner.
 -->
 <!--
-  **Zwei Knöpfe, zwei Schritte — und das ist die Reparatur, nicht die Bequemlichkeit.**
+  Drei Knöpfe, ein Satz. Die Erklärungen, die hier standen, sind raus — sie haben
+  die Seite sperrig gemacht, und was ein Knopf tut, steht auf ihm.
 
-  Erst stand hier ein Knopf, der die Datei bereitlegte **und** My Maps öffnete.
-  Auf dem Telefon hat er nicht funktioniert: Der Wechsel in den neuen Tab bricht
-  den gerade gestarteten Download ab. Ein Tipp, eine Sache.
+  Zwei Schritte und nicht einer, weil das die Reparatur ist: Ein Tipp, der die
+  Datei bereitlegt **und** My Maps öffnet, bricht auf dem Telefon den gerade
+  gestarteten Download ab.
 -->
 <div class="kmlzeile">
-  <button class="btn primary" onclick={kmlHerunterladen}>
-    1 · Datei mit {alle.length} Orten laden
-  </button>
+  <button class="btn primary" onclick={kmlHerunterladen}>1 · Datei laden ({alle.length} Orte)</button>
   <a class="btn" href={MY_MAPS} target="_blank" rel="noopener">2 · My Maps öffnen</a>
-  <span class="kmlhinweis">
-    In My Maps dann: <b>Neue Karte erstellen</b> → <b>Importieren</b> → die eben
-    geladene Datei wählen. Danach liegen alle Orte dauerhaft in eurem Google-Konto
-    und sind in der Maps-App abrufbar — mit euren Korrekturen und eigenen Orten,
-    ohne die ausgeblendeten. Ein weiterer Import <b>ergänzt</b> eine Ebene, die
-    alte müsst ihr dort löschen.
-    <br />
-    <button class="alslink" onclick={inMapsOeffnen}
-      >Nur den Kartenausschnitt in Maps öffnen</button
-    > — ohne Pins; Google kann per Adresse keine eigenen Marker setzen.
-  </span>
+  <button class="btn ghost" onclick={inMapsOeffnen}>Ausschnitt in Maps</button>
+  <span class="kmlhinweis">In My Maps: <b>Neue Karte</b> → <b>Importieren</b> → Datei wählen.</span>
 </div>
 
 <style>
@@ -850,20 +840,6 @@
     font-size: 0.8rem;
     color: var(--ai-60);
     line-height: 1.45;
-  }
-
-  /* Der KML-Weg bleibt erreichbar, tritt aber zurück: Er war die Hauptsache und
-     ist jetzt die Ausnahme. */
-  .alslink {
-    display: inline;
-    padding: 0;
-    border: 0;
-    background: none;
-    font: inherit;
-    color: var(--ai);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    cursor: pointer;
   }
 
   .versteckliste {

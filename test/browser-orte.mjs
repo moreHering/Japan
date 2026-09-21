@@ -803,7 +803,7 @@ console.log('\nDer Sprung in die Maps-App:');
   pruefe(ladenDa === 1, 'Schritt 1 ist ein eigener Knopf für die Datei', `${ladenDa}`);
   if (ladenDa === 1) {
     pruefe(
-      /\d+\s*Orten/.test(await laden.innerText()),
+      /\d+\s*Orte/.test(await laden.innerText()),
       'und er nennt, wie viele Orte darin stehen',
       await laden.innerText(),
     );
@@ -830,16 +830,20 @@ console.log('\nDer Sprung in die Maps-App:');
     );
   }
 
-  const knopf = seite.locator('.kmlzeile .alslink');
+  /*
+   * Der dritte Weg: nur der Kartenausschnitt, ohne Pins. Seine Beschriftung muss
+   * das sagen — **„Ausschnitt"** und nicht „Orte". Als der Knopf „In Google Maps
+   * öffnen" hieß, las sich das wie „mit meinen Orten", und Maps ging leer auf.
+   * Die Erklärung daneben ist raus; das Wort auf dem Knopf muss sie ersetzen.
+   */
+  const knopf = seite.locator('.kmlzeile .btn.ghost');
   const da = await knopf.count();
   pruefe(da === 1, 'daneben steht der Weg zum Kartenausschnitt', `${da}`);
   if (da === 1) {
     pruefe(
-      /ohne Pins|Ausschnitt/i.test(
-        (await seite.locator('.kmlhinweis').innerText()).replace(/\s+/g, ' '),
-      ),
-      'und die Zeile sagt dazu, dass dort keine Pins erscheinen',
-      (await seite.locator('.kmlhinweis').innerText()).replace(/\s+/g, ' ').slice(0, 120),
+      /Ausschnitt/i.test(await knopf.innerText()),
+      'und seine Beschriftung sagt „Ausschnitt", nicht „Orte"',
+      await knopf.innerText(),
     );
     await knopf.tap();
     await seite.waitForTimeout(400);

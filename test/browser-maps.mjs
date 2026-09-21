@@ -329,43 +329,15 @@ pruefe(
   'außerhalb der CDATA-Abschnitte steht kein rohes &',
 );
 
-// Beide Wege sind da und unterscheidbar.
-console.log('\nDie zwei KML-Wege:');
 /*
- * Sie stehen **beieinander**, und das ist keine Kosmetik: Der Knopf stand eine
- * Fassung lang über der Liste und hat dort den ersten Ort unter die Falzkante
- * geschoben — `browser-orte.mjs` hat es gemeldet (y = 501 px statt 326 px). Seither
- * sitzt er direkt über dem `.lesehinweis`-Kasten, in dem die statische KML verlinkt
- * ist und der Unterschied erklärt wird.
+ * Hier standen Prüfungen zum Erklärkasten unter dem Knopf — dass er da ist, dass
+ * der Knopf direkt darüber sitzt, dass die statische KML darin verlinkt ist. Der
+ * Kasten ist am 21.09.2026 entfallen, auf ausdrücklichen Wunsch: Er hat die
+ * Seite sperrig gemacht.
  *
- * Der Erklärtext dort sagt „direkt über diesem Kasten". Diese Prüfung ist das, was
- * den Satz wahr hält: Zieht jemand eines der beiden weg, steht dort eine
- * Wegbeschreibung, die ins Leere zeigt — und das merkt unterwegs niemand, weil der
- * Kasten zugeklappt ist.
+ * Was die Datei enthält, prüft diese Datei weiter oben und vollständig — daran
+ * ändert sich nichts. Wohin die drei Knöpfe führen, prüft `browser-orte.mjs`.
  */
-const lage = await seite.evaluate(() => {
-  const k = document.querySelector('.kmlzeile')?.getBoundingClientRect();
-  const l = document.querySelector('.lesehinweis')?.getBoundingClientRect();
-  return k && l ? { abstand: Math.round(l.top - k.bottom) } : null;
-});
-pruefe(lage !== null, 'Knopf und Erklärkasten sind beide da');
-pruefe(
-  lage !== null && lage.abstand >= 0 && lage.abstand < 80,
-  'und der Knopf steht direkt über dem Kasten, wie der Text behauptet',
-  lage ? `${lage.abstand} px` : '—',
-);
-pruefe(
-  (await seite.locator('a[href$=".kml"][download]').count()) === 1,
-  'die statische Datei ist weiter verlinkt',
-);
-await seite.locator('.lesehinweis summary').tap();
-await seite.waitForTimeout(300);
-const erklaerung = (await seite.locator('.lesehinweis').innerText()).replace(/\s+/g, ' ');
-pruefe(/zwei wege/i.test(erklaerung), 'der Unterschied ist erklärt');
-pruefe(
-  /keine Schnittstelle|nicht/i.test(erklaerung) && /ergänzt/i.test(erklaerung),
-  'und dass es keine automatische Anbindung gibt',
-);
 
 // ============================================================== 5) Layout ======
 

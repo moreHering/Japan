@@ -256,7 +256,26 @@ await seite.waitForTimeout(600);
  * Nebenlink, davor ein Knopf. Deshalb hier ausdrücklich `.btn.primary` und
  * nicht „irgendein Knopf in der Zeile" — daneben steht der Ausschnitt-Link.
  */
-const knopf = seite.locator('.kmlzeile .btn.primary');
+const knopf = seite.locator('.kmlzeile button.btn.primary');
+
+/*
+ * Der Fehler, der den Download auf dem Telefon verschluckt hat, und der am
+ * Rechner unsichtbar ist: `URL.revokeObjectURL()` stand direkt hinter `click()`.
+ * Damit ist der Blob freigegeben, **bevor** der Browser ihn gelesen hat — Chrome
+ * am Rechner ist schnell genug, ein Telefon nicht.
+ *
+ * Geprüft wird deshalb nicht „kommt eine Datei an" (das tat sie hier auch
+ * vorher), sondern die Ursache: Während des Tipps darf **kein** Widerruf
+ * passieren.
+ */
+await seite.evaluate(() => {
+  window.__widerrufe = 0;
+  const echt = URL.revokeObjectURL.bind(URL);
+  URL.revokeObjectURL = (u) => {
+    window.__widerrufe += 1;
+    return echt(u);
+  };
+});
 pruefe(await knopf.isVisible(), 'der Knopf ist da, auch bei 390 px mit zugeklappten Filtern');
 /*
  * Die Höhe gegen die **Projektvorgabe**, nicht gegen Apples 44 pt: `tokens.css:318`
@@ -271,6 +290,12 @@ const hoch = await knopf.evaluate((n) => Math.round(n.getBoundingClientRect().he
 pruefe(hoch >= 36, 'und nicht kleiner als die Projektvorgabe für .btn.small', `${hoch} px`);
 
 const [download] = await Promise.all([seite.waitForEvent('download'), knopf.click()]);
+const sofortWiderrufen = await seite.evaluate(() => window.__widerrufe);
+pruefe(
+  sofortWiderrufen === 0,
+  'der Blob wird nicht sofort widerrufen — sonst kommt auf dem Handy nichts an',
+  `${sofortWiderrufen} Widerruf(e) während des Tipps`,
+);
 pruefe(/\.kml$/.test(download.suggestedFilename()), 'die Datei endet auf .kml',
   download.suggestedFilename());
 const pfad = await download.path();

@@ -120,11 +120,31 @@
       // hängen bei unbekannten Typen ein `.txt` an. Deshalb der schlichte Weg.
       type: 'application/xml',
     });
+    /*
+     * Drei Kleinigkeiten, die am Rechner nicht auffallen und auf dem Handy den
+     * Download verschlucken — alle drei waren hier drin:
+     *
+     * 1. **Der Widerruf kam sofort.** `URL.revokeObjectURL()` direkt nach
+     *    `click()` gibt den Blob frei, **bevor** der Browser ihn gelesen hat.
+     *    Chrome am Rechner ist schnell genug, ein Telefon nicht: Dort passiert
+     *    dann schlicht nichts. Jetzt eine Minute später — der Speicher ist
+     *    danach frei, der Download aber längst durch.
+     * 2. **Das Element hing nicht im Dokument.** Mobile Browser ignorieren
+     *    Klicks auf losgelöste Elemente regelmäßig. Also einhängen, klicken,
+     *    wieder entfernen.
+     * 3. **Der Tipp machte zwei Dinge.** Der Wechsel nach My Maps im selben
+     *    Griff hat den gerade gestarteten Download abgebrochen. Deshalb steht
+     *    My Maps jetzt als eigener Knopf daneben.
+     */
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
+    a.href = url;
     a.download = kmlDateiname(new Date().toISOString());
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
   let versteckt = $derived<Place[]>(versteckteOrte());
 
@@ -728,22 +748,24 @@
   Tipp nebenher bereitgelegt — deshalb `onclick` **zusätzlich** zum `href`, nicht
   statt seiner.
 -->
+<!--
+  **Zwei Knöpfe, zwei Schritte — und das ist die Reparatur, nicht die Bequemlichkeit.**
+
+  Erst stand hier ein Knopf, der die Datei bereitlegte **und** My Maps öffnete.
+  Auf dem Telefon hat er nicht funktioniert: Der Wechsel in den neuen Tab bricht
+  den gerade gestarteten Download ab. Ein Tipp, eine Sache.
+-->
 <div class="kmlzeile">
-  <a
-    class="btn primary"
-    href={MY_MAPS}
-    target="_blank"
-    rel="noopener"
-    onclick={kmlHerunterladen}
-  >
-    Alle {alle.length} Orte in Google My Maps
-  </a>
+  <button class="btn primary" onclick={kmlHerunterladen}>
+    1 · Datei mit {alle.length} Orten laden
+  </button>
+  <a class="btn" href={MY_MAPS} target="_blank" rel="noopener">2 · My Maps öffnen</a>
   <span class="kmlhinweis">
-    Der Tipp legt die Datei in eure Downloads und öffnet My Maps. Dort:
-    <b>Neue Karte erstellen</b> → <b>Importieren</b> → die Datei wählen. Danach liegen
-    alle Orte dauerhaft in eurem Google-Konto und sind in der Maps-App abrufbar.
-    Mit euren Korrekturen und eigenen Orten, ohne die ausgeblendeten — ein weiterer
-    Import <b>ergänzt</b> eine Ebene, die alte müsst ihr dort löschen.
+    In My Maps dann: <b>Neue Karte erstellen</b> → <b>Importieren</b> → die eben
+    geladene Datei wählen. Danach liegen alle Orte dauerhaft in eurem Google-Konto
+    und sind in der Maps-App abrufbar — mit euren Korrekturen und eigenen Orten,
+    ohne die ausgeblendeten. Ein weiterer Import <b>ergänzt</b> eine Ebene, die
+    alte müsst ihr dort löschen.
     <br />
     <button class="alslink" onclick={inMapsOeffnen}
       >Nur den Kartenausschnitt in Maps öffnen</button

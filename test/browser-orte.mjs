@@ -793,9 +793,25 @@ console.log('\nDer Sprung in die Maps-App:');
    * „ohne Pins" beschriftet: Als Hauptknopf hat genau er enttäuscht, weil
    * „In Google Maps öffnen" wie „mit meinen Orten" klingt und Maps leer aufging.
    */
-  const haupt = seite.locator('.kmlzeile .btn.primary');
+  /*
+   * **Zwei Knöpfe, zwei Schritte.** Der erste lädt die Datei, der zweite öffnet
+   * My Maps. Vorher war es einer, der beides tat — und auf dem Telefon nichts:
+   * Der Wechsel in den neuen Tab bricht den gerade gestarteten Download ab.
+   */
+  const laden = seite.locator('.kmlzeile button.btn.primary');
+  const ladenDa = await laden.count();
+  pruefe(ladenDa === 1, 'Schritt 1 ist ein eigener Knopf für die Datei', `${ladenDa}`);
+  if (ladenDa === 1) {
+    pruefe(
+      /\d+\s*Orten/.test(await laden.innerText()),
+      'und er nennt, wie viele Orte darin stehen',
+      await laden.innerText(),
+    );
+  }
+
+  const haupt = seite.locator('.kmlzeile a.btn');
   const hauptDa = await haupt.count();
-  pruefe(hauptDa === 1, 'der Hauptknopf führt zu My Maps', `${hauptDa}`);
+  pruefe(hauptDa === 1, 'Schritt 2 führt zu My Maps', `${hauptDa}`);
   if (hauptDa === 1) {
     const ziel = await haupt.getAttribute('href');
     pruefe(

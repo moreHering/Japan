@@ -564,20 +564,35 @@ höchstens zehn Halten zeigen, einen Kartenausschnitt zeigen, Street View. Es gi
 über My Maps oder über die kostenpflichtige Maps-JavaScript-API mit Schlüssel —
 und ein Schlüssel in einem öffentlichen Repo ist keiner.
 
-Deshalb ist der Hauptknopf jetzt **„Alle 141 Orte in Google My Maps"**: Ein Tipp
-legt die KML in die Downloads **und** öffnet My Maps, dort noch zweimal tippen
-(*Neue Karte* → *Importieren*). Danach liegen die Orte dauerhaft im Google-Konto
-und sind in der Maps-App abrufbar.
+Dort stehen jetzt **zwei Knöpfe**: *1 · Datei mit 141 Orten laden* und
+*2 · My Maps öffnen*. In My Maps dann *Neue Karte erstellen* → *Importieren* →
+die geladene Datei wählen.
 
-Zwei Entscheidungen daran sind nicht beliebig:
+**Warum zwei und nicht einer.** Der erste Versuch war ein Knopf, der die Datei
+bereitlegte **und** My Maps öffnete. Auf dem Telefon tat er nichts: Der Wechsel
+in den neuen Tab bricht den gerade gestarteten Download ab. Ein Tipp, eine Sache.
 
-- **Ein echter `<a href>` mit `target="_blank"`, kein `window.open`.** Ein Fenster
-  aus einem Klick-Handler schlucken die Blocker mobiler Browser regelmäßig; ein
-  angetippter Link geht durch. Die Datei wird im selben Tipp per `onclick`
-  nebenher bereitgelegt.
-- **Die Produktseite `google.com/mymaps` und keine erfundene Import-Adresse.**
-  Einen Weg, den Import per URL anzustoßen, gibt es nicht — er ist ein Menüpunkt.
-  Was der Knopf abnimmt, ist das Suchen der Seite und das getrennte Herunterladen.
+**Drei Fehler im Download selbst**, alle am Rechner unsichtbar und auf dem Handy
+tödlich:
+
+```js
+a.click();
+URL.revokeObjectURL(a.href);   // ← sofort
+```
+
+1. **Der Widerruf kam sofort.** Damit ist der Blob freigegeben, *bevor* der
+   Browser ihn gelesen hat. Chrome am Rechner ist schnell genug, ein Telefon
+   nicht — dort passiert schlicht nichts. Jetzt eine Minute später.
+2. **Das `<a>` hing nicht im Dokument.** Mobile Browser ignorieren Klicks auf
+   losgelöste Elemente regelmäßig.
+3. **Der Tipp machte zwei Dinge** — siehe oben.
+
+Geprüft wird deshalb nicht „kommt eine Datei an" (das tat sie hier auch vorher,
+Playwright ist schnell), sondern die **Ursache**: Während des Tipps darf kein
+Widerruf passieren. Gegenprobe mit der alten Zeile: Die Prüfung fällt namentlich.
+
+**Die Produktseite `google.com/mymaps` und keine erfundene Import-Adresse:** Einen
+Weg, den Import per URL anzustoßen, gibt es nicht — er ist ein Menüpunkt.
 
 Der Kartenausschnitt bleibt als Nebenlink und heißt jetzt **„Nur den
 Kartenausschnitt in Maps öffnen — ohne Pins"**. Dieselbe Funktion, ehrlich

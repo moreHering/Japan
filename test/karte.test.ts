@@ -241,6 +241,48 @@ describe('Am echten Liberty-Stil', () => {
   });
 });
 
+describe('Der Web Worker von maplibre liegt neben der App', () => {
+  /*
+   * Die Ursache des Ausfalls vom 20./21.09.2026, und der Grund, warum sie so
+   * lange unentdeckt blieb.
+   *
+   * maplibre baut die Adresse seines Workers als Geschwisterdatei neben sich
+   * selbst. Vite bündelt maplibre aber in einen Chunk unter `_astro/` und
+   * kopiert die Datei nicht mit — gesucht wurde etwas, das es nicht gab. Die
+   * Folge sieht nach keinem Fehler aus: **Vektorkacheln werden ausschließlich im
+   * Worker geparst, Rasterquellen nicht.** Auf dem Telefon kam deshalb das
+   * Natural-Earth-Reliefbild des Liberty-Stils an und sonst nichts, ohne eine
+   * einzige Meldung.
+   *
+   * `scripts/karte-stil.mjs` kopiert Worker und gemeinsamen Teil nach
+   * `public/karte-motor/`. Hier wird geprüft, dass die Kopien **zur
+   * installierten Fassung passen** — ein maplibre-Sprung ohne neuen Kopierlauf
+   * wäre sonst ein stiller Rückfall in genau diesen Zustand.
+   */
+  const dist = (datei: string) =>
+    readFileSync(new URL(`../node_modules/maplibre-gl/dist/${datei}`, import.meta.url), 'utf8');
+  const kopie = (datei: string) =>
+    readFileSync(new URL(`../public/karte-motor/${datei}`, import.meta.url), 'utf8');
+
+  it('der gemeinsame Teil ist bytegleich mit dem installierten', () => {
+    expect(kopie('maplibre-gl-shared.js')).toBe(dist('maplibre-gl-shared.mjs'));
+  });
+
+  it('der Worker unterscheidet sich nur in der Endung, auf die er verweist', () => {
+    // `.mjs` wird je nach Server als `application/octet-stream` ausgeliefert, und
+    // ein Modul-Worker lehnt das ab. Deshalb `.js` — und nur deshalb.
+    expect(kopie('maplibre-gl-worker.js')).toBe(
+      dist('maplibre-gl-worker.mjs').replaceAll('./maplibre-gl-shared.mjs', './maplibre-gl-shared.js'),
+    );
+  });
+
+  it('und er verweist wirklich auf die Kopie, nicht ins Leere', () => {
+    const w = kopie('maplibre-gl-worker.js');
+    expect(w).toContain('./maplibre-gl-shared.js');
+    expect(w).not.toContain('./maplibre-gl-shared.mjs');
+  });
+});
+
 describe('Host einer Kachel-URL', () => {
   it('liest den Host aus einer Vorlage mit Platzhaltern', () => {
     // Ohne das Ersetzen der `{z}`-Platzhalter wirft `URL`, und der Hinweis stünde

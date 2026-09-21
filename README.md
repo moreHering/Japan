@@ -478,6 +478,52 @@ Umgebung fordert maplibre überhaupt keine Kacheln an — der Worker arbeitet hi
 nicht —, es gibt also weder Daten noch Fehler. Dass die Kette *dort* weitergeht,
 sagt nur `/wache/` auf dem Gerät.
 
+### Die eigentliche Ursache: eine Datei, die beim Bündeln verlorenging
+
+Drei Tage lang sah es nach einem Ausfall des Kartendienstes aus. Es war ein
+Fehler im **Bauen**, und er reproduziert sich in dieser Umgebung genauso wie auf
+dem Telefon.
+
+maplibre baut die Adresse seines Web Workers als Geschwisterdatei neben sich
+selbst:
+
+```js
+function workerUrl() {
+  const e = import.meta.url;
+  if (!/^https?:/.test(e)) return '';
+  const t = e.endsWith('-dev.mjs') ? 'maplibre-gl-worker-dev.mjs' : 'maplibre-gl-worker.mjs';
+  return new URL(`./${t}`, e).href;
+}
+```
+
+Vite bündelt maplibre aber in einen Chunk unter `_astro/` und **kopiert die
+Worker-Datei nicht mit**. Gesucht wurde also `_astro/maplibre-gl-worker.mjs` —
+dort ist nichts. Im Dev-Server stand dieselbe Warnung im Protokoll und wurde
+übersehen: *„The file does not exist at …/deps/maplibre-gl-worker.mjs."*
+
+**Warum das wie ein Dienstausfall aussieht:** Vektorkacheln werden
+**ausschließlich im Worker** geparst, Rasterquellen nicht. Der Liberty-Stil hat
+beides — ein Natural-Earth-Raster und die Vektorquelle. Ohne Worker kam genau das
+Raster an: ein Reliefbild ohne Wasser, ohne Straßen, ohne Namen. Kein Fehler,
+keine Meldung, kein `error`-Ereignis. Der Worker startet einfach nie, und
+maplibre wartet.
+
+Das erklärt rückblickend auch, warum in dieser Umgebung **nie** eine Vektorebene
+gewinnen konnte und warum maplibre hier keine einzige Kachel angefordert hat. Ich
+hatte das der Netzsperre zugeschrieben. Es war derselbe Fehler.
+
+**Die Reparatur:** `scripts/karte-stil.mjs` kopiert Worker und gemeinsamen Teil
+nach `public/karte-motor/` (Endung `.js`, weil `.mjs` je nach Server als
+`application/octet-stream` ausgeliefert wird und ein Modul-Worker das ablehnt),
+und `MapView` setzt die Adresse über `setWorkerUrl()` ausdrücklich — statt sie
+vom Bündeln zu erhoffen.
+
+Gegengeprobt: Ohne diese Zeile wird die Worker-Datei **nie geholt**, die
+Vektorebene bleibt bei Deckkraft 0 und die Rasterkarte liegen — genau das Bild
+vom Telefon. Dazu prüft `karte.test.ts`, dass die Kopien bytegleich zur
+installierten maplibre-Fassung sind; ein Versionssprung ohne neuen Kopierlauf
+wäre sonst ein stiller Rückfall.
+
 ### Zuerst eine Karte, die da ist — dann erst die schönere
 
 Am 21.09.2026 kam auf dem Telefon eine **weiße** Karte an: Marker an der

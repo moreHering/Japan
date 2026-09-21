@@ -22,9 +22,15 @@
  *   npm run data
  */
 
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 
 import { osm } from '@versatiles/style';
+
+import { mkdir } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { version } = require('maplibre-gl/package.json');
 
 const ZIEL = new URL('../public/karte-versatiles.json', import.meta.url);
 
@@ -41,4 +47,56 @@ await writeFile(ZIEL, `${JSON.stringify(stil)}\n`, 'utf8');
 console.log(
   `public/karte-versatiles.json: ${stil.layers.length} Ebenen, ${texte.length} davon beschriftet, ` +
     `${Math.round(JSON.stringify(stil).length / 1024)} KB`,
+);
+
+// ======================================= Der Worker von maplibre =============
+
+/**
+ * Legt maplibres Web Worker neben die App.
+ *
+ * **Das ist die Ursache des Ausfalls vom 20./21.09.2026, und sie steckte im
+ * Bündeln.** maplibre baut die Adresse seines Workers als *Geschwisterdatei
+ * neben sich selbst*:
+ *
+ * ```js
+ * const datei = url.endsWith('-dev.mjs') ? 'maplibre-gl-worker-dev.mjs' : 'maplibre-gl-worker.mjs';
+ * return new URL(`./${datei}`, import.meta.url).href;
+ * ```
+ *
+ * Vite bündelt maplibre aber in einen Chunk unter `_astro/` und kopiert die
+ * Worker-Datei **nicht** mit. Gesucht wurde also `_astro/maplibre-gl-worker.mjs`,
+ * und dort ist nichts. Ergebnis: Der Worker startet nie — und **Vektorkacheln
+ * werden ausschließlich im Worker geparst.** Rasterquellen nicht.
+ *
+ * Genau das war das Bild auf dem Telefon: Das Natural-Earth-Reliefbild des
+ * Liberty-Stils (eine Rasterquelle) kam an, alles Vektorielle blieb leer. Kein
+ * Fehler, keine Meldung — der Worker fehlt einfach, und maplibre wartet.
+ *
+ * Deshalb liegen beide Dateien jetzt in `public/karte-motor/` und werden über
+ * `setWorkerUrl()` ausdrücklich benannt. Der Worker zieht seinen gemeinsamen
+ * Teil nach; die Endung wird dabei auf `.js` geändert, weil `.mjs` je nach
+ * Server als `application/octet-stream` ausgeliefert wird und ein
+ * Modul-Worker das ablehnt.
+ */
+const WORKER_ZIEL = new URL('../public/karte-motor/maplibre-gl-worker.js', import.meta.url);
+const GETEILT_ZIEL = new URL('../public/karte-motor/maplibre-gl-shared.js', import.meta.url);
+
+// Über den Pfad der `package.json` und nicht über `require.resolve('maplibre-gl')`:
+// Das Paket hat keinen CommonJS-Haupteintrag in seinen `exports`, der Aufruf wirft.
+const dist = new URL('./dist/', new URL(require.resolve('maplibre-gl/package.json'), 'file:'));
+const worker = await readFile(new URL('maplibre-gl-worker.mjs', dist), 'utf8');
+const geteilt = await readFile(new URL('maplibre-gl-shared.mjs', dist), 'utf8');
+
+const workerNeu = worker.replaceAll('./maplibre-gl-shared.mjs', './maplibre-gl-shared.js');
+// Eine Zusicherung statt eines Vertrauensvorschusses: Ändert maplibre den Namen
+// seines gemeinsamen Teils, soll es hier auffallen und nicht auf der Reise.
+if (workerNeu === worker) throw new Error('Worker verweist nicht auf maplibre-gl-shared.mjs — Aufbau geändert?');
+if (!/import\s*\{/.test(worker)) throw new Error('Worker sieht nicht wie ein ES-Modul aus');
+
+await mkdir(new URL('../public/karte-motor/', import.meta.url), { recursive: true });
+await writeFile(WORKER_ZIEL, workerNeu, 'utf8');
+await writeFile(GETEILT_ZIEL, geteilt, 'utf8');
+console.log(
+  `public/karte-motor/: Worker ${Math.round(workerNeu.length / 1024)} KB, ` +
+    `gemeinsamer Teil ${Math.round(geteilt.length / 1024)} KB (maplibre-gl ${version})`,
 );

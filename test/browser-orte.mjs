@@ -93,6 +93,12 @@ const ctx = await browser.newContext({ ...iPhone });
 await vektorStilUnterschieben(ctx);
 const seite = await ctx.newPage();
 
+/** Holt maplibre seine Worker-Datei? Siehe den Block „Der Kartenmotor". */
+const workerAbrufe = [];
+seite.on('request', (r) => {
+  if (/karte-motor\//.test(r.url())) workerAbrufe.push(r.url().split('/').pop());
+});
+
 const meldungen = [];
 seite.on('console', (m) => {
   if (m.type() === 'error') meldungen.push(m.text());
@@ -268,10 +274,51 @@ await seite.waitForTimeout(700);
  */
 console.log('\nDie Karte hat sofort einen Untergrund:');
 {
-  const kacheln = await seite.locator('.leaflet-tile').count();
-  pruefe(kacheln > 0, 'eine Kachelebene hängt an der Karte', `${kacheln} Kacheln`);
-  const leer = await seite.locator('.leaflet-tile-pane .leaflet-layer').count();
-  pruefe(leer > 0, 'und sie ist eine echte Ebene, kein leerer Container', `${leer}`);
+  /*
+   * `.leaflet-tile-pane > *` und nicht `.leaflet-layer`: Die Rasterkarte trägt
+   * diese Klasse, die Vektorebene heißt `leaflet-gl-layer`. Gefragt ist aber
+   * nicht, **welche** Art Untergrund hängt, sondern **dass** einer hängt — und
+   * zwar von Anfang an. Am 21.09.2026 hing keiner, und die Karte war weiß.
+   */
+  const ebenen = await seite.locator('.leaflet-tile-pane > *').count();
+  pruefe(ebenen > 0, 'eine Kartenebene hängt an der Karte', `${ebenen}`);
+}
+
+/*
+ * **Der Web Worker von maplibre — die Ursache des Ausfalls vom 20./21.09.2026.**
+ *
+ * maplibre sucht seine Worker-Datei als Geschwisterdatei neben sich selbst.
+ * Vite bündelt maplibre aber in einen Chunk unter `_astro/` und kopiert sie
+ * nicht mit; gesucht wurde also etwas, das es nicht gab. Die Folge sieht nach
+ * keinem Fehler aus: **Vektorkacheln werden ausschließlich im Worker geparst,
+ * Rasterquellen nicht.** Auf dem Telefon kam deshalb das Reliefbild des Stils an
+ * und sonst nichts — keine Meldung, kein `error`, der Worker startet einfach nie.
+ *
+ * Geprüft wird beides: dass die Datei geholt wird, und dass daraufhin eine
+ * Vektorebene überhaupt gewinnen kann. Das zweite ist das eigentliche Ziel — vor
+ * der Reparatur hat es das in dieser Umgebung **nie** gegeben.
+ */
+console.log('\nDer Kartenmotor hat seinen Worker:');
+{
+  pruefe(
+    workerAbrufe.length > 0,
+    'maplibre holt seine Worker-Datei',
+    workerAbrufe.length ? [...new Set(workerAbrufe)].join(', ') : 'gar nicht — er startet nie',
+  );
+  const leinwand = await seite.locator('.maplibregl-canvas').count();
+  pruefe(leinwand === 1, 'und eine Vektorebene hat sich durchgesetzt', `${leinwand} Leinwände`);
+  if (leinwand === 1) {
+    const deckkraft = await seite
+      .locator('.maplibregl-canvas')
+      .evaluate((n) => getComputedStyle(n.closest('.leaflet-gl-layer') ?? n.parentElement).opacity);
+    pruefe(
+      deckkraft === '1',
+      'sie ist sichtbar und nicht die durchsichtige Probe',
+      `Deckkraft ${deckkraft}`,
+    );
+    const rest = await seite.locator('.leaflet-tile').count();
+    pruefe(rest === 0, 'und die Rasterkarte darunter ist abgeräumt', `${rest} Kacheln übrig`);
+  }
 }
 
 console.log('\nMarker sitzen an der Stelle, die ihre Koordinate vorgibt:');

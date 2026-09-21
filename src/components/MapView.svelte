@@ -363,11 +363,32 @@
        * überhaupt beginnt.
        */
       const quelle = a.vonHier ? asset(a.stil as string) : (a.stil as string);
-      const [antwort] = await Promise.all([
+      const [antwort, maplibre] = await Promise.all([
         fetch(quelle),
         import('maplibre-gl'),
         import('@maplibre/maplibre-gl-leaflet'),
       ]);
+
+      /*
+       * **Dem Worker sagen, wo er liegt — die Ursache des Ausfalls.**
+       *
+       * maplibre sucht seine Worker-Datei als Geschwisterdatei neben sich selbst
+       * (`new URL('./maplibre-gl-worker.mjs', import.meta.url)`). Vite bündelt
+       * maplibre aber in einen Chunk unter `_astro/` und kopiert die Datei nicht
+       * mit — gesucht wurde also etwas, das es nicht gibt.
+       *
+       * Die Folge ist heimtückisch, weil sie nicht nach einem Fehler aussieht:
+       * **Vektorkacheln werden ausschließlich im Worker geparst, Rasterquellen
+       * nicht.** Auf dem Telefon kam deshalb das Natural-Earth-Reliefbild des
+       * Liberty-Stils an und sonst nichts. Keine Meldung, kein `error` — der
+       * Worker startet einfach nie, und maplibre wartet.
+       *
+       * `scripts/karte-stil.mjs` legt Worker und gemeinsamen Teil nach
+       * `public/karte/`; hier wird die Adresse ausdrücklich gesetzt, statt sie
+       * vom Bündeln zu erhoffen.
+       */
+      const gl: any = (maplibre as any).default ?? maplibre;
+      gl.setWorkerUrl?.(new URL(asset('karte-motor/maplibre-gl-worker.js'), location.href).href);
       if (disposed) return durchgefallen('abgebrochen');
       if (!antwort.ok) return durchgefallen(`Stil ${antwort.status}`);
       const stil = deutscheNamen(await antwort.json());

@@ -85,13 +85,48 @@ export const KACHELHOSTS =
 export const PROBESTIL = {
   version: 8,
   glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
-  sources: { leer: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } } },
+  sources: {
+    /*
+     * Mit einem **echten** Merkmal, nicht leer.
+     *
+     * GeoJSON-Quellen werden wie Vektorkacheln im Web Worker von maplibre
+     * geparst. Solange dessen Datei fehlte — sie wurde beim Bündeln nicht
+     * mitkopiert —, kam hier nie etwas an, und keine Vektorebene konnte sich je
+     * beweisen. Die Fläche ist damit zugleich die Probe darauf, dass der Worker
+     * läuft.
+     */
+    probe: {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { name: 'Probefläche' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [134, 33],
+                  [141, 33],
+                  [141, 38],
+                  [134, 38],
+                  [134, 33],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+    },
+  },
   layers: [
     { id: 'hintergrund', type: 'background', paint: { 'background-color': '#eef3ee' } },
+    { id: 'flaeche', type: 'fill', source: 'probe', paint: { 'fill-color': '#cfe0cf' } },
     {
       id: 'beschriftung',
       type: 'symbol',
-      source: 'leer',
+      source: 'probe',
       layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'] },
     },
   ],

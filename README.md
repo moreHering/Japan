@@ -551,7 +551,47 @@ hing seine Beschriftung an `grund.art`: Sie wechselte während der Anbieterkette
 unter dem Finger, und auf der OSM-Karte bot er „Lateinische Karte" an, obwohl
 genau das eingestellt war — ein Knopf, der nichts ändert.
 
-### Der Knopf führt in die Maps-App, nicht in einen Download
+### Der Knopf führt nach My Maps — der einzige Weg zu eigenen Pins
+
+Die Zwischenstufe „In Google Maps öffnen" hat enttäuscht, und zwar berechtigt:
+Sie öffnete den **Ausschnitt**, und Maps ging ohne einen einzigen Pin auf. Der
+Name las sich wie „mit meinen Orten".
+
+**Was Googles Maps-URLs können** (Kenntnisstand, nicht nachgeschlagen — die
+Dokumentation ist aus dieser Umgebung gesperrt): einen Ort suchen, eine Route mit
+höchstens zehn Halten zeigen, einen Kartenausschnitt zeigen, Street View. Es gibt
+**keinen Parameter für eine Liste eigener Marker.** Mehrere eigene Pins gehen nur
+über My Maps oder über die kostenpflichtige Maps-JavaScript-API mit Schlüssel —
+und ein Schlüssel in einem öffentlichen Repo ist keiner.
+
+Deshalb ist der Hauptknopf jetzt **„Alle 141 Orte in Google My Maps"**: Ein Tipp
+legt die KML in die Downloads **und** öffnet My Maps, dort noch zweimal tippen
+(*Neue Karte* → *Importieren*). Danach liegen die Orte dauerhaft im Google-Konto
+und sind in der Maps-App abrufbar.
+
+Zwei Entscheidungen daran sind nicht beliebig:
+
+- **Ein echter `<a href>` mit `target="_blank"`, kein `window.open`.** Ein Fenster
+  aus einem Klick-Handler schlucken die Blocker mobiler Browser regelmäßig; ein
+  angetippter Link geht durch. Die Datei wird im selben Tipp per `onclick`
+  nebenher bereitgelegt.
+- **Die Produktseite `google.com/mymaps` und keine erfundene Import-Adresse.**
+  Einen Weg, den Import per URL anzustoßen, gibt es nicht — er ist ein Menüpunkt.
+  Was der Knopf abnimmt, ist das Suchen der Seite und das getrennte Herunterladen.
+
+Der Kartenausschnitt bleibt als Nebenlink und heißt jetzt **„Nur den
+Kartenausschnitt in Maps öffnen — ohne Pins"**. Dieselbe Funktion, ehrlich
+beschriftet.
+
+### Welche Karte man gerade sieht, steht unten an der Karte
+
+Drei Tage lang war „welche Karte sehe ich eigentlich?" nur über `/wache/` zu
+beantworten. Der aktive Anbieter steht jetzt in der Quellenangabe —
+`Leaflet | VersaTiles` oder `Leaflet | © OpenStreetMap, OSM-Rasterkarte`. Das ist
+die übliche Form (eine Karte nennt, woher sie kommt) und zugleich die billigste
+Diagnose: ein Blick statt eines Seitenwechsels.
+
+### Der Nebenweg: nur der Kartenausschnitt
 
 Statt „KML für Google My Maps" steht dort jetzt **„In Google Maps öffnen"**: Die
 Maps-App geht an derselben Stelle und im selben Maßstab auf, den die Karte

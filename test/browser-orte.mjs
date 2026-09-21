@@ -318,6 +318,24 @@ console.log('\nDer Kartenmotor hat seinen Worker:');
     );
     const rest = await seite.locator('.leaflet-tile').count();
     pruefe(rest === 0, 'und die Rasterkarte darunter ist abgeräumt', `${rest} Kacheln übrig`);
+
+    /*
+     * Der Anbieter steht unten an der Karte.
+     *
+     * Drei Tage lang war „welche Karte sehe ich eigentlich?" nur über `/wache/`
+     * zu beantworten — ein Seitenwechsel für eine Frage, die ein Blick klären
+     * sollte. Jetzt steht es in der Quellenangabe, wo eine Karte ohnehin nennt,
+     * woher sie kommt.
+     */
+    const quelle = (await seite.locator('.leaflet-control-attribution').innerText()).replace(
+      /\s+/g,
+      ' ',
+    );
+    pruefe(
+      /VersaTiles|OpenFreeMap|OSM-Rasterkarte/.test(quelle),
+      'und die Quellenangabe nennt den Anbieter, der gerade zeichnet',
+      quelle.slice(0, 80),
+    );
   }
 }
 
@@ -768,14 +786,44 @@ console.log('\nDer Sprung in die Maps-App:');
       return null;
     };
   });
-  const knopf = seite.locator('.kmlzeile .btn.primary');
+  /*
+   * Zwei Wege, und die Rollen sind vertauscht worden: Hauptknopf ist seit dem
+   * 21.09.2026 My Maps — der einzige Weg, auf dem in Google Maps wirklich eigene
+   * Pins landen. Der Kartenausschnitt steht daneben und ist ausdrücklich als
+   * „ohne Pins" beschriftet: Als Hauptknopf hat genau er enttäuscht, weil
+   * „In Google Maps öffnen" wie „mit meinen Orten" klingt und Maps leer aufging.
+   */
+  const haupt = seite.locator('.kmlzeile .btn.primary');
+  const hauptDa = await haupt.count();
+  pruefe(hauptDa === 1, 'der Hauptknopf führt zu My Maps', `${hauptDa}`);
+  if (hauptDa === 1) {
+    const ziel = await haupt.getAttribute('href');
+    pruefe(
+      (ziel ?? '').startsWith('https://www.google.com/mymaps'),
+      'und zwar als echter Link — ein Skriptfenster schlucken mobile Blocker',
+      String(ziel),
+    );
+    pruefe(
+      (await haupt.getAttribute('target')) === '_blank',
+      'der die App in einem eigenen Tab öffnet',
+    );
+    pruefe(
+      /My Maps/i.test(await haupt.innerText()),
+      'und er sagt, wohin er führt',
+      await haupt.innerText(),
+    );
+  }
+
+  const knopf = seite.locator('.kmlzeile .alslink');
   const da = await knopf.count();
-  pruefe(da === 1, 'die Ortsseite trägt einen Knopf nach Google Maps', `${da}`);
+  pruefe(da === 1, 'daneben steht der Weg zum Kartenausschnitt', `${da}`);
   if (da === 1) {
     pruefe(
-      /Google Maps/i.test(await knopf.innerText()),
-      'und er sagt, was er tut',
-      await knopf.innerText(),
+      /ohne Pins|Ausschnitt/i.test(
+        (await seite.locator('.kmlhinweis').innerText()).replace(/\s+/g, ' '),
+      ),
+      'und die Zeile sagt dazu, dass dort keine Pins erscheinen',
+      (await seite.locator('.kmlhinweis').innerText()).replace(/\s+/g, ' ').slice(0, 120),
     );
     await knopf.tap();
     await seite.waitForTimeout(400);

@@ -250,10 +250,13 @@ await seite.evaluate(async () => {
 });
 await seite.waitForTimeout(600);
 
-// Seit dem 21.09.2026 stehen zwei Knöpfe in der Zeile — voran der Sprung in die
-// Maps-App, dahinter der KML-Weg. Hier geht es um den KML-Weg, also ausdrücklich
-// `.alslink` statt „irgendein Knopf".
-const knopf = seite.locator('.kmlzeile .alslink');
+/*
+ * Der KML-Weg ist seit dem 21.09.2026 der **Hauptknopf** und ein echter Link:
+ * Ein Tipp legt die Datei bereit und öffnet My Maps. Vorher war er ein
+ * Nebenlink, davor ein Knopf. Deshalb hier ausdrücklich `.btn.primary` und
+ * nicht „irgendein Knopf in der Zeile" — daneben steht der Ausschnitt-Link.
+ */
+const knopf = seite.locator('.kmlzeile .btn.primary');
 pruefe(await knopf.isVisible(), 'der Knopf ist da, auch bei 390 px mit zugeklappten Filtern');
 /*
  * Die Höhe gegen die **Projektvorgabe**, nicht gegen Apples 44 pt: `tokens.css:318`

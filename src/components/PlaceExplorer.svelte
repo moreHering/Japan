@@ -85,12 +85,13 @@
    * gruppieren lässt.
    */
   /**
-   * Die Maps-App an der Stelle öffnen, die die Karte gerade zeigt.
+   * Die Maps-App an der Stelle öffnen, die die Karte gerade zeigt — **ohne Pins**.
    *
-   * **Nicht** „alle 141 Orte in Maps" — das kann Google nicht: Per Adresse lassen
-   * sich ein Ort, eine Route mit höchstens zehn Punkten oder ein Ausschnitt
-   * öffnen, aber keine eigenen Marker setzen. Dafür gibt es nur den Umweg über
-   * eine KML-Datei und My Maps, und der steht als zweite Möglichkeit daneben.
+   * Steht bewusst als Nebenweg und ausdrücklich so beschriftet. Als Hauptknopf
+   * hat genau das enttäuscht: „In Google Maps öffnen" liest sich wie „mit meinen
+   * Orten", und Maps ging leer auf. Per Adresse lassen sich ein Ort, eine Route
+   * mit höchstens zehn Punkten oder ein Ausschnitt öffnen — eigene Marker nicht.
+   * Dafür gibt es nur My Maps, und das ist jetzt der Hauptknopf.
    */
   function inMapsOeffnen() {
     const a = mapRef?.ansicht();
@@ -100,6 +101,16 @@
     if (!a) return;
     window.open(kartenLink(a.lat, a.lng, a.zoom), '_blank', 'noopener');
   }
+
+  /**
+   * Die Adresse von Google My Maps.
+   *
+   * Die Produktseite und **keine** erfundene Import-Adresse: Einen Weg, den
+   * Import per URL anzustoßen, gibt es nicht — der Import ist in My Maps ein
+   * Menüpunkt. Was dieser Knopf abnimmt, ist das Suchen der Seite und das
+   * getrennte Herunterladen; die zwei Tipps in My Maps bleiben.
+   */
+  const MY_MAPS = 'https://www.google.com/mymaps';
 
   function kmlHerunterladen() {
     const mitTag = alle.map((p) => ({ ...p, reisetag: dayOfPlace(p.nr) }));
@@ -708,16 +719,35 @@
   statische Link: Diese Datei kennt den localStorage, sie **muss** aus der Insel
   kommen.
 -->
+<!--
+  Ein echter Link und **kein** `window.open` aus einem Klick-Handler heraus.
+
+  Der Unterschied zählt genau auf dem Gerät, um das es geht: Ein Fenster, das ein
+  Skript öffnet, schlucken die Blocker mobiler Browser regelmäßig; ein
+  angetippter Link mit `target="_blank"` geht durch. Die Datei wird im selben
+  Tipp nebenher bereitgelegt — deshalb `onclick` **zusätzlich** zum `href`, nicht
+  statt seiner.
+-->
 <div class="kmlzeile">
-  <button class="btn primary" onclick={inMapsOeffnen}>In Google Maps öffnen</button>
+  <a
+    class="btn primary"
+    href={MY_MAPS}
+    target="_blank"
+    rel="noopener"
+    onclick={kmlHerunterladen}
+  >
+    Alle {alle.length} Orte in Google My Maps
+  </a>
   <span class="kmlhinweis">
-    Öffnet die Maps-App an derselben Stelle und im selben Maßstab, den die Karte oben
-    gerade zeigt — für Suche, Verkehr und Navigation von dort aus.
+    Der Tipp legt die Datei in eure Downloads und öffnet My Maps. Dort:
+    <b>Neue Karte erstellen</b> → <b>Importieren</b> → die Datei wählen. Danach liegen
+    alle Orte dauerhaft in eurem Google-Konto und sind in der Maps-App abrufbar.
+    Mit euren Korrekturen und eigenen Orten, ohne die ausgeblendeten — ein weiterer
+    Import <b>ergänzt</b> eine Ebene, die alte müsst ihr dort löschen.
     <br />
-    <button class="alslink" onclick={kmlHerunterladen}
-      >Stattdessen alle {alle.length} Orte als KML für Google My Maps</button
-    > — mit euren Korrekturen und eigenen Orten, ohne die ausgeblendeten. Ein Import
-    dort <b>ergänzt</b> eine Ebene, die alte müsst ihr löschen.
+    <button class="alslink" onclick={inMapsOeffnen}
+      >Nur den Kartenausschnitt in Maps öffnen</button
+    > — ohne Pins; Google kann per Adresse keine eigenen Marker setzen.
   </span>
 </div>
 

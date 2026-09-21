@@ -148,6 +148,23 @@
    */
   let disposed = false;
 
+  /**
+   * Was gerade in der Quellenangabe unten an der Karte steht.
+   *
+   * Der Anbieter gehört dorthin, und zwar aus zwei Gründen. Erstens ist es die
+   * übliche Form: Eine Karte nennt, woher sie kommt. Zweitens — und deshalb steht
+   * es hier — war „welche Karte sehe ich eigentlich?" drei Tage lang eine Frage,
+   * die sich nur über `/wache/` beantworten ließ. Ein Blick an den unteren Rand
+   * ist billiger als ein Seitenwechsel.
+   */
+  let anbieterHinweis: string | null = null;
+  function anbieterZeigen(name: string) {
+    if (!map?.attributionControl) return;
+    if (anbieterHinweis) map.attributionControl.removeAttribution(anbieterHinweis);
+    anbieterHinweis = name;
+    map.attributionControl.addAttribution(name);
+  }
+
   /*
    * Die Kartenart als Gerätevorliebe.
    *
@@ -268,6 +285,10 @@
       }
     });
     rasterEbene.addTo(map);
+    // „OSM-Rasterkarte" und nicht schlicht der Anbietername: Die Ebene bringt
+    // ihre eigene Quellenangabe „© OpenStreetMap" mit, und zweimal dasselbe Wort
+    // nebeneinander sagt weniger als eines, das die Kartenart benennt.
+    anbieterZeigen('OSM-Rasterkarte');
     grund = { ...kachelzustand('raster', '', warum), ...mitnehmen };
   }
 
@@ -568,6 +589,7 @@
           gezeichnet: versuch.gezeichnet,
           beschriftet: versuch.beschriftet,
         };
+        anbieterZeigen(a.name);
         merkeAnbieter(a.id);
         return;
       }

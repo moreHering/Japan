@@ -29,11 +29,14 @@ import { existsSync } from 'node:fs';
  * `BASIS` zuerst, `DEV` als Zweitname — beide Namen waren im Umlauf, und was in
  * Shell-Historien steht, soll weiter tun, was es getan hat.
  *
- * Es muss der **Dev**-Server sein und nicht `astro preview`: Sechs der Suiten
- * rufen im Browser `await import('/src/lib/store.svelte.ts')` auf, um den Plan
- * direkt zu setzen statt Orte anzuklicken. Diesen Pfad löst nur Vite im
- * Dev-Modus auf; im statischen Build gibt es ihn nicht. Der Preis ist benannt:
- * Die Suiten prüfen den Dev-Stand, nicht Byte für Byte das ausgelieferte Bundle.
+ * Es muss der **Dev**-Server sein und nicht `astro preview`: Mehrere Suiten rufen
+ * im Browser `await import('/src/lib/…')` auf, um Zustand direkt zu setzen statt
+ * ihn zu erklicken. Diesen Pfad löst nur Vite im Dev-Modus auf; im statischen
+ * Build gibt es ihn nicht. Der Preis ist benannt: Die Suiten prüfen den
+ * Dev-Stand, nicht Byte für Byte das ausgelieferte Bundle.
+ *
+ * **Für den Plan ist dieser Weg allerdings verboten** — siehe `planSchreiben()`
+ * weiter unten.
  */
 export const BASIS = process.env.BASIS ?? process.env.DEV ?? 'http://localhost:4322/Japan';
 
@@ -220,3 +223,51 @@ export const STUMMER_VEKTORSTIL = {
     },
   ],
 };
+
+/** Der Schlüssel, unter dem `store.svelte.ts` den Plan ablegt. */
+export const PLAN_KEY = 'japan2026:plan';
+
+/**
+ * Setzt Teile des Plans über den **localStorage** und lädt die Seite neu.
+ *
+ * Der Grund, und er hat am 22.09.2026 drei Suiten gleichzeitig rot gemacht:
+ *
+ * Der naheliegende Weg war `await import('/src/lib/store.svelte.ts')` in der
+ * Seite und dann `s.plan.customPlaces = […]`. Vite bedient dasselbe Modul aber
+ * unter **mehreren URLs** — nach einer Neu-Optimierung hängt an den Importen
+ * einer Insel ein `?v=<hash>`. Ein Import ohne diesen Anhang ist dann eine
+ * **zweite Instanz** des Moduls mit ihrem eigenen `$state`: Der Test schreibt in
+ * einen Plan, den die Komponente nie liest.
+ *
+ * Nachgewiesen im Browser: `import('…store.svelte.ts')` und
+ * `import('…store.svelte.ts?x=1')` liefern zwei Zustände, und der Zähler am
+ * Reisetag (`.daytab .dot`) blieb nach dem Schreiben leer. Das Tückische daran:
+ * Auf einem frisch gestarteten Dev-Server — also im CI — ging es gut, nach
+ * Stunden Laufzeit nicht mehr. Eine Prüfung, die mal grün und mal rot ist, ohne
+ * dass sich Code geändert hat, ist schlimmer als eine, die immer fällt.
+ *
+ * Der localStorage hat das Problem nicht: Aus ihm liest `load()` beim Start
+ * **selbst**, und es gibt ihn nur einmal je Ursprung. Preis ist ein Neuladen je
+ * Aufruf.
+ *
+ * `teil` wird über den bestehenden Stand gelegt, nicht an seine Stelle: So kann
+ * eine Suite erst Tage setzen und danach eigene Orte, ohne das Erste zu
+ * verlieren. `warten` ist der Selektor, auf den nach dem Neuladen gewartet wird.
+ */
+export async function planSchreiben(seite, teil, warten) {
+  await seite.evaluate(
+    ([schluessel, neu]) => {
+      let stand = {};
+      try {
+        stand = JSON.parse(localStorage.getItem(schluessel) ?? '{}');
+      } catch {
+        stand = {};
+      }
+      localStorage.setItem(schluessel, JSON.stringify({ ...stand, ...neu }));
+    },
+    [PLAN_KEY, teil],
+  );
+  await seite.reload({ waitUntil: 'load' });
+  if (warten) await seite.waitForSelector(warten, { timeout: 15000 });
+  await seite.waitForTimeout(400);
+}

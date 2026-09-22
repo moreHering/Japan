@@ -17,7 +17,7 @@
 
 import { chromium, devices } from 'playwright';
 
-import { BASIS, START } from './browserlauf.mjs';
+import { BASIS, planSchreiben, START } from './browserlauf.mjs';
 
 let fehler = 0;
 const pruefe = (bedingung, text, zusatz = '') => {
@@ -42,16 +42,13 @@ seite.on('console', (m) => {
   }
 });
 
-/** Setzt den Plan direkt — schneller und eindeutiger als Orte anzuklicken. */
+/**
+ * Setzt den Plan eines Tages. Nur eine Hülle um `planSchreiben()` — die
+ * Begründung, warum das über den localStorage läuft und **nicht** über
+ * `import('/src/lib/store.svelte.ts')`, steht dort.
+ */
 async function planSetzen(p, datum, nummern) {
-  await p.evaluate(
-    async ([d, nrs]) => {
-      const s = await import('/src/lib/store.svelte.ts');
-      s.plan.days = { [d]: { placeNrs: nrs, note: '' } };
-    },
-    [datum, nummern],
-  );
-  await p.waitForTimeout(400);
+  await planSchreiben(p, { days: { [datum]: { placeNrs: nummern, note: '' } } }, '.daybar .daytab');
 }
 
 /**
@@ -221,10 +218,18 @@ console.log('\nKML-Download auf /orte/:');
 await seite.goto(`${BASIS}/orte/`, { waitUntil: 'load' });
 await seite.waitForSelector('.kmlzeile', { timeout: 15000 });
 
-// Einen eigenen Ort anlegen — er ist der ganze Unterschied zur statischen Datei.
-await seite.evaluate(async () => {
-  const s = await import('/src/lib/store.svelte.ts');
-  s.plan.customPlaces = [
+/*
+ * Einen eigenen Ort anlegen — er ist der ganze Unterschied zur statischen Datei.
+ *
+ * Über den **localStorage** und nicht über `import('/src/lib/store.svelte.ts')`,
+ * aus demselben Grund wie bei `planSetzen()` oben: Vite bedient dasselbe Modul
+ * unter mehreren URLs, und eine Insel, deren Importe ein `?v=<hash>` tragen, hat
+ * ihren **eigenen** `$state`. Der Schreibvorgang landete dann in einem Plan, den
+ * die Komponente nie liest — die KML kam ohne den eigenen Ort heraus, und die
+ * Prüfung meldete einen Fehler in der Erzeugung, den es nicht gab.
+ */
+await planSchreiben(seite, {
+  customPlaces: [
     {
       nr: 165,
       name: 'Testunterkunft Kanazawa',
@@ -244,11 +249,10 @@ await seite.evaluate(async () => {
       vorlaeufig: false,
       angelegtVon: null,
     },
-  ];
+  ],
   // Und eine Ausblendung, damit auch die geprüft ist.
-  s.plan.korrekturen = { 1: { nr: 1, versteckt: true, schlagworte: [] } };
-});
-await seite.waitForTimeout(600);
+  korrekturen: { 1: { nr: 1, versteckt: true, schlagworte: [] } },
+}, '.kmlzeile');
 
 /*
  * Der KML-Weg ist seit dem 21.09.2026 der **Hauptknopf** und ein echter Link:

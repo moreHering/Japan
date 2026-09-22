@@ -39,6 +39,11 @@
   --nav-h: 56px;
   --nav-h-mobile: 48px;
   --tabbar-h: 52px;
+  /* Der seitliche Innenabstand von `main.inner`. Als Token, weil der Reiseband
+     ihn zurücknehmen muss: Sein Deckel und seine klebende Stationsleiste stehen
+     randlos, und `margin: 0 -16px` war bei 14 px Rand zwei Pixel zu viel — genug
+     für Querscrollen auf der Startseite. Geraten ist hier nicht erlaubt. */
+  --seitenrand: 16px;
   /* Nutzbare Höhe unterhalb der Kopfleiste. dvh statt vh, weil iOS die
      Adressleiste ein- und ausfährt — mit vh springt dann das ganze Layout. */
   --app-h: calc(100dvh - var(--nav-h));
@@ -295,6 +300,7 @@ textarea {
 @media (max-width: 767px) {
   :root {
     --app-h: calc(100dvh - var(--nav-h-mobile));
+    --seitenrand: 14px;
   }
 
   /* !important ist hier bewusst: Das komponenteneigene CSS von Svelte hat

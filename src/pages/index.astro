@@ -4,7 +4,6 @@ import TripStatus from '../components/TripStatus.svelte';
 import { places } from '../lib/places';
 import { stations, trip, formatDay } from '../lib/trip';
 import { url, guide } from '../lib/paths';
-import chapters from '../data/chapters.json';
 // Beide Dateien erzeugt `npm run data` aus der Lesefassung. Als Rohtext geladen,
 // damit der Band hier im Planer gelesen wird und nicht nur verlinkt ist.
 import bandInhalt from '../data/reiseband-inhalt.html?raw';
@@ -16,23 +15,13 @@ const countsOf = (slug: string) => ({
   ausflug: places.filter((p) => p.station === slug && p.area === 'ausflug').length,
 });
 
-/**
- * Die elf Kapitel des Reisebands, für den Leseblock unten.
- *
- * `chapters.json` erzeugt `npm run data` aus der Lesefassung selbst — von Hand
- * gepflegt wäre die Liste nach der ersten Textänderung falsch, und eine
- * Kapitelübersicht, die auf etwas anderes zeigt als sie behauptet, ist
- * schlimmer als keine.
- *
- * Die sechs Stationskapitel bekommen ihre harten Zahlen dazu: Nächte, Datum,
- * Ortsanzahl. Das steht in stations.json und nicht im Band.
+/*
+ * Hier stand `const kapitel` — `chapters.json`, angereichert mit Nächten, Datum
+ * und Ortszahl je Station. Gebraucht hat es nur die Kapitelzeile über dem Band,
+ * und die ist weg: Der Band bringt seine klebende Stationsleiste selbst mit.
+ * Die Zuordnung Kapitel → Zahlen macht jetzt `stations.json` direkt im Abschnitt
+ * „Die Route" weiter unten.
  */
-const kapitel = chapters.map((k) => {
-  const s = stations.find((x) => x.slug === k.id);
-  if (!s) return { ...k, station: null, orte: 0 };
-  const c = countsOf(s.slug);
-  return { ...k, station: s, orte: c.zentrum + c.ausflug };
-});
 
 /** Anker im Reiseband — vom Konvertierungsskript gesetzt. */
 const chapterOf: Record<string, string> = {
@@ -62,19 +51,18 @@ const chapterOf: Record<string, string> = {
     sind gzip-komprimiert etwa 59 kB; das ist weniger als ein einzelnes Foto,
     meine frühere Warnung davor war übertrieben.
 
-    Die Sprungmarken darüber sind bewusst eine schmale Zeile und keine Kacheln:
-    Bei elf Kapiteln braucht man einen Weg, mittendrin anzufangen — aber der Text
-    ist die Hauptsache und beginnt direkt darunter.
-  -->
-  <nav class="bandsprung" aria-label="Kapitel">
-    <span class="bandsprung-titel">Kapitel</span>
-    {
-      kapitel.map((k) => (
-        <a href={`#${k.id}`}>{k.station ? k.station.name : k.rubrik.split(' · ')[0]}</a>
-      ))
-    }
-  </nav>
+    Hier stand bis zum 22.09.2026 eine schmale Kapitelzeile (`.bandsprung`) mit
+    allen elf Kapitelnamen. Sie ist weg, weil der Band jetzt seine **eigene,
+    klebende** Stationsleiste mitbringt — erzeugt in `build-data.mjs`, sechs
+    Kanji-Chips, und sie bleibt beim Scrollen stehen. Das war der Mangel der
+    alten Zeile: Bei 14.650 Wörtern ist „wie komme ich nach Hakone" keine Frage,
+    die man einmal am Seitenanfang stellt.
 
+    Die fünf Kapitel ohne Station (Einladung, Prolog, Route, Ankunft, Epilog)
+    stehen nicht in der Leiste, behalten aber ihre Sprungmarke am `<details>` —
+    `paths.ts:kapitel()` trifft sie weiter, und `browser-reiseband.mjs` prüft
+    jede einzeln.
+  -->
   <div class="bandtext" set:html={bandInhalt} />
 
   <!--
@@ -83,7 +71,11 @@ const chapterOf: Record<string, string> = {
     Der Band ist seit dem Umbau ein Akkordeon, und die Anker sitzen an den
     `<details>`. Ein Link wie `/Japan/#kyoto` aus `paths.ts:kapitel()` springt
     sonst an eine **zugeklappte** Zeile: Man landet richtig und sieht nichts, und
-    hält den Link für kaputt. Das ist der einzige Grund für dieses Skript.
+    hält den Link für kaputt. Das war der ursprüngliche Grund für dieses Skript;
+    seit dem 22.09.2026 hängen zwei weitere Dinge daran, beide aus der gesendeten
+    Vorlage: die Markierung in der klebenden Stationsleiste und der Knopf nach
+    oben. Alle drei stehen hier und nicht im Bandtext, weil `set:html` keine
+    Skripte ausführt.
 
     Zwei Fälle, beide nötig: beim Laden mit Anker (`hashchange` feuert dann
     nicht) und bei jedem Sprung danach. `scrollIntoView` erst **nach** dem
@@ -107,6 +99,72 @@ const chapterOf: Record<string, string> = {
       }
       window.addEventListener('hashchange', aufklappen);
       aufklappen();
+
+      /*
+       * Die klebende Stationsleiste markiert, wo man liest.
+       *
+       * Die Logik ist aus der gesendeten Vorlage übernommen, ihre Fassung nicht:
+       * Die greift ohne Prüfung auf `.m-top` zu (`btn.classList` wirft, wenn der
+       * Knopf fehlt) und rechnet mit `offsetTop`, was bei einem `<details>` in
+       * einem positionierten Vorfahren die falsche Zahl liefert. Hier wird
+       * gegen den Viewport gemessen, und jeder Fund wird geprüft.
+       *
+       * Gemessen wird das **Kapitel**, nicht die Leiste: Ein zugeklapptes
+       * `<details>` ist 48 px hoch, ein offenes mehrere Tausend. Der Chip soll
+       * die Station nennen, in der der Text gerade steht — also die letzte, deren
+       * Kopf oberhalb der Leiste durchgelaufen ist.
+       */
+      var chips = [].slice.call(document.querySelectorAll('.m-nav a'));
+      if (chips.length) {
+        var ziele = chips
+          .map(function (a) {
+            var id = (a.getAttribute('href') || '').slice(1);
+            var el = id ? document.getElementById(id) : null;
+            return el ? { chip: a, el: el } : null;
+          })
+          .filter(Boolean);
+
+        // Die Höhe der Kopfleiste plus die der Leiste selbst: Darüber ist ein
+        // Kapitel durchgelaufen, darunter steht es noch im Bild.
+        function grenze() {
+          var nav = document.querySelector('.m-nav');
+          var r = nav ? nav.getBoundingClientRect() : null;
+          return r ? r.bottom + 8 : 80;
+        }
+
+        function markiere() {
+          var g = grenze();
+          var treffer = null;
+          ziele.forEach(function (z) {
+            if (z.el.getBoundingClientRect().top <= g) treffer = z;
+          });
+          chips.forEach(function (a) {
+            a.classList.toggle('on', !!treffer && treffer.chip === a);
+          });
+        }
+        window.addEventListener('scroll', markiere, { passive: true });
+        // Ein Auf- oder Zuklappen verschiebt alles darunter — ohne das zeigt die
+        // Leiste nach dem ersten Tipp auf eine andere Station.
+        document.addEventListener('toggle', markiere, true);
+        markiere();
+      }
+
+      /*
+       * Der Knopf nach oben. Er steht im erzeugten Bandtext (`NACH_OBEN` in
+       * `build-data.mjs`), weil er zum Band gehört und nicht zur Seite — aber
+       * `set:html` führt keine Skripte aus, deshalb hängt sein Verhalten hier.
+       */
+      var oben = document.querySelector('.m-top');
+      if (oben) {
+        var zeigen = function () {
+          oben.classList.toggle('show', window.scrollY > 700);
+        };
+        window.addEventListener('scroll', zeigen, { passive: true });
+        oben.addEventListener('click', function () {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+        zeigen();
+      }
     })();
   </script>
 
@@ -189,54 +247,6 @@ const chapterOf: Record<string, string> = {
   <style>
     /* ------------------------------------------------------- Kapitelsprünge */
 
-    /*
-     * Eine Zeile, seitlich wischbar — nicht umbrechend.
-     *
-     * Umbrechend waren es 144 px, also ein Fünftel des Bildschirms, nur für
-     * Sprungmarken. Der Text ist die Hauptsache; die Marken sind der Notausgang
-     * für „ich will bei Kyoto weiterlesen".
-     */
-    .bandsprung {
-      display: flex;
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-      gap: 12px;
-      align-items: center;
-      margin: 14px 0 6px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--line);
-    }
-    .bandsprung::-webkit-scrollbar {
-      display: none;
-    }
-    .bandsprung > * {
-      flex: none;
-      white-space: nowrap;
-    }
-    .bandsprung-titel {
-      font-family: var(--util);
-      font-size: 0.66rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--ai-40);
-    }
-    .bandsprung a {
-      font-family: var(--util);
-      font-size: 0.78rem;
-      color: var(--ai-60);
-      text-decoration: none;
-      border-bottom: 1px solid var(--line);
-      /* Schmale Zeile, aber ein Finger muss die Marke treffen. */
-      padding: 9px 2px;
-    }
-    .bandsprung a:hover,
-    .bandsprung a:focus-visible {
-      color: var(--shu);
-      border-color: var(--shu);
-    }
-
     /* --------------------------------------------------------- Der Bandtext */
 
     .banddruck {
@@ -265,13 +275,11 @@ const chapterOf: Record<string, string> = {
     .bandtext :global(details[id]) {
       scroll-margin-top: 70px;
     }
-    /* Der Scrollrahmen um jede Tabelle — sonst schiebt die breiteste die ganze
-       Seite zur Seite. Gesetzt wird er beim Erzeugen der Lesefassung. */
-    .bandtext :global(.bandtabelle) {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      max-width: 100%;
-    }
+    /* Hier stand der Scrollrahmen `.bandtabelle` um jede der 19 Tabellen. Er ist
+       weg, weil es keine Tabellen mehr gibt: `tabellenZuKarten()` in
+       `build-data.mjs` löst sie in gestapelte Wertzeilen auf. Der Rahmen war die
+       Notlösung — Querscrollen in einem Kasten statt in der Seite —, die
+       Auflösung ist die Behebung. */
 
     /* -------------------------------------------------------------- Abschnitte */
 

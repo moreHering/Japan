@@ -29,6 +29,16 @@ const UNTERKUNFT = resolve(root, 'data/source/unterkunft.json');
  * stünden sie zweimal im Repo und wären nach der ersten Änderung uneinig.
  */
 const STATIONEN = JSON.parse(readFileSync(resolve(root, 'src/data/stations.json'), 'utf8'));
+/*
+ * Die harten Reisezahlen für den Deckel der Lesefassung.
+ *
+ * Gebraucht, seit der Deckel seine Kennzahlen als `.kpi`-Zeile trägt statt als
+ * `table.facts`. Die Zahlen stehen damit **einmal** im Repo: Nächte und Daten
+ * hier, Stationen in `stations.json`, Orte in `places`. In der Vorlage waren sie
+ * getippt — „3 Reisende · 19 Tage · 6 Stationen · 164 Orte" —, und getippte
+ * Zahlen sind nach der ersten Planänderung falsch, ohne dass es auffällt.
+ */
+const TRIP = JSON.parse(readFileSync(resolve(root, 'src/data/trip.json'), 'utf8'));
 const OUT = resolve(root, 'src/data/places.json');
 
 /** Erwartungswerte, gegen die das Ergebnis geprüft wird. */
@@ -1064,8 +1074,13 @@ const BAND_CONTAINER = '.bandtext';
  * jemand einen und nicht den anderen.
  *
  * Ergänzt gegenüber der Vorlage ist nur, was aus unserem Inhalt kommt und dort
- * nicht vorkam: `.bandtabelle` (der Scrollrahmen um die 19 Probier-Tabellen) und
- * `a.app-orte` steht offen im Kapitelkörper statt in einer Klappe.
+ * nicht vorkam: `a.app-orte` (die Vorlage nennt ihn `.planer` und hat ihn nur
+ * sechsmal je Station; unser Kasten trägt zusätzlich die Aufteilung
+ * Zentrum/Ausflüge und steht auch in den Kapiteln ohne Station).
+ *
+ * Der Scrollrahmen `.bandtabelle` ist **weg**, seit die Tabellen zu Wertzeilen
+ * aufgelöst werden — siehe `tabellenZuKarten()`. Er war die Notlösung für ein
+ * Problem, das die Vorlage an der Wurzel löst.
  *
  * Wird zusammen mit dem übrigen Bandstylesheet durch `scope()` an `.bandtext`
  * gebunden — die Prüfung unten bricht bei jeder ungebundenen Regel ab.
@@ -1117,7 +1132,416 @@ details.kap > summary .sub, details.teil > summary .sub {
 /* Die innere Ebene steht eingerückt, damit man sieht, dass sie zur Station
    gehört und nicht zum nächsten Kapitel. */
 details.kap > .dbody > details.teil { margin: 10px 0; }
+
+/* ------------------------------------------------------------- Der Deckel */
+
+/*
+ * Aus ".cover2" (hell, für A4) wird ".m-cover" (dunkel, für 390 px). Die
+ * "!important" der Vorlage sind hier nicht nötig: Sie waren dort gegen die
+ * Regeln von ".cover2" gerichtet, und diese Fassung trägt die Klasse gar nicht
+ * mehr.
+ */
+.m-cover {
+  position: relative;
+  overflow: hidden;
+  /* Randlos, und **genau** randlos: Der Innenabstand von "main.inner" steht als
+     Token in tokens.css (16 px, unter 767 px 14 px). Hier stand einmal ein
+     festes -16px; bei 14 px Rand ragte der Deckel damit 2 px über den Schirm und
+     die Startseite scrollte quer. Eine geratene Zahl war der ganze Fehler. */
+  margin: 0 calc(-1 * var(--seitenrand, 16px));
+  padding: 34px 20px 30px;
+  background: linear-gradient(160deg, var(--ai-900), var(--ai) 62%, #1c2f4f);
+  color: var(--washi);
+}
+.m-cover .eyebrow {
+  font-family: var(--util);
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--kin-soft);
+  margin: 0 0 14px;
+}
+/* Der Strich vor der Vorzeile gehört zum hellen Kapitelkopf, nicht hierher —
+   auf dunklem Grund liest die goldene Zeile ohne ihn besser. */
+.m-cover .eyebrow::before { content: none; }
+.m-cover h1 {
+  font-family: var(--disp);
+  font-size: clamp(30px, 9vw, 46px);
+  line-height: 1.05;
+  margin: 0;
+  color: var(--washi);
+}
+.m-cover h1 em { color: var(--kin-soft); font-style: italic; }
+.m-cover .jp {
+  font-family: var(--jp);
+  color: var(--shu);
+  letter-spacing: 0.3em;
+  margin: 12px 0 0;
+  font-size: 15px;
+}
+.m-cover .rule { width: 44px; height: 3px; background: var(--shu); margin: 16px 0; }
+/* 16 px und nicht die 15.5 px der Vorlage: Unter 16 px zoomt iOS beim Antippen,
+   und der Band hat diese Grenze als eigene Regel — sie gilt auch für seinen
+   Deckel. */
+.m-cover p { color: #DBD2BE; font-size: 16px; margin: 0; max-width: 46ch; }
+.m-cover .kpi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 20px;
+  font-family: var(--util);
+  font-size: 11px;
+  color: #C4BBA6;
+}
+.m-cover .kpi b {
+  display: block;
+  font-family: var(--disp);
+  font-size: 20px;
+  color: var(--washi);
+  line-height: 1.1;
+}
+/* Angeschnitten, nicht zentriert: Das Zeichen ist Fläche, nicht Aufschrift. */
+.m-cover .bigk {
+  position: absolute;
+  right: -6px;
+  bottom: -26px;
+  font-family: var(--jp);
+  font-size: 150px;
+  color: #253147;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* -------------------------------------------------- Die klebende Leiste */
+
+/*
+ * "top" ist **nicht** 0, und das ist der einzige Unterschied zur Vorlage.
+ *
+ * Dort steht die Leiste in einem Dokument für sich. Hier sitzt darüber die
+ * Kopfleiste der App ("Base.astro": "position: sticky; top: 0; z-index: 100").
+ * Bei "top: 0" verschwände die Leiste hinter ihr — sichtbar nur auf dem Gerät,
+ * unsichtbar im Code. "--nav-h" ist die Höhe dieser Kopfleiste; sie steht in
+ * "tokens.css" und wird hier nicht abgeschrieben.
+ */
+.m-nav {
+  position: sticky;
+  top: var(--nav-h, 56px);
+  z-index: 50;
+  background: rgba(239, 231, 214, 0.96);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line);
+  /* Denselben Rand zurücknehmen wie der Deckel — siehe dort. */
+  margin: 0 calc(-1 * var(--seitenrand, 16px));
+}
+/* Unter 767 px ist die Kopfleiste der App flacher ("--nav-h-mobile", 48 px) —
+   "Base.astro:327,338". Mit der Vorgabe 56 px klaffte hier ein 8-px-Streifen,
+   durch den der Text beim Scrollen sichtbar bliebe. */
+@media (max-width: 767px) {
+  .m-nav { top: var(--nav-h-mobile, 48px); }
+}
+.m-nav .row {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 9px 12px;
+  scrollbar-width: none;
+}
+.m-nav .row::-webkit-scrollbar { display: none; }
+.m-nav a {
+  flex: 0 0 auto;
+  font-family: var(--util);
+  font-size: 12.5px;
+  text-decoration: none;
+  color: var(--ai-60);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  /* 44 px, damit der Daumen trifft — sie ist der Hauptweg durch den Band. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+}
+.m-nav a .k { font-family: var(--jp); color: var(--shu); }
+.m-nav a.on { background: var(--ai); color: var(--washi); border-color: var(--ai); }
+.m-nav a.on .k { color: var(--kin-soft); }
+
+/* ------------------------------------------------ Tabellen als Wertzeilen */
+
+.mcards { margin: 8px 0 12px; }
+.mrow {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 13px;
+  margin: 0 0 8px;
+}
+.mlbl {
+  font-family: var(--util);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--kin);
+  margin: 6px 0 2px;
+}
+.mlbl:first-child { margin-top: 0; }
+.mval { font-size: 15px; line-height: 1.5; }
+.mval p { margin: 0; }
+.mval strong { color: var(--ai); }
+/* Die zehn Sprachzeilen: japanisch groß, Übersetzung mager darunter. */
+.mjp { font-family: var(--jp); color: var(--shu-deep); font-size: 16px; margin-bottom: 3px; }
+.mde { display: block; color: var(--ai-60); font-style: italic; font-size: 14px; }
+
+/* ------------------------------------------------------- Nach oben */
+
+.m-top {
+  position: fixed;
+  right: 14px;
+  bottom: 16px;
+  /*
+   * Unter ".tabbar" (z-index 120) und über dem Text. Höher gesetzt würde der
+   * Knopf die Fußleiste verdecken — und die ist die Hauptnavigation.
+   */
+  z-index: 60;
+  background: var(--ai);
+  color: var(--washi);
+  border: none;
+  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+  font-size: 19px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.m-top.show { opacity: 0.94; pointer-events: auto; }
+/* Auf dem Telefon sitzt am Fußrand die Tabbar (52 px, "--tabbar-h"). Der Knopf
+   rückt darüber, sonst liegt er auf „Freunde". */
+@media (max-width: 767px) {
+  .m-top { bottom: calc(var(--tabbar-h, 52px) + env(safe-area-inset-bottom) + 12px); }
+}
+
+/* --------------------------------------------- Der Weg in den Planer */
+
+/*
+ * Derselbe Kasten, andere Kleidung.
+ *
+ * "listLink()" erzeugt ihn für **beide** Fassungen, und im Druckdokument ist der
+ * helle Kasten mit rotem Balken richtig — dunkle Flächen kosten dort Toner und
+ * lesen sich schlechter. Auf dem Schirm ist er ein Knopf, und die Vorlage macht
+ * ihn dunkel (".planer"). Deshalb steht die Umkleidung hier, im Stylesheet der
+ * Lesefassung, und nicht in "listLink()".
+ *
+ * Inhalt und Ziel bleiben unangetastet: Ortszahl, Aufteilung Zentrum/Ausflüge
+ * und "./orte/?station=<slug>" — den Parameter liest "PlaceExplorer.svelte"
+ * wirklich aus.
+ */
+a.app-orte {
+  background: var(--ai);
+  color: var(--washi);
+  border: none;
+  border-left: none;
+  border-radius: 12px;
+  padding: 14px 16px;
+  min-height: 56px;
+  gap: 12px;
+}
+a.app-orte:hover { background: var(--ai-900); }
+a.app-orte .ao-count { color: var(--kin-soft); font-size: 1.9rem; }
+a.app-orte .ao-text b { color: var(--washi); font-size: 1.05rem; }
+a.app-orte .ao-text small { color: #AEB7C6; }
+a.app-orte .ao-go { color: var(--kin-soft); }
+
+@media print {
+  .m-nav, .m-top { display: none; }
+}
 `;
+
+/** `2026-09-26` → `26.09.` — für die Kennzahlenzeile des Deckels. */
+function tagMonat(iso) {
+  const [, m, d] = iso.split('-');
+  return `${d}.${m}.`;
+}
+
+/**
+ * Der Deckel der Lesefassung: aus `.cover2` wird `.m-cover`.
+ *
+ * Der Unterschied ist nicht Kosmetik. Der Deckel der Druckfassung ist hell und
+ * liegt auf einer A4-Seite; auf einem 390-px-Schirm ist er die erste und einzige
+ * Fläche, die man sieht, bevor man wischt. Die gesendete Vorlage macht daraus
+ * eine dunkle Fläche mit Verlauf, angeschnittenem 旅 und einer Kennzahlenzeile —
+ * ein Buchdeckel, kein Seitenkopf.
+ *
+ * **Die Kennzahlen kommen aus den Daten, nicht aus der Vorlage.** Dort stehen
+ * „3 Reisende · 19 Tage · 6 Stationen · 164 Orte" als getippter Text. Hier
+ * zählen `TRIP`, `STATIONEN` und `places`. Und es heißt „Orte im Planer" und
+ * nicht „Orte auf der Karte": Die Karte ist im Planer, und der Satz soll dahin
+ * führen, wo die Orte wirklich liegen.
+ *
+ * Läuft **vor** `tabellenZuKarten()`, sonst wäre `table.facts` schon zu einer
+ * Wertzeilen-Karte geworden und der Deckel trüge mitten im Verlauf eine weiße
+ * Kachel.
+ */
+function mobilerDeckel(inhalt, orte) {
+  const kpi = [
+    [TRIP.travellers.length, 'Reisende'],
+    [TRIP.nights, 'Nächte'],
+    [STATIONEN.length, 'Stationen'],
+    [orte, 'Orte im Planer'],
+    [`${tagMonat(TRIP.start)}–${tagMonat(TRIP.end)}`, 'Herbst 2026'],
+  ]
+    .map(([wert, was]) => `<div><b>${wert}</b>${was}</div>`)
+    .join('');
+
+  let getroffen = 0;
+  /*
+   * Der Deckel wird **aus** `.wrap` herausgeholt.
+   *
+   * In der Quelle steht er darin, und `.wrap` hat `padding: 0 26px`. Eine dunkle
+   * Fläche mit 26 px hellem Rand ringsum ist keine Titelseite, sondern eine
+   * Karte — auf 390 px besonders deutlich. Deshalb greift die Ersetzung über das
+   * öffnende `<div class="wrap">` mit und setzt es hinter den Deckel wieder auf.
+   */
+  const raus = inhalt.replace(
+    /<div class="wrap">\s*<div class="cover2">([\s\S]*?)<div class="bigk">旅<\/div>\s*<\/div>/,
+    (_t, innen) => {
+      getroffen++;
+      const umgebaut = innen
+        .replace(/<div class="ce">/, '<div class="eyebrow">')
+        // Der Akzent im Titel ist in der Vorlage ein `<em>`; im Druckdokument ein
+        // `<span class="accent">`. Beide meinen dasselbe Wort in Gold.
+        .replace(/<span class="accent">([\s\S]*?)<\/span>/g, '<em>$1</em>')
+        .replace(/<div class="sub">([\s\S]*?)<\/div>/, '<p>$1</p>')
+        .replace(/<table class="facts">[\s\S]*?<\/table>/, `<div class="kpi">${kpi}</div>`);
+      return `<header class="m-cover">${umgebaut}<div class="bigk">旅</div></header>\n<div class="wrap">`;
+    },
+  );
+
+  // Genau einmal. Null hieße, der Deckel der Quelle sieht anders aus als
+  // angenommen — dann stünde die Startseite ohne Deckel da, und das fällt
+  // niemandem auf, weil eine Seite ohne Deckel wie eine Entscheidung aussieht.
+  if (getroffen !== 1) fail(`${getroffen} Deckel umgebaut, erwartet genau einen`);
+  if (!raus.includes('class="kpi"')) fail('Deckel ohne Kennzahlenzeile — table.facts nicht gefunden');
+  return raus;
+}
+
+/**
+ * Die klebende Stationsleiste über dem Band.
+ *
+ * Sie ersetzt die unbewegliche Kapitelzeile (`.bandsprung` in `index.astro`).
+ * Der Unterschied, der zählt: Sie bleibt beim Scrollen stehen. Bei 14.650 Wörtern
+ * ist „wo bin ich und wie komme ich nach Hakone" die häufigste Frage, und eine
+ * Leiste, die man nur am Seitenanfang sieht, beantwortet sie einmal.
+ *
+ * **Sechs Stationen, nicht elf Kapitel.** Mittendrin anfangen heißt bei einer
+ * Reise „an einer Station"; die fünf Kapitel ohne Station (Einladung, Prolog,
+ * Route, Ankunft, Epilog) behalten ihre Sprungmarke am `<details>` und sind über
+ * `paths.ts:kapitel()` erreichbar, stehen aber nicht in der Leiste.
+ *
+ * Kanji und Name kommen aus `stations.json`. Die Vorlage hält für Kyoto 雅
+ * („Eleganz"), die Projektdaten 形 („Form") — es gilt `stations.json`, wie schon
+ * bei den Klappenköpfen.
+ */
+function stationsleiste(inhalt, stationen) {
+  const chips = stationen
+    .map((s) => `<a href="#${s.slug}"><span class="k">${s.kanji}</span>${s.name}</a>`)
+    .join('');
+  const leiste = `\n<nav class="m-nav" aria-label="Stationen"><div class="row">${chips}</div></nav>`;
+
+  /*
+   * Direkt hinter den Deckel und damit **vor** `.wrap` — aus demselben Grund wie
+   * der Deckel selbst: Die 26 px Innenabstand von `.wrap` würden die klebende
+   * Leiste als Insel mitten in der Seite stehen lassen, mit hellem Streifen
+   * links und rechts, durch den beim Scrollen der Text läuft.
+   */
+  const marke = '</header>';
+  const stelle = inhalt.indexOf(marke);
+  // Ohne Anker keine Leiste, und das wäre stumm: Die Seite sähe aus wie vorher.
+  if (stelle < 0) fail('Kein Deckel gefunden — die Stationsleiste hat keinen Ankerpunkt');
+  const nach = stelle + marke.length;
+  return `${inhalt.slice(0, nach)}${leiste}${inhalt.slice(nach)}`;
+}
+
+/**
+ * Der Knopf zurück nach oben, wie in der Vorlage.
+ *
+ * Ein `<button>` und kein Link: Er springt innerhalb der Seite und soll keinen
+ * Eintrag in die Verlaufsliste schreiben. Sichtbar wird er erst nach 700 px —
+ * das Skript dazu steht in `index.astro`, weil `set:html` keine Skripte
+ * ausführt.
+ */
+const NACH_OBEN = '<button class="m-top" type="button" aria-label="Nach oben">↑</button>';
+
+/**
+ * Löst jede Tabelle des Bandes in gestapelte Wertzeilen auf.
+ *
+ * Aus einer `<tr>` wird eine `.mrow`, aus jeder Zelle ein Paar aus Spaltenkopf
+ * (`.mlbl`) und Wert (`.mval`). Die Form ist aus der gesendeten Vorlage
+ * abgelesen, nicht erfunden.
+ *
+ * **Drei Formen, weil der Band drei hat** — gezählt, nicht vermutet:
+ *
+ * 1. Zehn Tabellen führen einen `<thead>` mit `<th>`-Köpfen („Klassiker" /
+ *    „Zwei Straßen weiter"). Deren Köpfe werden die Etiketten.
+ * 2. Fünf `table.pins` haben keinen Kopf: eine Marke (`◯` — „ohne Nummer, nur
+ *    hier im Buch") und den Text. Die Marke bleibt, ein Etikett gäbe es nicht.
+ * 3. `table.bkjp` sind die zehn Sprachzeilen: japanisch, Umschrift, Übersetzung.
+ *    Sie bekommen `.mjp` und `.mde` — eine Umschrift unter einem Etikett
+ *    „Japanisch" wäre eine Zeile Platz für keine Auskunft.
+ *
+ * Alles andere (`bkroute`, `bkqr`) läuft über den kopflosen Weg. Das Bild in
+ * `bkqr` bleibt dabei erhalten; `browser-reiseband.mjs` zählt neun Bilder, und
+ * eines davon ist dieses.
+ */
+function tabellenZuKarten(inhalt) {
+  const zellen = (zeile) =>
+    [...zeile.matchAll(/<(t[dh])\b([^>]*)>([\s\S]*?)<\/\1>/g)].map((m) => ({
+      kopf: m[1] === 'th',
+      attr: m[2],
+      html: m[3].trim(),
+    }));
+
+  return inhalt.replace(/<table\b([^>]*)>([\s\S]*?)<\/table>/g, (treffer, attr, innen) => {
+    const klasse = /class="([^"]*)"/.exec(attr)?.[1] ?? '';
+    const zeilen = [...innen.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g)].map((m) => zellen(m[1]));
+    // Eine Tabelle, die sich nicht zerlegen lässt, wird **nicht** stillschweigend
+    // durchgelassen: Sie stünde ohne Scrollrahmen in der Seite und schöbe sie zur
+    // Seite. Die Zusicherung am Aufrufer (0 Tabellen) fängt das.
+    if (!zeilen.length) return treffer;
+
+    const etiketten = (zeilen.find((z) => z.some((c) => c.kopf)) ?? [])
+      .filter((c) => c.kopf)
+      .map((c) => c.html);
+    const koerper = zeilen.filter((z) => z.length && z.every((c) => !c.kopf));
+    if (!koerper.length) return treffer;
+
+    const reihen = koerper.map((z) => {
+      if (klasse.includes('bkjp')) {
+        const [jp, rest] = [z[0]?.html ?? '', z[1]?.html ?? ''];
+        return `<div class="mrow"><div class="mjp">${jp}</div><div class="mval">${rest.replace(
+          /<span>/,
+          '<span class="mde">',
+        )}</div></div>`;
+      }
+      if (klasse.includes('pins')) {
+        const marke = z.find((c) => /class="b"/.test(c.attr))?.html ?? '';
+        const text = z.filter((c) => !/class="b"/.test(c.attr)).map((c) => c.html);
+        return `<div class="mrow">${marke}${text
+          .map((h) => `<div class="mval">${h}</div>`)
+          .join('')}</div>`;
+      }
+      const paare = z.map((c, i) => {
+        const etikett = etiketten[i] ? `<div class="mlbl">${etiketten[i]}</div>` : '';
+        return `${etikett}<div class="mval">${c.html}</div>`;
+      });
+      return `<div class="mrow">${paare.join('')}</div>`;
+    });
+
+    return `<div class="mcards">${reihen.join('')}</div>`;
+  });
+}
 
 function schreibeLesefassung(html, kapitelDaten, stationen) {
   const roh = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
@@ -1149,27 +1573,54 @@ function schreibeLesefassung(html, kapitelDaten, stationen) {
   // dem ersten Bildschirm hängen.
   inhalt = inhalt.replace(/<img (?![^>]*loading=)/g, '<img loading="lazy" decoding="async" ');
 
-  // Tabellen in einen eigenen Scrollrahmen.
-  //
-  // Gemessen bei 390 px Breite: `table.data` ist 532 px breit, `table.facts`
-  // 346 px mit Einzug. Beide schieben die **ganze Seite** zur Seite, und
-  // Querscrollen auf der Startseite ist genau das, was einem als Erstes auffällt.
-  //
-  // Der Rahmen scrollt statt der Seite. Absichtlich nicht die Tabelle
-  // schrumpfen: Eine Probier-Tabelle mit vier Zeichen pro Spalte liest niemand,
-  // ein Wischen zur Seite ist zumutbar.
-  const tabellen = (inhalt.match(/<table\b/g) ?? []).length;
-  inhalt = inhalt
-    .replace(/<table\b/g, '<div class="bandtabelle"><table')
-    .replace(/<\/table>/g, '</table></div>');
-  const rahmen = (inhalt.match(/<div class="bandtabelle">/g) ?? []).length;
-  if (rahmen !== tabellen) {
-    fail(`${rahmen} Tabellenrahmen für ${tabellen} Tabellen — Auszeichnung unerwartet`);
+  // Der Deckel **vor** den Tabellen: `table.facts` steckt in ihm und wird zur
+  // Kennzahlenzeile, nicht zu einer Wertzeilen-Karte.
+  inhalt = mobilerDeckel(inhalt, places.length);
+
+  /*
+   * **Tabellen werden zu gestapelten Wertzeilen.**
+   *
+   * Hier stand ein Scrollrahmen um jede Tabelle (`.bandtabelle`), und die
+   * Begründung dafür war ehrlich gemessen: `table.data` ist bei 390 px Breite
+   * 532 px breit und schob die ganze Seite zur Seite. Der Rahmen hat das
+   * Querscrollen der Seite in ein Querscrollen der Tabelle verwandelt.
+   *
+   * Das war eine Notlösung, und die gesendete Vorlage macht es besser: Sie löst
+   * die Tabellen ganz auf. Aus einer Zeile wird eine Karte, aus jeder Zelle ein
+   * Paar aus Spaltenkopf (`.mlbl`) und Wert (`.mval`). Nichts steht mehr hinter
+   * einem Guckloch, nichts muss gewischt werden.
+   *
+   * Der Druckfassung `public/reiseband.html` passiert das **nicht** — dort ist
+   * eine Tabelle auf einer A4-Seite genau richtig. Deshalb greift die Umformung
+   * hier, auf dem Weg zur Startseite.
+   */
+  const vorher = (inhalt.match(/<table\b/g) ?? []).length;
+  inhalt = tabellenZuKarten(inhalt);
+  const uebrig = (inhalt.match(/<table\b/g) ?? []).length;
+  /*
+   * Null, nicht „weniger als vorher".
+   *
+   * Eine einzige übriggebliebene Tabelle wäre der Fehler, den man erst auf dem
+   * Telefon sieht: Sie schiebt die Seite zur Seite, und ihr fehlt jetzt auch der
+   * Scrollrahmen, der das früher abgefangen hat. Der alte Zähler verglich zwei
+   * Zahlen miteinander; dieser verlangt einen Endzustand.
+   */
+  if (uebrig !== 0) {
+    fail(`${uebrig} von ${vorher} Tabellen nicht aufgelöst — Auszeichnung unerwartet`);
   }
 
-  // Zuletzt die Klappen. **Nach** den Tabellenrahmen, weil die Rahmen sonst in
+  // Die Leiste vor das erste Kapitel, **bevor** daraus Klappen werden: Danach
+  // gibt es kein `<section class="chapter">` mehr, an dem sie sich festmachen
+  // könnte.
+  inhalt = stationsleiste(inhalt, stationen);
+
+  // Zuletzt die Klappen. **Nach** der Tabellenumformung, weil die Karten sonst in
   // den Abschnitten gesucht würden, die es zu diesem Zeitpunkt noch nicht gibt.
   inhalt = akkordeon(inhalt, kapitelDaten, stationen);
+
+  // Der Knopf zuletzt und außerhalb aller Klappen — er gehört der Seite, nicht
+  // einem Kapitel.
+  inhalt = `${inhalt}\n${NACH_OBEN}`;
 
   mkdirSync(resolve(root, 'src/data'), { recursive: true });
   writeFileSync(resolve(root, 'src/data/reiseband-inhalt.html'), `${inhalt}\n`, 'utf8');

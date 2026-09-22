@@ -426,3 +426,166 @@ text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
 .bandtext .dbody{ padding: 0 15px 14px; }
 .bandtext .dbody > :first-child{ margin-top: 0; }
 .bandtext details.kap > .dbody > details.teil{ margin: 10px 0; }
+.bandtext .m-cover{
+  position: relative;
+  overflow: hidden;
+  /* Randlos, und **genau** randlos: Der Innenabstand von "main.inner" steht als
+     Token in tokens.css (16 px, unter 767 px 14 px). Hier stand einmal ein
+     festes -16px; bei 14 px Rand ragte der Deckel damit 2 px über den Schirm und
+     die Startseite scrollte quer. Eine geratene Zahl war der ganze Fehler. */
+  margin: 0 calc(-1 * var(--seitenrand, 16px));
+  padding: 34px 20px 30px;
+  background: linear-gradient(160deg, var(--ai-900), var(--ai) 62%, #1c2f4f);
+  color: var(--washi);
+}
+.bandtext .m-cover .eyebrow{
+  font-family: var(--util);
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--kin-soft);
+  margin: 0 0 14px;
+}
+.bandtext .m-cover .eyebrow::before{ content: none; }
+.bandtext .m-cover h1{
+  font-family: var(--disp);
+  font-size: clamp(30px, 9vw, 46px);
+  line-height: 1.05;
+  margin: 0;
+  color: var(--washi);
+}
+.bandtext .m-cover h1 em{ color: var(--kin-soft); font-style: italic; }
+.bandtext .m-cover .jp{
+  font-family: var(--jp);
+  color: var(--shu);
+  letter-spacing: 0.3em;
+  margin: 12px 0 0;
+  font-size: 15px;
+}
+.bandtext .m-cover .rule{ width: 44px; height: 3px; background: var(--shu); margin: 16px 0; }
+.bandtext .m-cover p{ color: #DBD2BE; font-size: 16px; margin: 0; max-width: 46ch; }
+.bandtext .m-cover .kpi{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 20px;
+  font-family: var(--util);
+  font-size: 11px;
+  color: #C4BBA6;
+}
+.bandtext .m-cover .kpi b{
+  display: block;
+  font-family: var(--disp);
+  font-size: 20px;
+  color: var(--washi);
+  line-height: 1.1;
+}
+.bandtext .m-cover .bigk{
+  position: absolute;
+  right: -6px;
+  bottom: -26px;
+  font-family: var(--jp);
+  font-size: 150px;
+  color: #253147;
+  line-height: 1;
+  pointer-events: none;
+}
+.bandtext .m-nav{
+  position: sticky;
+  top: var(--nav-h, 56px);
+  z-index: 50;
+  background: rgba(239, 231, 214, 0.96);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line);
+  /* Denselben Rand zurücknehmen wie der Deckel — siehe dort. */
+  margin: 0 calc(-1 * var(--seitenrand, 16px));
+}
+@media (max-width: 767px){.bandtext .m-nav{ top: var(--nav-h-mobile, 48px); }}
+.bandtext .m-nav .row{
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 9px 12px;
+  scrollbar-width: none;
+}
+.bandtext .m-nav .row::-webkit-scrollbar{ display: none; }
+.bandtext .m-nav a{
+  flex: 0 0 auto;
+  font-family: var(--util);
+  font-size: 12.5px;
+  text-decoration: none;
+  color: var(--ai-60);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  /* 44 px, damit der Daumen trifft — sie ist der Hauptweg durch den Band. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+}
+.bandtext .m-nav a .k{ font-family: var(--jp); color: var(--shu); }
+.bandtext .m-nav a.on{ background: var(--ai); color: var(--washi); border-color: var(--ai); }
+.bandtext .m-nav a.on .k{ color: var(--kin-soft); }
+.bandtext .mcards{ margin: 8px 0 12px; }
+.bandtext .mrow{
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 13px;
+  margin: 0 0 8px;
+}
+.bandtext .mlbl{
+  font-family: var(--util);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--kin);
+  margin: 6px 0 2px;
+}
+.bandtext .mlbl:first-child{ margin-top: 0; }
+.bandtext .mval{ font-size: 15px; line-height: 1.5; }
+.bandtext .mval p{ margin: 0; }
+.bandtext .mval strong{ color: var(--ai); }
+.bandtext .mjp{ font-family: var(--jp); color: var(--shu-deep); font-size: 16px; margin-bottom: 3px; }
+.bandtext .mde{ display: block; color: var(--ai-60); font-style: italic; font-size: 14px; }
+.bandtext .m-top{
+  position: fixed;
+  right: 14px;
+  bottom: 16px;
+  /*
+   * Unter ".tabbar" (z-index 120) und über dem Text. Höher gesetzt würde der
+   * Knopf die Fußleiste verdecken — und die ist die Hauptnavigation.
+   */
+  z-index: 60;
+  background: var(--ai);
+  color: var(--washi);
+  border: none;
+  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+  font-size: 19px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.bandtext .m-top.show{ opacity: 0.94; pointer-events: auto; }
+@media (max-width: 767px){.bandtext .m-top{ bottom: calc(var(--tabbar-h, 52px) + env(safe-area-inset-bottom) + 12px); }}
+.bandtext a.app-orte{
+  background: var(--ai);
+  color: var(--washi);
+  border: none;
+  border-left: none;
+  border-radius: 12px;
+  padding: 14px 16px;
+  min-height: 56px;
+  gap: 12px;
+}
+.bandtext a.app-orte:hover{ background: var(--ai-900); }
+.bandtext a.app-orte .ao-count{ color: var(--kin-soft); font-size: 1.9rem; }
+.bandtext a.app-orte .ao-text b{ color: var(--washi); font-size: 1.05rem; }
+.bandtext a.app-orte .ao-text small{ color: #AEB7C6; }
+.bandtext a.app-orte .ao-go{ color: var(--kin-soft); }
+@media print{.bandtext .m-nav, .bandtext .m-top{ display: none; }}

@@ -884,9 +884,39 @@ Damit der grüne Haken nicht mehr verspricht, als er hält:
   gerechnet** — gegen Web-Mercator, nicht gegen die Nachbarmarker.
 - **Dass Google die Maps-URLs annimmt.**
 - **Den Abgleich gegen echtes Supabase.** Läuft bis heute nur gegen die Attrappe.
-- **Das ausgelieferte Bundle in den Browsersuiten.** Sechs von zehn brauchen den
-  Dev-Server, weil sie `import('/src/lib/store.svelte.ts')` aufrufen — diesen Pfad
-  löst nur Vite auf. `npm run build` läuft mit, die Suiten sehen den Dev-Stand.
+- **Das ausgelieferte Bundle in den Browsersuiten.** Mehrere brauchen den
+  Dev-Server, weil sie `import('/src/lib/…')` aufrufen — diesen Pfad löst nur Vite
+  auf. `npm run build` läuft mit, die Suiten sehen den Dev-Stand.
+
+### Zwei Instanzen eines Moduls — der Fehler, der vom Alter des Servers abhing
+
+Am 22.09.2026 fielen drei Suiten gleichzeitig, ohne dass sich der Code geändert
+hatte. Ursache: **Vite bedient dasselbe Modul unter mehreren URLs.** Nach einer
+Neu-Optimierung tragen die Importe einer Insel ein `?v=<hash>`; ein
+`import('/src/lib/store.svelte.ts')` **ohne** diesen Anhang ist dann eine zweite
+Instanz des Moduls mit ihrem eigenen `$state`.
+
+Die Suiten schrieben also in einen Plan, den die Komponente nie liest. Gemessen:
+`.daytab .dot` blieb nach dem Schreiben leer, der Tag zeigte keine Orte, und die
+Routenzeile erschien **zu Recht** nicht — die Prüfung meldete einen Fehler in der
+App, der keiner war. Nachgewiesen mit `import('…store.svelte.ts')` gegen
+`import('…store.svelte.ts?x=1')`: ein Modul, zwei Zustände.
+
+Das Tückische ist die Abhängigkeit vom **Zustand der Umgebung**: Auf einem frisch
+gestarteten Dev-Server — also im CI — lief es, nach Stunden Laufzeit nicht mehr.
+Dieselbe Klasse Fehler wie die Kachelsperre, die einmal vorgefunden statt erzwungen
+wurde, nur andersherum.
+
+Seitdem läuft jeder Schreibvorgang auf den Plan über `planSchreiben()` in
+`test/browserlauf.mjs`: localStorage setzen, Seite neu laden. Aus dem localStorage
+liest `load()` beim Start **selbst**, und es gibt ihn nur einmal je Ursprung.
+
+**Ein Nebenbefund dabei, noch offen:** `normalisiereOrt()` verwirft beim Laden
+jeden eigenen Ort mit `lat > 90` (`store.svelte.ts:157`). Ein Ort mit vertauschten
+Koordinaten — genau der Fall, vor dem `/wache/` warnt — **verschwindet damit beim
+nächsten Laden stillschweigend**, statt gemeldet zu werden. Der Befund ist also nur
+in der Sitzung sichtbar, in der der Ort angelegt wurde. Ob Verwerfen oder Behalten
+richtig ist, ist eine Entscheidung und keine Reparatur; sie steht aus.
 
 ## Das Reiseband auf der Startseite: ein Akkordeon
 
@@ -901,6 +931,44 @@ ansehen") und die Übergangszeile zum nächsten Kapitel.
 
 `public/reiseband.html` bleibt durchlaufender Text. Ein zugeklapptes `<details>`
 druckt nicht; wer die Datei aufs Papier gibt, bekäme sonst elf Überschriften.
+
+### Die mobile Fassung (22.09.2026)
+
+Eine neuere Vorlage kam, und wieder wurde die **Form** übernommen und nicht die
+Datei. Fünf Dinge sind dazugekommen, alle in `build-data.mjs` erzeugt:
+
+| Was | Statt | Warum |
+|---|---|---|
+| `.m-cover` — dunkler Verlaufsdeckel, `.kpi`-Zeile, angeschnittenes 旅 | `.cover2`, hell, `table.facts` | Auf 390 px ist der Deckel die erste und einzige Fläche vor dem ersten Wisch |
+| `.m-nav` — **klebende** Kanji-Leiste, sechs Stationen, Scroll-Markierung | `.bandsprung`, unbewegliche Textzeile | Bei 14.650 Wörtern ist „wie komme ich nach Hakone" keine Frage, die man einmal am Seitenanfang stellt |
+| `.mcards`/`.mrow`/`.mlbl`/`.mval` — 18 Kartenblöcke, 77 Zeilen, 191 Werte | 19 Tabellen in `.bandtabelle`-Scrollrahmen | `table.data` ist bei 390 px **532 px** breit. Der Rahmen war die Notlösung, die Auflösung ist die Behebung |
+| `a.app-orte` dunkel wie der `.planer`-Knopf der Vorlage | heller Kasten mit rotem Balken | Auf Papier ist hell richtig, auf dem Schirm ist es ein Knopf. Deshalb nur im Stylesheet der Lesefassung umgekleidet, nicht in `listLink()` |
+| `.m-top` — runder Knopf ab 700 px | fehlte | — |
+
+**Was aus den Daten kommt und nicht aus der Vorlage:** die Kennzahlen des Deckels
+(`trip.json`, `stations.json`, `places.json` — die Vorlage hat „3 · 19 · 6 · 164"
+als getippten Text), die Kanji der Leiste (`stations.json` hält für Kyoto 形, die
+Vorlage 雅), die Ortszahlen der Planer-Knöpfe und `?station=<slug>`. Die Schrift
+des Deckels steht auf **16 px** statt der 15,5 px der Vorlage: Unter 16 px zoomt
+iOS beim Antippen, und das ist eine Regel des Projekts.
+
+**Der Rand als Token.** Deckel und Leiste stehen randlos und müssen dafür den
+Innenabstand von `main.inner` zurücknehmen. Erst stand dort ein festes `-16px` —
+bei 14 px Rand ragten beide zwei Pixel über den Schirm, und die Startseite
+scrollte quer. Jetzt führt `tokens.css` `--seitenrand` (16 px, unter 767 px
+14 px), `Base.astro` benutzt es, und das Bandstylesheet nimmt genau diesen Wert
+zurück. Eine geratene Zahl war der ganze Fehler.
+
+**Die Kollision mit der App-Kopfzeile.** `.topbar` ist selbst
+`sticky; top: 0; z-index: 100`. Die Leiste klebt deshalb bei `var(--nav-h)` und
+bleibt unter `z-index: 100` — bei `top: 0`, wie in der Vorlage, verschwände sie
+dahinter. Sichtbar wäre das nur auf dem Gerät, deshalb misst
+`browser-reiseband.mjs` nach 1800 px Scrollen, ob ihre Oberkante auf der
+Unterkante der Kopfzeile sitzt (± 2 px). Gegenprobe: `position: static` → fällt.
+
+**Sechs Chips, elf Anker.** Die Leiste führt nur die Stationen; die fünf Kapitel
+ohne Station behalten ihre Sprungmarke am `<details>`, und `paths.ts:kapitel()`
+trifft sie weiter. Die Prüfung fährt alle elf einzeln an.
 
 **Erzeugt und nicht kopiert.** Die Vorlage kam als fertige HTML-Datei. Sie
 einzusetzen wäre schneller gewesen, hätte aber Inhalt gelöscht: 19 Probier-Tabellen,

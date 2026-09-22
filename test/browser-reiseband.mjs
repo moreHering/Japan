@@ -27,6 +27,15 @@ const pruefe = (bedingung, text, zusatz = '') => {
 };
 
 const kapitel = JSON.parse(readFileSync('src/data/chapters.json', 'utf8'));
+/*
+ * Die Projektdaten, gegen die der Deckel, die Leiste und die Planer-Knöpfe
+ * geprüft werden. Abgeleitet statt getippt: Eine Prüfung, die „19 Nächte" im
+ * Quelltext stehen hat, ist nach der ersten Planänderung falsch — und zwar
+ * gleichzeitig mit der Seite, sodass sie grün bleibt.
+ */
+const trip = JSON.parse(readFileSync('src/data/trip.json', 'utf8'));
+const stationen = JSON.parse(readFileSync('src/data/stations.json', 'utf8'));
+const orte = JSON.parse(readFileSync('src/data/places.json', 'utf8'));
 
 const browser = await chromium.launch({
   ...START,
@@ -74,8 +83,15 @@ const mass = await seite.evaluate(() => {
     ersterKapitelY: Math.round(
       (bt.querySelector('details.kap[id]')?.getBoundingClientRect().top ?? 0) + window.scrollY,
     ),
+    /*
+     * `.m-cover` zuerst: Seit dem 22.09.2026 heißt der Deckel so. Die alte Liste
+     * fiel auf `.wrap` zurück, und `.wrap` beginnt **hinter** Deckel und Leiste —
+     * gemessen wurden 810 px, also der Textanfang, und die Zusicherung „die
+     * Titelseite steht im ersten Bildschirm" prüfte etwas anderes als ihr Name.
+     */
     deckelY: Math.round(
-      (bt.querySelector('.cover2, .wrap')?.getBoundingClientRect().top ?? 9999) + window.scrollY,
+      (bt.querySelector('.m-cover, .cover2, .wrap')?.getBoundingClientRect().top ?? 9999) +
+        window.scrollY,
     ),
   };
 });
@@ -140,6 +156,288 @@ pruefe(
   'die anklickbaren Kapitelkacheln sind weg',
 );
 
+// ============================== Der mobile Deckel und die Stationsleiste ===
+
+/*
+ * Die drei Formen, die am 22.09.2026 aus der gesendeten Vorlage übernommen
+ * wurden. Geprüft wird jede an dem, was sie leisten soll — nicht daran, dass sie
+ * existiert.
+ */
+console.log('\nDer Deckel im mobilen Format:');
+{
+  const deckel = await seite.evaluate(() => {
+    const d = document.querySelector('.bandtext .m-cover');
+    if (!d) return null;
+    const s = getComputedStyle(d);
+    const bt = document.querySelector('.bandtext');
+    const r = d.getBoundingClientRect();
+    return {
+      /*
+       * **Echt breiter, nicht gleich breit.**
+       *
+       * Erste Fassung verlangte `>=`. Damit bestand die Prüfung auch ohne den
+       * randlosen Rand — der Deckel war dann genau so breit wie der Textbereich,
+       * und `>=` ist dafür wahr. Die Gegenprobe hat es gezeigt: Regel entfernt,
+       * Prüfung weiter grün. Verlangt wird jetzt, dass er über den Textbereich
+       * hinausragt und links am Schirmrand steht.
+       */
+      breiter: r.width > bt.clientWidth,
+      breite: Math.round(r.width),
+      textbreite: bt.clientWidth,
+      linksAmRand: Math.round(r.left) <= 0,
+      dunkel: s.backgroundImage.includes('gradient'),
+      kpi: [...d.querySelectorAll('.kpi b')].map((b) => b.textContent.trim()),
+      zeichen: (d.querySelector('.bigk') || {}).textContent,
+      akzent: !!d.querySelector('h1 em'),
+    };
+  });
+  pruefe(deckel !== null, 'der Deckel steht als .m-cover auf der Seite');
+  if (deckel) {
+    /*
+     * Randlos, und das ist keine Kosmetik: In der Quelle steckt der Deckel in
+     * `.wrap` mit 26 px Innenabstand. Dort gelassen wäre die dunkle Fläche eine
+     * Karte mit hellem Rand ringsum statt einer Titelseite. `mobilerDeckel()`
+     * holt ihn heraus, und das ist die Zusicherung darauf.
+     */
+    pruefe(
+      deckel.breiter && deckel.linksAmRand,
+      'er läuft über die volle Breite, ist keine Karte im Text',
+      `${deckel.breite} px bei ${deckel.textbreite} px Textbreite, linke Kante ${deckel.linksAmRand ? 'am Rand' : 'eingerückt'}`,
+    );
+    pruefe(deckel.dunkel, 'und trägt den dunklen Verlauf der Vorlage');
+    pruefe(deckel.zeichen === '旅', 'das große 旅 steht darin', String(deckel.zeichen));
+    pruefe(deckel.akzent, 'und der Titel hat seinen goldenen Akzent');
+    /*
+     * **Die Kennzahlen gegen die Daten, nicht gegen getippte Zahlen.**
+     *
+     * In der Vorlage stehen „3 · 19 · 6 · 164" als Text im Deckel. Hier baut
+     * `mobilerDeckel()` sie aus `trip.json`, `stations.json` und `places.json`.
+     * Diese Prüfung vergleicht mit denselben Dateien — schreibt also niemand die
+     * Zahl 19 in den Test, und eine Planänderung macht beides zugleich richtig.
+     */
+    const soll = [
+      String(trip.travellers.length),
+      String(trip.nights),
+      String(stationen.length),
+      String(orte.length),
+    ];
+    pruefe(
+      soll.every((z) => deckel.kpi.includes(z)),
+      'die Kennzahlen stimmen mit den Projektdaten überein',
+      `${deckel.kpi.join(' · ')} — erwartet ${soll.join(' · ')}`,
+    );
+  }
+}
+
+console.log('\nDie Stationsleiste klebt und markiert:');
+{
+  const chips = seite.locator('.bandtext .m-nav a');
+  const anzahl = await chips.count();
+  pruefe(anzahl === stationen.length, `sie führt die ${stationen.length} Stationen`, String(anzahl));
+
+  if (anzahl === stationen.length) {
+    /*
+     * Kanji aus `stations.json`, **abgeleitet statt getippt**. Die Vorlage hält
+     * für Kyoto 雅 („Eleganz"), die Projektdaten 形 („Die Schule der Form").
+     * Getippt im Test wäre die Prüfung eine Kopie der Vorlage und würde die
+     * Abweichung gerade nicht melden.
+     */
+    const gelesen = await chips.evaluateAll((ns) =>
+      ns.map((n) => ({
+        ziel: n.getAttribute('href'),
+        kanji: (n.querySelector('.k') || {}).textContent,
+        hoehe: Math.round(n.getBoundingClientRect().height),
+      })),
+    );
+    pruefe(
+      gelesen.every((g, i) => g.kanji === stationen[i].kanji),
+      'jeder Chip trägt das Kanji aus stations.json',
+      gelesen.map((g) => g.kanji).join(' '),
+    );
+    pruefe(
+      gelesen.every((g, i) => g.ziel === `#${stationen[i].slug}`),
+      'und führt zum Kapitel derselben Station',
+      gelesen.map((g) => g.ziel).join(' '),
+    );
+    pruefe(
+      gelesen.every((g) => g.hoehe >= 44),
+      'jeder Chip ist mindestens 44 px hoch — er wird mit dem Daumen getroffen',
+      `${Math.min(...gelesen.map((g) => g.hoehe))} px im kleinsten Fall`,
+    );
+
+    /*
+     * **Die Zusicherung gegen die Kollision mit der App-Kopfzeile.**
+     *
+     * `.topbar` ist selbst `sticky; top: 0; z-index: 100`. Bei `top: 0` — wie in
+     * der Vorlage, die keine App um sich hat — verschwindet die Leiste hinter
+     * ihr, und das sieht man nur auf dem Gerät. Deshalb wird nach echtem Scrollen
+     * gemessen, ob sie **unter** der Kopfzeile steht und nicht darunter
+     * verschwindet.
+     */
+    /*
+     * **`behavior: 'instant'`, und das ist kein Detail.**
+     *
+     * `tokens.css:63` setzt `scroll-behavior: smooth` für die ganze App. Ein
+     * `window.scrollTo(0, n)` ist damit eine **Animation**: Der Aufruf kehrt
+     * sofort zurück, die Seite steht noch am alten Platz, und die Messung
+     * dahinter misst den Zustand von vorher. Genau daran sind zwei Prüfungen
+     * dieses Blocks gefallen — nicht am Code, den sie prüfen.
+     */
+    await seite.evaluate(() => window.scrollTo({ top: 1800, behavior: 'instant' }));
+    await seite.waitForTimeout(400);
+    const lage = await seite.evaluate(() => {
+      const nav = document.querySelector('.bandtext .m-nav');
+      const bar = document.querySelector('.topbar');
+      const n = nav.getBoundingClientRect();
+      const b = bar ? bar.getBoundingClientRect() : { bottom: 0, height: 0 };
+      return { navTop: Math.round(n.top), navHoehe: Math.round(n.height), barUnten: Math.round(b.bottom) };
+    });
+    pruefe(
+      lage.navTop > 0 && Math.abs(lage.navTop - lage.barUnten) <= 2,
+      'nach 1800 px Scrollen klebt sie genau unter der Kopfzeile der App',
+      JSON.stringify(lage),
+    );
+    pruefe(
+      lage.navTop + lage.navHoehe > lage.barUnten,
+      'und ist dabei sichtbar, nicht hinter ihr verschwunden',
+      JSON.stringify(lage),
+    );
+
+    /*
+     * **Die Markierung wird am Kapitel gemessen, nicht an einer Scrollhöhe.**
+     *
+     * Erste Fassung prüfte bei 1800 px „genau ein Chip ist markiert" und fiel —
+     * zu Recht: Bei elf zugeklappten Kapiteln steht dort noch die Einladung, und
+     * die ist keine Station. Kein markierter Chip war die **richtige** Antwort,
+     * die Prüfung war falsch. Jetzt wird eine Station gezielt angefahren und
+     * verlangt, dass genau ihr Chip anspringt.
+     */
+    const zweite = stationen[1];
+    await seite.evaluate((slug) => {
+      const el = document.getElementById(slug);
+      let k = el;
+      while (k) {
+        if (k.tagName === 'DETAILS') k.open = true;
+        k = k.parentElement;
+      }
+      // Erst nach dem Aufklappen rechnen — ein offenes Kapitel verschiebt alles
+      // darunter — und hart scrollen, nicht über `scrollIntoView`: Das wäre wegen
+      // `scroll-behavior: smooth` eine Animation, und 60 px unter dem Kapitelkopf
+      // trifft es ohnehin genauer als die Vorgabe von `scrollIntoView`.
+      const y = el.getBoundingClientRect().top + window.scrollY - 60;
+      window.scrollTo({ top: y, behavior: 'instant' });
+    }, zweite.slug);
+    await seite.waitForTimeout(500);
+    const markiert = await chips.evaluateAll((ns) =>
+      ns.filter((n) => n.classList.contains('on')).map((n) => n.getAttribute('href')),
+    );
+    pruefe(
+      markiert.length === 1 && markiert[0] === `#${zweite.slug}`,
+      `im Kapitel ${zweite.name} springt genau dessen Chip an`,
+      markiert.length ? markiert.join(' ') : 'keiner markiert',
+    );
+    await seite.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+    await seite.waitForTimeout(400);
+  }
+}
+
+console.log('\nDer Knopf nach oben:');
+{
+  const lies = () =>
+    seite.evaluate(() => {
+      const b = document.querySelector('.bandtext .m-top');
+      if (!b) return null;
+      const s = getComputedStyle(b);
+      return { sichtbar: Number(s.opacity) > 0.5, tippbar: s.pointerEvents !== 'none' };
+    });
+  // Erst an den Seitenanfang, dann messen. Die Blöcke davor haben gescrollt, und
+  // ein vorausgesetzter Ausgangszustand ist kein gemessener.
+  await seite.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await seite.waitForTimeout(400);
+  const oben = await lies();
+  pruefe(oben !== null, 'der Knopf steht im Band');
+  if (oben) {
+    // Am Seitenanfang hat er nichts zu tun — und darf dann auch keine Tipps
+    // abfangen. Deshalb wird `pointer-events` mitgeprüft und nicht nur die
+    // Deckkraft: Ein durchsichtiger Knopf, der Tipps schluckt, ist schlimmer als
+    // ein sichtbarer.
+    pruefe(
+      !oben.sichtbar && !oben.tippbar,
+      'am Seitenanfang ist er unsichtbar und fängt nichts ab',
+      JSON.stringify(oben),
+    );
+    await seite.evaluate(() => window.scrollTo({ top: 1200, behavior: 'instant' }));
+    await seite.waitForTimeout(400);
+    const unten = await lies();
+    pruefe(unten.sichtbar && unten.tippbar, 'nach 1200 px ist er da und tippbar');
+    await seite.locator('.bandtext .m-top').tap();
+    await seite.waitForTimeout(900);
+    const y = await seite.evaluate(() => window.scrollY);
+    pruefe(y < 60, 'und ein Tipp bringt die Seite zurück nach oben', `${Math.round(y)} px`);
+  }
+}
+
+console.log('\nDer Weg in den Planer:');
+{
+  const knoepfe = await seite.locator('.bandtext a.app-orte').evaluateAll((ns) =>
+    ns.map((n) => ({
+      ziel: n.getAttribute('href'),
+      zahl: Number((n.querySelector('.ao-count') || {}).textContent),
+      dunkel: getComputedStyle(n).backgroundColor,
+      hoehe: Math.round(n.getBoundingClientRect().height),
+    })),
+  );
+  pruefe(
+    knoepfe.length === stationen.length,
+    `je Station ein Weg in den Planer (${stationen.length})`,
+    String(knoepfe.length),
+  );
+  /*
+   * **Die Ortszahl gegen places.json, das Ziel gegen den Planer.**
+   *
+   * Sechs Knöpfe mit einer Zahl darauf sind eine Behauptung, solange niemand
+   * nachzählt. Und `?station=` ist nur dann ein Filter, wenn die Ortsseite ihn
+   * liest — `PlaceExplorer.svelte` tut das, und der letzte Block hier fährt es
+   * nach.
+   */
+  const fehlZahl = knoepfe.filter((k) => {
+    const slug = (k.ziel.match(/station=([a-z]+)/) || [])[1];
+    return orte.filter((o) => o.station === slug).length !== k.zahl;
+  });
+  pruefe(
+    fehlZahl.length === 0,
+    'jede genannte Ortszahl stimmt mit places.json überein',
+    fehlZahl.map((k) => `${k.ziel} sagt ${k.zahl}`).join(' | '),
+  );
+  pruefe(
+    knoepfe.every((k) => /\/orte\/\?station=/.test(k.ziel)),
+    'und jeder führt gefiltert in den Planer',
+    knoepfe.map((k) => k.ziel).join(' '),
+  );
+  pruefe(
+    knoepfe.every((k) => k.hoehe >= 48),
+    'die Knöpfe sind mit dem Daumen zu treffen',
+    `${Math.min(...knoepfe.map((k) => k.hoehe))} px im kleinsten Fall`,
+  );
+
+  // Der Filter wirkt wirklich — sonst ist der Knopf ein Link ins Ungefilterte.
+  const ziel = knoepfe[0]?.ziel;
+  if (ziel) {
+    const slug = (ziel.match(/station=([a-z]+)/) || [])[1];
+    await seite.goto(`${BASIS}/orte/?station=${slug}`, { waitUntil: 'load' });
+    await seite.waitForTimeout(1200);
+    const sichtbar = await seite.locator('article.place').count();
+    const erwartet = orte.filter((o) => o.station === slug).length;
+    pruefe(
+      sichtbar > 0 && sichtbar <= erwartet,
+      `?station=${slug} zeigt nur diese Station`,
+      `${sichtbar} Einträge, ${erwartet} gehören zur Station`,
+    );
+    await seite.goto(`${BASIS}/`, { waitUntil: 'load' });
+    await seite.waitForTimeout(600);
+  }
+}
+
 /*
  * Der Inhalt ist noch vollständig — und das ist die Prüfung mit dem größten Wert
  * an dieser Umformung.
@@ -155,13 +453,48 @@ const inhalt = await seite.evaluate(() => {
   const bt = document.querySelector('.bandtext');
   return {
     tabellen: bt.querySelectorAll('table').length,
+    karten: bt.querySelectorAll('.mcards').length,
+    zeilen: bt.querySelectorAll('.mrow').length,
+    werte: bt.querySelectorAll('.mval').length,
+    etiketten: bt.querySelectorAll('.mlbl').length,
+    sprache: bt.querySelectorAll('.mjp').length,
     rahmen: bt.querySelectorAll('.bandtabelle').length,
     nurImBuch: (bt.textContent.match(/ohne Nummer, nur hier im Buch/g) ?? []).length,
     bilder: bt.querySelectorAll('img').length,
   };
 });
-pruefe(inhalt.tabellen === 19, 'die 19 Probier-Tabellen sind noch da', String(inhalt.tabellen));
-pruefe(inhalt.rahmen === 19, 'und jede in ihrem Scrollrahmen', String(inhalt.rahmen));
+/*
+ * **Keine Tabelle mehr, und der Inhalt trotzdem vollständig.**
+ *
+ * Bis zum 22.09.2026 stand hier „die 19 Probier-Tabellen sind noch da" und „jede
+ * in ihrem Scrollrahmen". Der Rahmen war die Notlösung: Bei 390 px ist
+ * `table.data` 532 px breit und schob die Seite zur Seite, also scrollte
+ * stattdessen der Rahmen. Die gesendete Vorlage löst die Tabellen ganz auf, und
+ * genau das prüft diese Stelle jetzt — **null**, nicht „weniger".
+ *
+ * Die Zahlen darunter sind die Gegenwache dazu: Eine Umformung, die Tabellen
+ * verschwinden lässt, ohne Wertzeilen zu hinterlassen, wäre ein Inhaltsverlust,
+ * und „0 Tabellen" allein wäre dafür grün. Erwartet sind 18 Kartenblöcke,
+ * 77 Zeilen, 149 Etiketten und 191 Werte; geprüft wird mit Luft nach unten,
+ * damit eine Textkorrektur im Band die Suite nicht rot macht.
+ */
+pruefe(inhalt.tabellen === 0, 'keine Tabelle steht mehr im Bandtext', String(inhalt.tabellen));
+pruefe(inhalt.rahmen === 0, 'und damit auch kein Scrollrahmen mehr', String(inhalt.rahmen));
+pruefe(
+  inhalt.karten >= 15 && inhalt.zeilen >= 60,
+  'die Tabellen stehen als gestapelte Wertzeilen da',
+  `${inhalt.karten} Kartenblöcke, ${inhalt.zeilen} Zeilen`,
+);
+pruefe(
+  inhalt.werte >= 150 && inhalt.etiketten >= 120,
+  'mit Spaltenkopf und Wert je Zelle — der Inhalt ist nicht verloren',
+  `${inhalt.etiketten} Etiketten, ${inhalt.werte} Werte`,
+);
+pruefe(
+  inhalt.sprache === 10,
+  'die zehn Sprachzeilen tragen ihr Japanisch getrennt',
+  String(inhalt.sprache),
+);
 pruefe(
   inhalt.nurImBuch === 5,
   'die fünf „nur hier im Buch"-Blöcke sind noch da — sie stehen nirgends sonst',
@@ -250,17 +583,32 @@ pruefe(druckfassung.tabellen === 19, 'mit ihren 19 Tabellen', String(druckfassun
 await seite.goto(`${BASIS}/`, { waitUntil: 'load' });
 await seite.waitForTimeout(500);
 
-// Die Tabellen scrollen für sich, nicht die Seite.
-const tabellen = await seite.evaluate(() => {
-  const r = [...document.querySelectorAll('.bandtext .bandtabelle')];
-  return {
-    rahmen: r.length,
-    scrollbar: r.filter((e) => getComputedStyle(e).overflowX === 'auto').length,
-    ueberstehend: r.filter((e) => e.scrollWidth > e.clientWidth + 1).length,
-  };
+/*
+ * **Nichts im Band ist breiter als der Band.**
+ *
+ * Das ist die Nachfolgerin von „jede Tabelle hat ihren eigenen Scrollrahmen".
+ * Die alte Prüfung sicherte zu, dass das Überstehen *eingefangen* ist; diese
+ * sichert zu, dass es **keines gibt**. Gemessen wird jedes Element im Bandtext,
+ * nicht nur die früheren Tabellen — sonst wäre die nächste zu breite Auszeichnung
+ * wieder unsichtbar, bis jemand auf dem Telefon danebenwischt.
+ *
+ * Der Deckel und die klebende Leiste sind ausgenommen: Sie stehen mit
+ * `margin: 0 -16px` absichtlich randlos und sind damit breiter als ihr Elter.
+ */
+const zuBreit = await seite.evaluate(() => {
+  const bt = document.querySelector('.bandtext');
+  const breite = bt.clientWidth;
+  return [...bt.querySelectorAll('*')]
+    .filter((e) => !e.closest('.m-cover') && !e.closest('.m-nav'))
+    .filter((e) => e.scrollWidth > breite + 1)
+    .slice(0, 5)
+    .map((e) => `${e.tagName.toLowerCase()}.${e.className || '-'}: ${e.scrollWidth} px`);
 });
-pruefe(tabellen.rahmen > 0 && tabellen.rahmen === tabellen.scrollbar, 'jede Tabelle hat ihren eigenen Scrollrahmen', JSON.stringify(tabellen));
-pruefe(tabellen.ueberstehend > 0, 'und mindestens eine ist tatsächlich breiter — der Rahmen wird gebraucht');
+pruefe(
+  zuBreit.length === 0,
+  `kein Element im Band ist breiter als seine ${await seite.evaluate(() => document.querySelector('.bandtext').clientWidth)} px`,
+  zuBreit.join(' | '),
+);
 
 // ================================= 2) Die App sieht noch aus wie die App ===
 
@@ -359,10 +707,18 @@ console.log('\nSprungmarken:');
 await seite.goto(`${BASIS}/`, { waitUntil: 'networkidle' });
 await seite.waitForTimeout(400);
 
+/*
+ * Hier stand „11 Sprungmarken in einer Zeile" und zählte `.bandsprung a`. Diese
+ * Zeile ist weg: Der Band bringt seine klebende Stationsleiste selbst mit, und
+ * die führt **sechs** Stationen statt elf Kapitel. Die fünf Kapitel ohne Station
+ * sind damit nicht unerreichbar — ihre Sprungmarke sitzt am `<details>`, und die
+ * Schleife unmittelbar darunter fährt jede einzeln an. Genau das ist der Grund,
+ * warum diese Zusicherung ersetzt und nicht gestrichen wurde.
+ */
 pruefe(
-  (await seite.locator('.bandsprung a').count()) === kapitel.length,
-  `${kapitel.length} Sprungmarken in einer Zeile`,
-  String(await seite.locator('.bandsprung a').count()),
+  (await seite.locator('.bandtext .m-nav a').count()) === stationen.length,
+  `die klebende Leiste führt ${stationen.length} Stationen`,
+  String(await seite.locator('.bandtext .m-nav a').count()),
 );
 
 for (const k of kapitel) {

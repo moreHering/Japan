@@ -20,6 +20,7 @@ import {
   BASIS,
   KACHELHOSTS,
   MELDENDER_STIL,
+  planSchreiben,
   START,
   vektorStilUnterschieben,
 } from './browserlauf.mjs';
@@ -103,9 +104,16 @@ pruefe(
 // ======================================== 2) Ein kaputter eigener Ort ======
 
 console.log('\nMit einem eigenen Ort, dessen Koordinaten vertauscht sind:');
-await seite.evaluate(async () => {
-  const s = await import('/src/lib/store.svelte.ts');
-  s.plan.customPlaces = [
+/*
+ * Über den localStorage und **nicht** über `import('/src/lib/store.svelte.ts')`:
+ * Vite bedient dasselbe Modul unter mehreren URLs, und ein Import ohne das
+ * `?v=<hash>` der Insel ist eine zweite Instanz mit eigenem `$state`. Die
+ * ausführliche Begründung steht an `planSchreiben()` in `browserlauf.mjs`. Diese
+ * drei Blöcke sind am 22.09.2026 genau daran gefallen — auf einem frischen
+ * Dev-Server liefen sie, nach Stunden Laufzeit nicht mehr.
+ */
+await planSchreiben(seite, {
+  customPlaces: [
     {
       nr: 167,
       name: 'Unsere Wohnung Kanazawa',
@@ -113,9 +121,23 @@ await seite.evaluate(async () => {
       station: 'kanazawa',
       stationLabel: 'Kanazawa · Zentrum',
       area: 'zentrum',
-      // Vertauscht: 136,65 als Breite gibt es nicht.
-      lat: 136.6562,
-      lng: 36.5613,
+      /*
+       * Vertauscht — aber **darstellbar**.
+       *
+       * Hier stand `lat: 136.6562`. Die Absicht war richtig (eine Breite von 136
+       * gibt es nicht), der Wert aber unbrauchbar als Prüfvorlage: `normalize()`
+       * in `store.svelte.ts:157` verwirft jeden Ort mit `lat > 90` beim **Laden**
+       * aus dem localStorage. Ein solcher Ort überlebt kein Neuladen, und ein
+       * Befund über ihn ist nach dem Neuladen nicht mehr herstellbar.
+       *
+       * Deshalb die andere Vertauschung: Breite 36,56 ist Japan, Länge 36,66 ist
+       * die Türkei. `inJapan()` schlägt genauso an, und der Ort kommt durch die
+       * Normalisierung. Der Nebenbefund dazu — dass ein Ort mit unmöglicher Breite
+       * beim Neuladen **stillschweigend verschwindet**, statt gemeldet zu werden —
+       * steht in der Zusammenfassung; er gehört nicht in diesen Test.
+       */
+      lat: 36.5613,
+      lng: 36.6562,
       placeId: null,
       descriptionHtml: 'Von Hand ergänzt.',
       isFriendTip: false,
@@ -126,9 +148,8 @@ await seite.evaluate(async () => {
       vorlaeufig: false,
       angelegtVon: null,
     },
-  ];
-});
-await seite.waitForTimeout(700);
+  ],
+}, '.wache .block');
 
 const befunde = await seite.locator('.befunde li').evaluateAll((ns) =>
   ns.map((n) => ({ klasse: n.className, text: n.innerText.replace(/\s+/g, ' ') })),
@@ -182,9 +203,8 @@ pruefe(/Fehler/.test(fazitJetzt), 'die Kopfzeile zählt mit', fazitJetzt);
 // ================== 3) Ein eigener Ort, der nie abgeglichen wurde ==========
 
 console.log('\nMit einem eigenen Ort ohne endgültige Nummer:');
-await seite.evaluate(async () => {
-  const s = await import('/src/lib/store.svelte.ts');
-  s.plan.customPlaces = [
+await planSchreiben(seite, {
+  customPlaces: [
     {
       nr: -1,
       name: 'Noch nicht abgeglichen',
@@ -204,9 +224,8 @@ await seite.evaluate(async () => {
       vorlaeufig: true,
       angelegtVon: null,
     },
-  ];
-});
-await seite.waitForTimeout(700);
+  ],
+}, '.wache .block');
 
 /*
  * Der Befund, den sonst nichts bemerkt: Eine negative Nummer heißt, dieses Gerät
@@ -223,11 +242,7 @@ pruefe(
 pruefe(/abgleichen/i.test(nieAbgeglichen), 'mit dem Weg zur Behebung');
 
 // Zurück auf den sauberen Stand.
-await seite.evaluate(async () => {
-  const s = await import('/src/lib/store.svelte.ts');
-  s.plan.customPlaces = [];
-});
-await seite.waitForTimeout(500);
+await planSchreiben(seite, { customPlaces: [] }, '.wache .block');
 
 // ======================================================= 4) Die Karte =====
 

@@ -83,6 +83,74 @@ wird über den **Namen**, nicht über eine Mailadresse — auf dem Handy tippt n
 gern Adressen. Das Passwort steht ausschließlich als GitHub-Secret `ACCOUNT_PW`; im
 Repository steht nur der Variablenname, denn dieses Repository ist öffentlich.
 
+## Fünf Layout-Vorlagen für Beiträge
+
+Ein Beitrag im Freundebuch trug bis zum 22.09.2026 **genau ein Bild**, immer im
+Verhältnis 4:3. Für ein Polaroid ist das richtig; ein Torii im Hochformat wurde
+darin oben und unten abgeschnitten, eine Küstenlinie seitlich, und vier Bilder von
+einem Abend wurden vier Beiträge.
+
+| id | Bilder | Form |
+|---|---|---|
+| `polaroid` | 1 | 4:3, Text darunter — **Vorgabe**, das Aussehen aller alten Beiträge |
+| `hochkant` | 1 | 3:4 |
+| `panorama` | 1 | 16:9, über die ganze Breite des Stroms |
+| `streifen` | 2–3 | nebeneinander |
+| `collage` | 2–4 | 2×2-Raster |
+
+Gewählt wird von Hand, fünf Knöpfe im Formular nach dem Muster der Aufkleberwahl.
+Die Liste steht in `src/lib/vorlagen.ts`, in der Datenbank ist `vorlage` ein
+freies `text` ohne Enum — dasselbe Muster wie `sticker`, und eine sechste Vorlage
+kostet damit keine Migration. `vorlageVon()` fällt bei `null` **und** bei einem
+unbekannten Wert auf Polaroid zurück: Ein Beitrag, den ein Gerät mit neuerer
+Fassung anlegt, muss auf einem mit älterer Fassung sichtbar bleiben.
+
+**Gerendert wird an einer Stelle**, nicht an zwei: `Bildfeld.svelte` benutzen
+Freundebuch und Gästeansicht gemeinsam. Sie enthält **kein** `input`, `form` oder
+`button` — die Gästeseite verspricht, nichts Bedienbares zu tragen — und **keinen**
+`<style>`-Block, weil ihre Regeln in `y2k.css` stehen. Beides prüft
+`y2k-css.test.ts`, dazu, dass es zu **jeder** Kennung aus `VORLAGEN` eine Regel
+gibt (abgeleitet, nicht getippt). Was verschieden bleibt und bleiben soll: der
+Kippwinkel (0,7 im Freundebuch, 0,4 im Tagebuch), die `nurtext`-Klasse und der
+Löschknopf.
+
+### Migration 0009 und die Lücke dahinter
+
+`bild_pfade text[]` und `vorlage text` kommen per Migration; `bild_pfad` **bleibt**
+und trägt weiter das erste Bild, weil ein Telefon mit zwischengespeichertem altem
+JavaScript nur diese Spalte liest.
+
+Der Code wird per Push ausgeliefert, das SQL spielt ein Mensch im Dashboard ein —
+**dazwischen liegt eine Lücke**, und sie dauert nicht Minuten, sondern bis jemand
+am Rechner sitzt. `ladeFreundebuch()` selektiert namentlich; ein `bild_pfade` in
+der Liste hätte gegen die alte Tabelle 400 ergeben, und das Freundebuch wäre bis
+dahin **tot** gewesen — kein Bilderstrom, keine Steckbriefe.
+
+Deshalb eine Fähigkeitsprobe: voller Select, bei „Spalte gibt es nicht" (`42703`)
+einmal zurück auf die alte Liste, Ergebnis für die Sitzung gemerkt. Ist sie
+negativ, nimmt `beitragAnlegen()` nur ein Bild und schickt die neuen Spalten nicht
+mit, und die Maske zeigt Filmstreifen und Collage gar nicht erst — eine Wahl, die
+beim Absenden scheitert, wäre schlimmer als keine.
+
+`test/freundebuch-spalten.test.ts` fährt **beide** Schemaformen gegen
+`mini-postgrest.ts`. Gegenprobe: Rückfall entfernen → die vier „ohne
+Migration"-Prüfungen fallen. Dafür musste die Attrappe lernen, auf eine unbekannte
+Spalte im `select` mit **400** zu antworten statt zu werfen: Mit einem `throw`
+**hängt** der Supabase-Client, die Abfrage löst nie auf. Eine Attrappe, die anders
+scheitert als das Original, prüft eine Welt, die es nicht gibt.
+
+**Rücknahme über alle Bilder.** Bisher wurde bei einem Insert-Fehler die *eine*
+Datei entfernt. Bei vier Bildern reicht das nicht: Bricht der dritte Upload ab, lief
+gar kein Insert — die zwei ersten lägen für immer im Bucket, ohne dass eine Zeile
+auf sie zeigt. Niemand würde sie je finden. `beitragLoeschen()` entfernt
+entsprechend alle Pfade, weiter Datei zuerst.
+
+**Datenverbrauch, gerechnet:** ~300 kB je Foto nach `verkleinern()`, also ~1,2 MB
+für einen Collagen-Beitrag statt 300 kB. Die Gästeseite lädt acht Tagesgruppen auf
+einmal, alle Bilder `loading="lazy"` — grob 25–30 MB je vollständig gescrollter
+Seite, gegen 5 GB im Monat also etwa 170 Durchläufe. Wird es knapp, ist `SCHRITT`
+in `Tagebuch.svelte` der Hebel, nicht die Bildzahl.
+
 ## Das Reisetagebuch für die Gäste
 
 Unter `/tagebuch/` stehen die Beiträge des Freundebuchs **ohne Anmeldung** — als
@@ -910,6 +978,28 @@ wurde, nur andersherum.
 Seitdem läuft jeder Schreibvorgang auf den Plan über `planSchreiben()` in
 `test/browserlauf.mjs`: localStorage setzen, Seite neu laden. Aus dem localStorage
 liest `load()` beim Start **selbst**, und es gibt ihn nur einmal je Ursprung.
+
+**Für das Freundebuch ging dieser Weg nicht** — `buch` liegt nicht im
+localStorage. Dort hängt die Insel im Entwicklungsmodus ihre eigene Instanz an
+`globalThis.__buch` (`freundebuch.svelte.ts`, hinter `import.meta.env.DEV`), und
+`buchSchreiben()` schreibt dorthin. Es ist also **die** Instanz, die die Komponente
+liest; eine zweite gibt es nicht. Dass der Haken nicht mitgeliefert wird, prüft
+`test/dist.test.ts` gegen `dist/` — Gegenprobe: `DEV` durch `true` ersetzen, die
+Prüfung fällt. Ein Prüfhaken im Bündel wäre eine Hintertür: Jeder Besucher könnte
+über `window.__buch` den angezeigten Bilderstrom verändern.
+
+Dass es diesen Weg braucht, hat sich sofort bestätigt: Die Suite lief, ich habe
+eine Zeile in `vorlagen.ts` geändert — an einer **anderen** Datei —, und sie fiel,
+weil Vite neu optimiert hatte. Mit dem Haken übersteht sie dieselbe Änderung.
+
+**Eine Prüfung, die es nicht geben kann.** In `test/dist.test.ts` stand kurz „das
+Anmeldepasswort kommt im Bündel nicht vor". Sie schlug sofort an — das Passwort ist
+ein gewöhnliches japanisches Gericht und steht achtmal im Reiseband
+(„Yakitori-Stände im Grillrauch"), also auf genau den öffentlich erreichbaren
+Seiten. Eine Prüfung, die immer anschlägt, wird abgeschaltet und schützt danach
+nichts; sie ist wieder raus. Der Punkt ist kein Testproblem: Ein Passwort, das als
+Wort auf der eigenen Seite steht, ist geraten, bevor jemand einen Angriff
+versucht.
 
 **Ein Nebenbefund dabei, noch offen:** `normalisiereOrt()` verwirft beim Laden
 jeden eigenen Ort mit `lat > 90` (`store.svelte.ts:157`). Ein Ort mit vertauschten

@@ -27,7 +27,7 @@
 
 import { chromium, devices } from 'playwright';
 
-import { BASIS, KACHELHOSTS, START } from './browserlauf.mjs';
+import { BASIS, KACHELHOSTS, START, buchSchreiben } from './browserlauf.mjs';
 
 let fehler = 0;
 const pruefe = (bedingung, text, zusatz = '') => {
@@ -259,16 +259,19 @@ for (const [pfad, vorher] of [
   // keinen. Zustand direkt setzen, wie in `browser-tagebuch.mjs`; sonst wartet
   // man auf ein Element, das es zu Recht nicht gibt.
   ['/tagebuch/', async (p) => {
-    await p.evaluate(async () => {
-      const fb = await import('/src/lib/freundebuch.svelte.ts');
-      fb.buch.personen = [{ id: 'aaaa', name: 'Paule', farbe: '#C6402B' }];
-      fb.buch.beitraege = [{
+    // Über den Prüfhaken `window.__buch`, nicht über einen Modulimport — Vite
+    // bedient dasselbe Modul unter mehreren URLs. Siehe `buchSchreiben()` in
+    // `browserlauf.mjs`.
+    await buchSchreiben(p, {
+      personen: [{ id: 'aaaa', name: 'Paule', farbe: '#C6402B' }],
+      beitraege: [{
         id: 'k1', text: 'Kartenprobe', datum: '2026-09-27', ortNr: null,
         ortName: 'Kuromon-Ichiba', ortLat: 34.6656, ortLng: 135.5061,
-        sticker: null, bildPfad: null, bildUrl: null, autorId: 'aaaa',
+        sticker: null, bildPfad: null, bildUrl: null,
+        bildPfade: [], bildUrls: [], vorlage: null, autorId: 'aaaa',
         erstellt: '2026-09-27T09:00:00Z',
-      }];
-      fb.buch.status = 'bereit';
+      }],
+      status: 'bereit',
     });
     await p.waitForTimeout(700);
   }],

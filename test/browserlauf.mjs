@@ -271,3 +271,42 @@ export async function planSchreiben(seite, teil, warten) {
   if (warten) await seite.waitForSelector(warten, { timeout: 15000 });
   await seite.waitForTimeout(400);
 }
+
+/**
+ * Setzt den Zustand des Freundebuchs über den Prüfhaken `window.__buch`.
+ *
+ * **Nicht** über `import('/src/lib/freundebuch.svelte.ts')`, und das ist keine
+ * Geschmacksfrage: Vite bedient dasselbe Modul unter mehreren URLs, und ein
+ * Import ohne das `?v=<hash>` der Insel ist eine zweite Instanz mit eigenem
+ * `$state`. Der Schreibvorgang landete dann in einem Zustand, den die Komponente
+ * nie liest — die Suite lief, eine Quelländerung an einer **anderen** Datei
+ * genügte, und sie fiel. Dieselbe Falle hat am 22.09.2026 drei Suiten gekippt
+ * (siehe `planSchreiben()` oben für den Plan-Teil).
+ *
+ * `__buch` hängt die Insel selbst auf, im Entwicklungsmodus (`freundebuch.svelte.ts`).
+ * Es ist also **die** Instanz, die die Komponente liest — es gibt keine zweite.
+ *
+ * `erwartet` ist die Quittung: Wie viele `.polaroid` müssen danach stehen? Ohne
+ * diese Zahl wäre ein nicht angekommener Zustand wieder ein Rätsel aus zehn
+ * Folgefehlern.
+ */
+export async function buchSchreiben(seite, teil, erwartet = null) {
+  const da = await seite.evaluate((neu) => {
+    const b = window.__buch;
+    if (!b) return false;
+    Object.assign(b, neu);
+    return true;
+  }, teil);
+  if (!da) {
+    throw new Error(
+      'window.__buch fehlt — läuft die Seite im Dev-Modus? (Der Haken hängt an import.meta.env.DEV.)',
+    );
+  }
+  await seite.waitForTimeout(600);
+  if (erwartet !== null) {
+    const stehen = await seite.locator('.strom .polaroid').count();
+    if (stehen !== erwartet) {
+      throw new Error(`${stehen} von ${erwartet} Beiträgen gerendert — Zustand nicht angekommen?`);
+    }
+  }
+}

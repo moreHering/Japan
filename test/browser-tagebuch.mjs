@@ -24,7 +24,7 @@
 
 import { chromium, devices } from 'playwright';
 
-import { BASIS, START } from './browserlauf.mjs';
+import { BASIS, START, buchSchreiben } from './browserlauf.mjs';
 
 let fehler = 0;
 const pruefe = (bedingung, text, zusatz = '') => {
@@ -111,19 +111,32 @@ pruefe(storeGeholt.length === 0, 'weder store.svelte noch sync.svelte werden gel
 // ================================================== 3) Inhalt: Zustand setzen ===
 
 console.log('\nMit Inhalt:');
-await seite.evaluate(async () => {
-  const fb = await import('/src/lib/freundebuch.svelte.ts');
-  fb.buch.personen = [
+/*
+ * Über den Prüfhaken `window.__buch` und **nicht** über
+ * `import('/src/lib/freundebuch.svelte.ts')`. Vite bedient dasselbe Modul unter
+ * mehreren URLs; ein Import ohne das `?v=<hash>` der Insel ist eine zweite
+ * Instanz mit eigenem `$state`, und der Zustand kommt nie in der Komponente an.
+ * Gemessen: Die Suite lief, eine Änderung an einer **anderen** Datei genügte, und
+ * sie fiel. Die ausführliche Begründung steht an `buchSchreiben()` in
+ * `browserlauf.mjs`.
+ */
+{
+  /** Ein 1×1-Pixel als Daten-URL — lädt ohne Netz und löst kein `onerror` aus. */
+  const PIXEL =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+  const PERSONEN = [
     { id: 'aaaa', name: 'Paule', farbe: '#C6402B' },
     { id: 'bbbb', name: 'Deggel', farbe: '#3E6B5E' },
     { id: 'cccc', name: 'Baldes', farbe: '#A67C33' },
   ];
-  fb.buch.steckbriefe = { bbbb: { essen: 'Okonomiyaki', ort: 'Kanazawa, der Garten' } };
+  const STECKBRIEFE = { bbbb: { essen: 'Okonomiyaki', ort: 'Kanazawa, der Garten' } };
   const b = (t) => ({
     ortNr: null, ortName: null, ortLat: null, ortLng: null,
-    sticker: null, bildPfad: null, bildUrl: null, ...t,
+    sticker: null, bildPfad: null, bildUrl: null,
+    bildPfade: [], bildUrls: [], vorlage: null, ...t,
   });
-  fb.buch.beitraege = [
+  const BEITRAEGE = [
     // Vor der Reise — muss in einen eigenen Eimer und darf nicht verschwinden.
     b({ id: 'v1', text: 'Koffer steht.', datum: '2026-09-20', autorId: 'aaaa',
         erstellt: '2026-09-20T10:00:00Z' }),
@@ -162,6 +175,22 @@ await seite.evaluate(async () => {
         datum: '2026-09-27',
         ortName: 'Kuromon<b>-</b>Ichiba', ortLat: 34.6656, ortLng: 135.5061,
         sticker: 'sushi', autorId: 'cccc', erstellt: '2026-09-27T11:00:00Z' }),
+    /*
+     * Eine Collage — damit die Vorlagen **auch auf der Gästeseite** geprüft sind.
+     *
+     * Beide Ansichten benutzen `Bildfeld.svelte`, aber sie bauen das `<article>`
+     * darum selbst. Eine Prüfung nur im Freundebuch hätte offengelassen, ob die
+     * Gästeseite die Vorlagenklasse überhaupt setzt — und dort lesen die Freunde.
+     *
+     * Die Bilder sind Daten-URLs: Jeder fremde Host ist hier gesperrt, eine echte
+     * Adresse löste `onerror` aus, und das markiert den Beitrag als „Bild lässt
+     * sich nicht laden". Die Prüfung hätte den Fehlerfall gemessen.
+     */
+    b({ id: 'c1', text: 'Vier Ecken von Dotonbori.', datum: '2026-09-27',
+        bildPfad: 'x/1.png', bildUrl: PIXEL,
+        bildPfade: ['x/1.png', 'x/2.png', 'x/3.png'],
+        bildUrls: [PIXEL, PIXEL, PIXEL], vorlage: 'collage',
+        autorId: 'aaaa', erstellt: '2026-09-28T19:00:00Z' }),
     // Nach der Reise — der zweite Rand-Eimer.
     b({ id: 'n1', text: 'Wieder da.', datum: '2026-10-20', autorId: 'aaaa',
         erstellt: '2026-10-20T08:00:00Z' }),
@@ -169,12 +198,53 @@ await seite.evaluate(async () => {
   // Der Statuswert heißt `bereit` (siehe `BuchStatus` in freundebuch.svelte.ts) —
   // ein falscher Wert lässt die Komponente im Ladezustand stehen und alle
   // Inhaltsprüfungen unten schlagen an, ohne dass etwas kaputt ist.
-  fb.buch.status = 'bereit';
-});
+  // Die `5` ist die Quittung: So viele Beiträge müssen danach stehen.
+  await buchSchreiben(
+    seite,
+    { personen: PERSONEN, steckbriefe: STECKBRIEFE, beitraege: BEITRAEGE, status: 'bereit' },
+    6,
+  );
+}
 await seite.waitForTimeout(700);
 
-pruefe((await seite.locator('.polaroid').count()) === 5, 'ein Polaroid je Beitrag',
+pruefe((await seite.locator('.polaroid').count()) === 6, 'ein Polaroid je Beitrag',
   `${await seite.locator('.polaroid').count()}`);
+
+/*
+ * **Die Vorlage wirkt auch hier — und die Seite bleibt unbedienbar.**
+ *
+ * Beide Ansichten benutzen `Bildfeld.svelte`, bauen das `<article>` darum aber
+ * selbst. Ohne diese Prüfung wäre offen, ob die Gästeseite die Vorlagenklasse
+ * überhaupt setzt; dort lesen die Freunde.
+ */
+{
+  const c = await seite.evaluate(() => {
+    const art = [...document.querySelectorAll('.strom .polaroid')].find((n) =>
+      (n.textContent ?? '').includes('Vier Ecken'),
+    );
+    if (!art) return null;
+    const bild = art.querySelector('.bilder img');
+    return {
+      klassen: art.className,
+      bilder: art.querySelectorAll('.bilder img').length,
+      verhaeltnis: bild ? getComputedStyle(bild).aspectRatio : null,
+      // Nichts Bedienbares in der gemeinsamen Komponente — sonst bricht das
+      // Versprechen dieser Seite an einer Stelle, an der niemand danach sucht.
+      bedienbar: art.querySelectorAll('input, button, form, select, textarea').length,
+    };
+  });
+  pruefe(c !== null, 'der Collagen-Beitrag steht auf der Gästeseite');
+  if (c) {
+    pruefe(c.klassen.includes('collage'), 'er trägt die Vorlagenklasse', c.klassen);
+    pruefe(c.bilder === 3, 'und zeigt seine drei Bilder', `${c.bilder}`);
+    pruefe(
+      c.verhaeltnis === '1 / 1',
+      'im Quadrat der Collage, nicht im 4:3 des Polaroids',
+      String(c.verhaeltnis),
+    );
+    pruefe(c.bedienbar === 0, 'und bringt nichts Bedienbares mit', `${c.bedienbar} Knoten`);
+  }
+}
 
 const koepfe = await seite.locator('.tagkopf').allInnerTexts();
 pruefe(koepfe.length === 4, 'vier Gruppen: vor der Reise, Tag 1, Tag 2, danach', `${koepfe.length}`);
@@ -203,7 +273,7 @@ const finde = (wort) => zahlen.find((t) => t.toLowerCase().includes(wort));
 pruefe(zahlen.some((t) => /\b20\b/.test(t)), '20 Reisetage', finde('tage'));
 pruefe(zahlen.some((t) => /\b19\b/.test(t)), '19 Nächte — nicht mit den 20 Tagen verwechselt', finde('nächte'));
 pruefe(zahlen.some((t) => /\b6\b/.test(t)), '6 Stationen');
-pruefe(zahlen.some((t) => /\b5\b/.test(t)), '5 Beiträge insgesamt');
+pruefe(zahlen.some((t) => /\b6\b/.test(t)), '6 Beiträge insgesamt');
 const jePerson = await seite.locator('.jeperson li').allInnerTexts();
 pruefe(jePerson.length === 3, 'alle drei Personen stehen da, auch ohne Beitrag',
   `${jePerson.length}`);
@@ -336,11 +406,9 @@ await buch.goto(`${BASIS}/freundebuch/`, { waitUntil: 'load' });
 await buch.waitForTimeout(900);
 // Ohne Supabase steht dort der Kasten „keine Verbindung" und kein LoginPanel.
 // Der Zustand lässt sich setzen — dieselbe Technik wie oben.
-await buch.evaluate(async () => {
-  const fb = await import('/src/lib/freundebuch.svelte.ts');
-  fb.buch.status = 'abgemeldet';
-});
-await buch.waitForTimeout(500);
+// Auch hier der Prüfhaken; ohne Quittung, weil dieser Zustand gerade **keine**
+// Beiträge zeigen soll.
+await buchSchreiben(buch, { status: 'abgemeldet' });
 const lp = buch.locator('.loginbox .zeile').first();
 if ((await lp.count()) === 0) {
   fehler += 1;

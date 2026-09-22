@@ -13,7 +13,7 @@
 
 import { chromium, devices } from 'playwright';
 
-import { BASIS, START } from './browserlauf.mjs';
+import { BASIS, buchSchreiben, START } from './browserlauf.mjs';
 
 let fehler = 0;
 const pruefe = (bedingung, text, zusatz = '') => {
@@ -65,18 +65,19 @@ await seite.evaluate(async () => {
 });
 await seite.waitForTimeout(400);
 
-await seite.evaluate(async () => {
-  const fb = await import('/src/lib/freundebuch.svelte.ts');
+/** Ein 1×1-Pixel als Daten-URL — lädt ohne Netz und löst kein `onerror` aus. */
+const PIXEL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-  fb.buch.personen = [
+const PERSONEN = [
     { id: 'aaaa', name: 'Paule', farbe: '#C6402B' },
     { id: 'bbbb', name: 'Deggel', farbe: '#3E6B5E' },
     { id: 'cccc', name: 'Baldes', farbe: '#A67C33' },
   ];
-  fb.buch.steckbriefe = {
+  const STECKBRIEFE = {
     bbbb: { essen: 'Okonomiyaki', ort: 'Kanazawa, der Garten' },
   };
-  fb.buch.beitraege = [
+  const BEITRAEGE = [
     {
       id: '11111111-1111-1111-1111-111111111111',
       text: 'Erster Abend in Osaka, viel zu viel gegessen.',
@@ -85,6 +86,9 @@ await seite.evaluate(async () => {
       sticker: 'ramen',
       bildPfad: null,
       bildUrl: null,
+      bildPfade: [],
+      bildUrls: [],
+      vorlage: null,
       autorId: 'aaaa',
       erstellt: '2026-09-26T20:00:00Z',
     },
@@ -96,13 +100,116 @@ await seite.evaluate(async () => {
       sticker: 'sakura',
       bildPfad: null,
       bildUrl: null,
+      bildPfade: [],
+      bildUrls: [],
+      vorlage: null,
       autorId: 'bbbb',
       erstellt: '2026-10-08T09:00:00Z',
     },
+    /*
+     * Drei Beiträge mit Bildern, je eine Vorlage.
+     *
+     * Die Bilder sind **Daten-URLs** und keine Adressen: In dieser Umgebung ist
+     * jeder fremde Host gesperrt, ein `<img>` mit echter URL würde `onerror`
+     * auslösen — und `onerror` ist im Tagebuch genau der Weg, auf dem ein Beitrag
+     * als „Bild lässt sich nicht laden" markiert wird. Die Prüfung hätte dann den
+     * Fehlerfall gemessen und ihn für den Normalfall gehalten.
+     */
+    {
+      id: '33333333-3333-3333-3333-333333333333',
+      text: 'Vier Ecken von Dotonbori.',
+      datum: '2026-09-27',
+      ortNr: null,
+      sticker: null,
+      bildPfad: 'x/1.png',
+      bildUrl: PIXEL,
+      bildPfade: ['x/1.png', 'x/2.png', 'x/3.png'],
+      bildUrls: [PIXEL, PIXEL, PIXEL],
+      vorlage: 'collage',
+      autorId: 'aaaa',
+      erstellt: '2026-09-27T20:00:00Z',
+    },
+    {
+      id: '44444444-4444-4444-4444-444444444444',
+      text: 'Die Bucht von Hakone.',
+      datum: '2026-10-09',
+      ortNr: null,
+      sticker: null,
+      bildPfad: 'x/4.png',
+      bildUrl: PIXEL,
+      bildPfade: ['x/4.png'],
+      bildUrls: [PIXEL],
+      vorlage: 'panorama',
+      autorId: 'aaaa',
+      erstellt: '2026-10-09T09:00:00Z',
+    },
+    {
+      id: '66666666-6666-6666-6666-666666666666',
+      text: 'Drei Gassen in Kyoto.',
+      datum: '2026-10-02',
+      ortNr: null,
+      sticker: null,
+      bildPfad: 'x/6.png',
+      bildUrl: PIXEL,
+      bildPfade: ['x/6.png', 'x/7.png'],
+      bildUrls: [PIXEL, PIXEL],
+      vorlage: 'streifen',
+      autorId: 'aaaa',
+      erstellt: '2026-10-02T09:00:00Z',
+    },
+    {
+      id: '77777777-7777-7777-7777-777777777777',
+      text: 'Der Turm, aufrecht.',
+      datum: '2026-10-11',
+      ortNr: null,
+      sticker: null,
+      bildPfad: 'x/8.png',
+      bildUrl: PIXEL,
+      bildPfade: ['x/8.png'],
+      bildUrls: [PIXEL],
+      vorlage: 'hochkant',
+      autorId: 'aaaa',
+      erstellt: '2026-10-11T09:00:00Z',
+    },
+    {
+      id: '55555555-5555-5555-5555-555555555555',
+      text: 'Ein Torii, hochkant.',
+      datum: '2026-10-10',
+      ortNr: null,
+      sticker: null,
+      bildPfad: 'x/5.png',
+      bildUrl: PIXEL,
+      bildPfade: ['x/5.png'],
+      bildUrls: [PIXEL],
+      // Kein `vorlage` — das ist der Zustand jedes Beitrags vor Migration 0009,
+      // und er muss wie ein Polaroid aussehen.
+      vorlage: null,
+      autorId: 'aaaa',
+      erstellt: '2026-10-10T09:00:00Z',
+    },
   ];
-  fb.buch.status = 'bereit';
-});
+
+/*
+ * Über `buchSchreiben()` und **nicht** über
+ * `import('/src/lib/freundebuch.svelte.ts')`. Gemessen: Der Import-Weg lief, dann
+ * habe ich eine Zeile in `vorlagen.ts` geändert — und er lief nicht mehr, weil
+ * Vite neu optimiert hatte und die Insel ihre Module seither unter `?v=<hash>`
+ * lädt. Zwei Instanzen, zwei Zustände. Die ausführliche Begründung steht an
+ * `buchSchreiben()` in `browserlauf.mjs`.
+ *
+ * Die `5` ist die Quittung: So viele Beiträge müssen danach stehen. Kommt der
+ * Zustand nicht an, bricht der Helfer mit einem Satz ab, der auf die Ursache
+ * zeigt — statt zehn Folgefehler zu erzeugen, die nach einem Fehler in der App
+ * aussehen.
+ */
+await buchSchreiben(
+  seite,
+  { personen: PERSONEN, steckbriefe: STECKBRIEFE, beitraege: BEITRAEGE, status: 'bereit' },
+  7,
+);
 await seite.waitForTimeout(600);
+
+
 
 pruefe((await seite.locator('.brief').count()) === 3, 'Drei Steckbriefe');
 pruefe(
@@ -131,11 +238,126 @@ pruefe(
   `kleinste ${Math.min(...schriftgroessen)} px`,
 );
 
-pruefe((await seite.locator('.polaroid').count()) === 2, 'Zwei Beiträge im Bilderstrom');
+pruefe((await seite.locator('.polaroid').count()) === 7, 'Sieben Beiträge im Bilderstrom');
 pruefe(
   (await seite.locator('.polaroid .klebe svg').count()) === 2,
-  'Jeder Beitrag trägt seinen Aufkleber',
+  'Jeder Beitrag mit Aufkleber trägt ihn',
 );
+
+// ============================================= Die fünf Layout-Vorlagen ===
+
+/*
+ * Gemessen wird die **Wirkung**, nicht die Klasse.
+ *
+ * Eine Zusicherung auf `class="collage"` wäre grün, sobald das Wort im Markup
+ * steht — auch wenn die Regel in `y2k.css` fehlt oder anders heißt. Deshalb
+ * `aspect-ratio` und `grid-template-columns` aus `getComputedStyle`: Das ist,
+ * was auf dem Schirm passiert.
+ */
+console.log('\nDie Layout-Vorlagen:');
+{
+  const form = (text) =>
+    seite.evaluate((t) => {
+      const art = [...document.querySelectorAll('.strom .polaroid')].find((n) =>
+        (n.textContent ?? '').includes(t),
+      );
+      if (!art) return null;
+      const bilder = art.querySelector('.bilder');
+      const bild = art.querySelector('.bilder img');
+      const s = bild ? getComputedStyle(bild) : null;
+      return {
+        klassen: art.className,
+        anzahl: art.querySelectorAll('.bilder img').length,
+        verhaeltnis: s ? s.aspectRatio : null,
+        spalten: bilder ? getComputedStyle(bilder).gridTemplateColumns : null,
+        spaltenImStrom: getComputedStyle(art).gridColumn,
+      };
+    }, text);
+
+  const collage = await form('Vier Ecken');
+  pruefe(collage !== null, 'der Collagen-Beitrag steht auf der Seite');
+  if (collage) {
+    pruefe(collage.anzahl === 3, 'er zeigt seine drei Bilder', `${collage.anzahl}`);
+    pruefe(
+      collage.verhaeltnis === '1 / 1',
+      'im Quadrat, nicht im 4:3 des Polaroids',
+      String(collage.verhaeltnis),
+    );
+    // Zwei Spalten — das ist das 2×2-Raster. Eine einzige hieße, die Regel
+    // greift nicht und die Bilder stünden untereinander.
+    pruefe(
+      collage.spalten !== null && collage.spalten.split(' ').length === 2,
+      'in zwei Spalten',
+      String(collage.spalten),
+    );
+  }
+
+  const panorama = await form('Bucht von Hakone');
+  pruefe(panorama !== null, 'der Panorama-Beitrag steht auf der Seite');
+  if (panorama) {
+    pruefe(
+      panorama.verhaeltnis === '16 / 9',
+      'das Panorama ist 16:9 breit',
+      String(panorama.verhaeltnis),
+    );
+    // `1 / -1` liest der Browser als „von der ersten bis zur letzten Linie" und
+    // gibt es als `1 / -1` oder als `span N` zurück — geprüft wird deshalb, dass
+    // es **nicht** der Vorgabewert `auto` ist.
+    pruefe(
+      panorama.spaltenImStrom !== 'auto',
+      'und nimmt die ganze Breite des Stroms',
+      String(panorama.spaltenImStrom),
+    );
+  }
+
+  const streifen = await form('Drei Gassen');
+  pruefe(streifen !== null, 'der Filmstreifen steht auf der Seite');
+  if (streifen) {
+    pruefe(streifen.anzahl === 2, 'er zeigt seine zwei Bilder', `${streifen.anzahl}`);
+    // Nebeneinander heißt: zwei Spalten. Untereinander wäre eine — und genau das
+    // passiert, wenn `grid-auto-flow: column` nicht greift.
+    pruefe(
+      streifen.spalten !== null && streifen.spalten.split(' ').length === 2,
+      'nebeneinander und nicht untereinander',
+      String(streifen.spalten),
+    );
+  }
+
+  const hochkant = await form('Turm, aufrecht');
+  pruefe(hochkant !== null, 'das Hochformat steht auf der Seite');
+  if (hochkant) {
+    pruefe(
+      hochkant.verhaeltnis === '3 / 4',
+      'es ist 3:4 hoch — genau das, was im Polaroid beschnitten würde',
+      String(hochkant.verhaeltnis),
+    );
+  }
+
+  /*
+   * **Der wichtigste Fall dieses Blocks.** `vorlage: null` ist der Zustand jedes
+   * Beitrags, der vor Migration 0009 entstanden ist — und das sind alle
+   * vorhandenen. Sie müssen aussehen wie vorher: 4:3, eine Spalte.
+   */
+  const alt = await form('Torii, hochkant');
+  pruefe(alt !== null, 'der Beitrag ohne Vorlage steht auf der Seite');
+  if (alt) {
+    pruefe(
+      alt.verhaeltnis === '4 / 3',
+      'ohne Vorlage bleibt es das Polaroid — 4:3 wie vor der Migration',
+      String(alt.verhaeltnis),
+    );
+    pruefe(
+      alt.klassen.includes('polaroid'),
+      'und die Klasse polaroid steht daran',
+      alt.klassen,
+    );
+    pruefe(
+      alt.spaltenImStrom === 'auto',
+      'es nimmt keine Sonderbreite im Strom',
+      String(alt.spaltenImStrom),
+    );
+  }
+}
 pruefe(
   (await seite.locator('.polaroid', { hasText: 'Osaka' }).locator('.weg').count()) === 1,
   'Der eigene Beitrag hat einen Löschknopf',
@@ -174,6 +396,67 @@ pruefe(
   (await seite.locator('.stickerknopf.on').count()) === 1,
   'Genau ein Aufkleber ist gewählt',
 );
+
+// -------------------------------------------------------- Die Vorlagenwahl ---
+
+/*
+ * Dasselbe Muster wie die Aufkleberwahl darüber, und aus demselben Grund
+ * geprüft: Ein Knopf unter 44 px wird auf einem Telefon nicht zuverlässig
+ * getroffen, und zwei aktive Knöpfe heißen, dass der Zustand nicht exklusiv ist.
+ */
+{
+  const knoepfe = seite.locator('.vorlageknopf');
+  const anzahl = await knoepfe.count();
+  pruefe(anzahl === 5, 'fünf Vorlagen stehen zur Wahl', String(anzahl));
+
+  const hoehen = await knoepfe.evaluateAll((ns) =>
+    ns.map((n) => Math.round(n.getBoundingClientRect().height)),
+  );
+  pruefe(
+    hoehen.length > 0 && hoehen.every((h) => h >= 44),
+    'jede ist mindestens 44 px hoch',
+    `kleinste ${Math.min(...hoehen)} px`,
+  );
+
+  const namen = await knoepfe.allInnerTexts();
+  pruefe(
+    /Polaroid/.test(namen.join(' ')) && /Collage/.test(namen.join(' ')),
+    'sie tragen ihre Namen',
+    namen.join(' · ').replace(/\s+/g, ' ').slice(0, 80),
+  );
+
+  // Polaroid ist die Vorgabe — der Zustand, in dem alle bestehenden Beiträge
+  // stehen. Eine andere Vorauswahl würde unbemerkt das Aussehen ändern.
+  // `.vorlageknopf.on` und nicht `knoepfe.locator('.on')`: Das Zweite sucht ein
+  // `.on` **innerhalb** eines Knopfes, und dort ist keines.
+  const vorher = await seite.locator('.vorlageknopf.on').count();
+  pruefe(vorher === 1, 'genau eine ist vorgewählt', String(vorher));
+  pruefe(
+    /Polaroid/.test(await seite.locator('.vorlageknopf.on').innerText()),
+    'und zwar Polaroid',
+    (await seite.locator('.vorlageknopf.on').innerText()).replace(/\s+/g, ' '),
+  );
+
+  await knoepfe.nth(4).tap();
+  await seite.waitForTimeout(250);
+  pruefe(
+    (await seite.locator('.vorlageknopf.on').count()) === 1,
+    'ein Tipp wechselt und lässt genau eine aktiv',
+  );
+  pruefe(
+    /Collage/.test(await seite.locator('.vorlageknopf.on').innerText()),
+    'nämlich die angetippte',
+    (await seite.locator('.vorlageknopf.on').innerText()).replace(/\s+/g, ' '),
+  );
+  // Ohne Bild und mit Collage gewählt: Der Hinweis muss da sein und sagen, dass
+  // es trotzdem geht — keine Sperre.
+  const hinweis = await seite.locator('.vorlagehinweis').count();
+  pruefe(hinweis >= 1, 'bei unpassender Bildzahl steht ein Hinweis, keine Sperre', `${hinweis}`);
+
+  // Zurück auf Polaroid, damit die folgenden Blöcke den Ausgangszustand sehen.
+  await knoepfe.nth(0).tap();
+  await seite.waitForTimeout(200);
+}
 
 // ---------------------------------------------------------------- Layout ---
 

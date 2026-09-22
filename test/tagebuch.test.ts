@@ -48,6 +48,14 @@ function beitrag(teil: Partial<Beitrag> = {}): Beitrag {
     sticker: null,
     bildPfad: null,
     bildUrl: null,
+    /*
+     * Die Felder aus Migration 0009. Leer als Vorgabe, weil dieser Prüfstand die
+     * Gruppierung und die Kartenmarken prüft und nicht die Bilder — ein Test, der
+     * hier Bilder setzt, tut es ausdrücklich.
+     */
+    bildPfade: [],
+    bildUrls: [],
+    vorlage: null,
     autorId: 'p1',
     // Über `Date.UTC` und nicht als Zeichenkette zusammengesetzt: Ein Zähler als
     // Minutenteil ergibt ab dem 60. Aufruf `08:60:00`, und das macht `Date.parse`

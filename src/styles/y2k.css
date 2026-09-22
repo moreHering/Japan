@@ -305,6 +305,98 @@
   padding: 10px;
 }
 
+/* ===================================================== Die fünf Vorlagen ====
+
+   Bis zum 22.09.2026 hatte jeder Beitrag ein Bild im Verhältnis 4:3. Für ein
+   Polaroid ist das richtig; ein Torii im Hochformat wurde darin oben und unten
+   abgeschnitten, eine Küstenlinie seitlich, und vier Bilder von einem Abend
+   waren vier Beiträge.
+
+   Die Vorlagenklasse sitzt am `<article>` (dem Rasterelement im `.strom`), nicht
+   am Bildbehälter: `grid-column` wirkt nur dort. Die Liste der Klassen ist
+   `VORLAGEN` in `src/lib/vorlagen.ts`, und `y2k-css.test.ts` prüft, dass es zu
+   **jeder** Kennung von dort eine Regel hier gibt — abgeleitet, nicht getippt.
+
+   `.polaroid` ohne weitere Klasse bleibt das Polaroid. Das ist der Zustand aller
+   bestehenden Beiträge (`vorlage IS NULL`), und er darf sich nicht ändern. */
+
+.y2k .bilder {
+  display: grid;
+  gap: 3px;
+}
+
+/* --- Ein Bild: nur das Verhältnis ändert sich --------------------------- */
+
+.y2k .hochkant img {
+  aspect-ratio: 3 / 4;
+}
+.y2k .hochkant .kein {
+  aspect-ratio: 3 / 4;
+}
+
+.y2k .panorama img {
+  aspect-ratio: 16 / 9;
+}
+.y2k .panorama .kein {
+  aspect-ratio: 16 / 9;
+}
+/* Über die ganze Breite des Stroms — auf breiten Schirmen eine Zugabe, auf 390 px
+   ist der Strom einspaltig und die Regel wirkungslos. Sie steht am Kind des
+   Stroms und nicht allgemein, damit ein Panorama außerhalb eines Rasters (etwa in
+   der Probekarte von /wache/) nichts Unerwartetes tut. */
+.y2k .strom > .panorama {
+  grid-column: 1 / -1;
+}
+
+/* --- Filmstreifen: nebeneinander, gleiche Höhe -------------------------- */
+
+/*
+   `grid-auto-flow: column` und nicht `flex`: Damit sind alle Spalten gleich
+   breit, ohne dass die Bilder ihre Breite vorgeben — bei gemischten
+   Seitenverhältnissen wäre ein Flexlayout sonst schief. `1fr` je Bild kommt aus
+   dem Fluss selbst.
+*/
+.y2k .streifen .bilder {
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
+.y2k .streifen img {
+  aspect-ratio: 2 / 3;
+  height: 100%;
+}
+.y2k .streifen .kein {
+  aspect-ratio: 2 / 1;
+}
+
+/* --- Collage: 2×2 ------------------------------------------------------- */
+
+.y2k .collage .bilder {
+  grid-template-columns: 1fr 1fr;
+}
+.y2k .collage img {
+  aspect-ratio: 1 / 1;
+}
+/*
+   Zwei Bilder füllen die erste Zeile, drei lassen das vierte Feld leer, vier
+   ergeben das Raster. Ein einzelnes Bild in einer Collage nimmt beide Spalten —
+   sonst stünde es als Quadrat neben einer leeren Hälfte, und das sieht nach einem
+   Fehler aus statt nach einer Entscheidung.
+*/
+.y2k .collage .bilder > img:only-child {
+  grid-column: span 2;
+  aspect-ratio: 4 / 3;
+}
+.y2k .collage .kein {
+  aspect-ratio: 1 / 1;
+}
+/* Auf breiten Schirmen darf die Collage zwei Spalten des Stroms nehmen — vier
+   Bilder in 230 px sind Briefmarken. */
+@media (min-width: 720px) {
+  .y2k .strom > .collage {
+    grid-column: span 2;
+  }
+}
+
 .y2k .klebe {
   position: absolute;
   top: -14px;

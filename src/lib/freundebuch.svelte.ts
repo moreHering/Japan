@@ -16,6 +16,7 @@
 import { getSupabase, supabaseConfigured } from './supabase';
 import { auth } from './auth.svelte';
 import { verkleinern } from './bild';
+import { BILDER_MAX, pfadeVon, VORGABE, type VorlageName } from './vorlagen';
 
 /** Die Fragen des Steckbriefs. Reihenfolge und Text stehen hier, nicht in der DB. */
 export const FRAGEN = [
@@ -48,11 +49,50 @@ export type Beitrag = {
   ortLat: number | null;
   ortLng: number | null;
   sticker: string | null;
+  /**
+   * Das **erste** Bild — und nur deshalb noch da.
+   *
+   * Seit Migration 0009 ist `bildPfade` die Wahrheit. `bildPfad` bleibt, weil
+   * `Wache.svelte` und ältere, zwischengespeicherte App-Fassungen es lesen; es
+   * trägt immer `bildPfade[0]` oder `null`.
+   */
   bildPfad: string | null;
   /** Für Gäste ein öffentlicher, sonst ein zeitlich begrenzter Link. */
   bildUrl: string | null;
+  /** Alle Bilder des Beitrags, in Anzeigereihenfolge. Leer bei Textbeiträgen. */
+  bildPfade: string[];
+  bildUrls: string[];
+  /**
+   * Das Layout: polaroid, hochkant, panorama, streifen, collage — oder `null`
+   * für die Vorgabe. Bewusst `string` und nicht `VorlageName`: In der Spalte
+   * steht freier Text, und ein unbekannter Wert von einem neueren Gerät darf den
+   * Beitrag nicht unlesbar machen. `vorlageVon()` fängt das ab.
+   */
+  vorlage: string | null;
   autorId: string;
   erstellt: string;
+};
+
+/**
+ * Eine Zeile, wie `guestbook_post` sie liefert.
+ *
+ * `bild_pfade` und `vorlage` sind optional, weil sie vor Migration 0009 gar
+ * nicht mitkommen — genau der Fall, den die Fähigkeitsprobe offenhält.
+ */
+type ZeileRoh = {
+  id: string;
+  text: string | null;
+  datum: string;
+  ort_nr: number | null;
+  ort_name: string | null;
+  ort_lat: number | null;
+  ort_lng: number | null;
+  sticker: string | null;
+  bild_pfad: string | null;
+  bild_pfade?: string[] | null;
+  vorlage?: string | null;
+  created_by: string;
+  created_at: string;
 };
 
 export type Person = { id: string; name: string; farbe: string };
@@ -71,7 +111,92 @@ export const buch = $state({
   letzteGroesse: null as { vorher: number; nachher: number } | null,
 });
 
+/*
+ * **Ein Prüfhaken, und nur im Entwicklungsmodus.**
+ *
+ * Die Browsersuiten setzen `buch` direkt, weil Supabase aus dieser Umgebung nicht
+ * erreichbar ist. Der naheliegende Weg dafür war
+ * `await import('/src/lib/freundebuch.svelte.ts')` in der Seite — und der ist
+ * unzuverlässig: Vite bedient dasselbe Modul unter mehreren URLs, und nach einer
+ * Neu-Optimierung tragen die Importe einer Insel ein `?v=<hash>`. Ein Import ohne
+ * diesen Anhang ist dann eine **zweite Instanz** mit eigenem `$state`, und der
+ * Schreibvorgang landet in einem Zustand, den die Komponente nie liest.
+ *
+ * Gemessen: Die Suite lief, ich änderte eine Zeile in `vorlagen.ts`, und sie fiel
+ * — ohne dass sich an ihr etwas geändert hatte. Am 22.09.2026 hat dieselbe Falle
+ * drei andere Suiten gekippt.
+ *
+ * Deshalb hängt die Insel ihre **eigene** Instanz hier auf. `import.meta.env.DEV`
+ * ist zur Bauzeit `false`, der Zweig fällt beim Bündeln weg; `test/dist.test.ts`
+ * prüft, dass `__buch` im ausgelieferten Stand nicht vorkommt. Ein Prüfhaken, der
+ * mitgeliefert wird, ist eine Hintertür.
+ */
+if (import.meta.env.DEV) {
+  (globalThis as unknown as { __buch?: typeof buch }).__buch = buch;
+}
+
 const BUCKET = 'freundebuch';
+
+/** Die Spalten, die `guestbook_post` seit 0001 hat — ohne die von 0009. */
+const SPALTEN_ALT =
+  'id, text, datum, ort_nr, ort_name, ort_lat, ort_lng, sticker, bild_pfad, created_by, created_at';
+/** Dieselben plus `bild_pfade` und `vorlage` aus Migration 0009. */
+const SPALTEN_NEU = `${SPALTEN_ALT}, bild_pfade, vorlage`;
+
+/**
+ * Kennt diese Datenbank die Spalten aus Migration 0009?
+ *
+ * `null` heißt „noch nicht geprüft". Die Probe ist **nötig und nicht
+ * vorsichtshalber**: `ladeFreundebuch()` selektiert namentlich, und eine Abfrage
+ * mit `bild_pfade` gegen eine Tabelle ohne diese Spalte antwortet mit 400. Der
+ * ausgelieferte Code wäre damit zwischen Deploy und eingespielter Migration
+ * **tot** — kein Bilderstrom, keine Steckbriefe, nur eine Fehlermeldung. Und
+ * diese Lücke ist keine Minute lang, sondern so lang, bis jemand am Rechner
+ * sitzt.
+ *
+ * Also: erst den vollen Select versuchen, bei „Spalte gibt es nicht" einmal auf
+ * den alten zurückfallen und das für die Sitzung merken.
+ */
+let reihenFaehig: boolean | null = null;
+
+/**
+ * Nur für den Prüfstand: die Fähigkeitsprobe vergessen.
+ *
+ * Im Betrieb ruft das niemand — dort ist genau richtig, dass die Antwort für die
+ * Sitzung stehen bleibt. In einer Prüfdatei liefen sonst alle Fälle gegen das
+ * Ergebnis des ersten, und „ohne Migration" wäre grün, weil „mit Migration"
+ * vorher gelaufen ist. Dasselbe Muster wie `zuruecksetzenFuerTest()` in
+ * `sync.svelte.ts`.
+ */
+export function spaltenprobeZuruecksetzenFuerTest() {
+  reihenFaehig = null;
+}
+
+/** Was die Oberfläche wissen muss: Sind Collagen überhaupt speicherbar? */
+export function mehrbildFaehig(): boolean {
+  // Vor der ersten Abfrage optimistisch: Die Wahl soll nicht flackern, und wer
+  // eine migrierte Datenbank hat — der Normalfall — sieht sofort alles.
+  return reihenFaehig !== false;
+}
+
+/**
+ * Erkennt die PostgREST-Antwort auf eine unbekannte Spalte.
+ *
+ * `42703` ist der Postgres-Code für „undefined column". Die Meldung wird
+ * mitgeprüft, weil PostgREST den Code je nach Fassung auch als `PGRST204`
+ * ausgibt — und weil ein Prüfstand (`test/mini-postgrest.ts`) nur die Meldung
+ * hat. Geprüft wird auf den **Spaltennamen**, damit ein anderer Spaltenfehler
+ * nicht stillschweigend die Reihenfunktion abschaltet.
+ */
+function fehltSpalte(e: unknown): boolean {
+  const o = (e ?? {}) as { code?: string; message?: string };
+  const msg = (o.message ?? '').toLowerCase();
+  const code = o.code ?? '';
+  return (
+    (code === '42703' || code === 'PGRST204' || msg.includes('spalte') || msg.includes('column')) &&
+    (msg.includes('bild_pfade') || msg.includes('vorlage'))
+  );
+}
 
 function deute(e: unknown, fuerGaeste = false): string {
   const o = (e ?? {}) as { code?: string; message?: string };
@@ -122,18 +247,35 @@ export async function ladeFreundebuch(opt: { oeffentlich?: boolean } = {}) {
   buch.status = 'lädt';
   buch.fehler = null;
   try {
-    const [personen, briefe, posts] = await Promise.all([
-      sb.from('profiles').select('id, name, farbe').order('angelegt_am'),
-      sb.from('guestbook_profile').select('user_id, feld, wert'),
+    /*
+     * Die Beiträge mit Fähigkeitsprobe: voller Select, und nur bei „Spalte gibt
+     * es nicht" einmal zurück auf den alten. Der zweite Versuch läuft **im
+     * selben Lauf**, damit die Seite nichts davon merkt.
+     */
+    const beitraegeHolen = (spalten: string) =>
       sb
         .from('guestbook_post')
-        .select(
-          'id, text, datum, ort_nr, ort_name, ort_lat, ort_lng, sticker, bild_pfad, created_by, created_at',
-        )
+        .select(spalten)
         .order('datum', { ascending: false })
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false });
+
+    const [personen, briefe, ersterVersuch] = await Promise.all([
+      sb.from('profiles').select('id, name, farbe').order('angelegt_am'),
+      sb.from('guestbook_profile').select('user_id, feld, wert'),
+      beitraegeHolen(reihenFaehig === false ? SPALTEN_ALT : SPALTEN_NEU),
     ]);
-    for (const r of [personen, briefe, posts]) if (r.error) throw r.error;
+    for (const r of [personen, briefe]) if (r.error) throw r.error;
+
+    let posts = ersterVersuch;
+    if (posts.error && reihenFaehig !== false && fehltSpalte(posts.error)) {
+      // Migration 0009 fehlt. Kein Fehler für die Nutzer — nur ein Bild je
+      // Beitrag, und `mehrbildFaehig()` sagt der Maske, dass Collagen aus sind.
+      reihenFaehig = false;
+      posts = await beitraegeHolen(SPALTEN_ALT);
+    } else if (!posts.error) {
+      reihenFaehig = reihenFaehig ?? true;
+    }
+    if (posts.error) throw posts.error;
 
     buch.personen = (personen.data ?? []).map((p) => ({
       id: p.id,
@@ -147,8 +289,20 @@ export async function ladeFreundebuch(opt: { oeffentlich?: boolean } = {}) {
     }
     buch.steckbriefe = briefeMap;
 
-    const roh = posts.data ?? [];
-    const pfade = roh.map((z) => z.bild_pfad).filter((p): p is string => Boolean(p));
+    /*
+     * `as unknown as` ist hier nicht Faulheit: Der Select ist zur Laufzeit eine
+     * von zwei Zeichenketten, und Supabase leitet seinen Rückgabetyp aus dem
+     * Literal ab. Bei einem veränderlichen Select gibt es keinen Typ, den es
+     * ableiten könnte — die Form der Zeilen prüft `pfadeVon()` und die
+     * Zuweisungen darunter.
+     */
+    const roh = (posts.data ?? []) as unknown as ZeileRoh[];
+    /*
+     * **Alle** Pfade aller Beiträge auf einmal. `createSignedUrls()` nimmt schon
+     * heute eine Liste, die Map bleibt wie sie war — an dieser Stelle ändert die
+     * Mehrbildfähigkeit also nichts außer der Länge der Liste.
+     */
+    const pfade = roh.flatMap((z) => pfadeVon(z));
     const links = new Map<string, string>();
 
     /*
@@ -179,20 +333,30 @@ export async function ladeFreundebuch(opt: { oeffentlich?: boolean } = {}) {
       }
     }
 
-    buch.beitraege = roh.map((z) => ({
-      id: z.id,
-      text: z.text ?? '',
-      datum: z.datum,
-      ortNr: z.ort_nr ?? null,
-      ortName: z.ort_name ?? null,
-      ortLat: z.ort_lat ?? null,
-      ortLng: z.ort_lng ?? null,
-      sticker: z.sticker ?? null,
-      bildPfad: z.bild_pfad ?? null,
-      bildUrl: z.bild_pfad ? (links.get(z.bild_pfad) ?? null) : null,
-      autorId: z.created_by,
-      erstellt: z.created_at,
-    }));
+    buch.beitraege = roh.map((z) => {
+      const eigenePfade = pfadeVon(z);
+      // Nur Pfade, zu denen es wirklich einen Link gibt. Ein fehlender Link
+      // würde sonst als leeres `src` im Markup landen, und das lädt in manchen
+      // Browsern die Seite selbst noch einmal.
+      const urls = eigenePfade.map((pf) => links.get(pf)).filter((u): u is string => Boolean(u));
+      return {
+        id: z.id,
+        text: z.text ?? '',
+        datum: z.datum,
+        ortNr: z.ort_nr ?? null,
+        ortName: z.ort_name ?? null,
+        ortLat: z.ort_lat ?? null,
+        ortLng: z.ort_lng ?? null,
+        sticker: z.sticker ?? null,
+        bildPfad: eigenePfade[0] ?? null,
+        bildUrl: urls[0] ?? null,
+        bildPfade: eigenePfade,
+        bildUrls: urls,
+        vorlage: z.vorlage ?? null,
+        autorId: z.created_by,
+        erstellt: z.created_at,
+      };
+    });
 
     buch.status = 'bereit';
   } catch (e) {
@@ -226,7 +390,15 @@ export async function steckbriefSetzen(feld: string, wert: string) {
 // ------------------------------------------------------------ Bilderstrom ---
 
 export type NeuerBeitrag = {
-  datei: File | null;
+  /**
+   * Die gewählten Bilder, in Anzeigereihenfolge — höchstens `BILDER_MAX`.
+   *
+   * War bis zum 22.09.2026 eine einzelne `datei`. Eine Liste, weil Filmstreifen
+   * und Collage mehrere zeigen; die Reihenfolge ist die Auswahlreihenfolge.
+   */
+  dateien: File[];
+  /** Das Layout. `vorlage: 'polaroid'` ist die Vorgabe der Maske. */
+  vorlage: VorlageName;
   text: string;
   datum: string;
   ortNr: number | null;
@@ -248,27 +420,48 @@ export async function beitragAnlegen(neu: NeuerBeitrag) {
   if (!sb || !auth.userId) return false;
 
   buch.fehler = null;
-  try {
-    let pfad: string | null = null;
+  /*
+   * Die schon hochgeladenen Pfade, für die Rücknahme.
+   *
+   * **Außerhalb** von `try` deklariert, damit der `catch`-Zweig sie sieht. Bis
+   * zum 22.09.2026 wurde nur die *eine* Datei entfernt, und nur wenn der Insert
+   * scheiterte. Bei vier Bildern reicht das nicht: Bricht der dritte Upload ab,
+   * lief gar kein Insert — die zwei ersten Dateien lägen für immer im Bucket und
+   * zählten gegen die 5 GB, ohne dass eine Zeile auf sie zeigt. Niemand würde sie
+   * je finden.
+   */
+  const hochgeladen: string[] = [];
+  /*
+   * Ohne Migration 0009 nimmt die Tabelle nur ein Bild. Hier abgeschnitten und
+   * nicht in der Maske: Die Maske sagt es vorher (`mehrbildFaehig()`), aber wenn
+   * die Probe erst bei diesem Laden fehlschlägt, darf der Beitrag nicht mitten im
+   * Absenden an einem 400 scheitern — nachdem die Bilder schon oben sind.
+   */
+  const dateien = (neu.dateien ?? []).slice(0, mehrbildFaehig() ? BILDER_MAX : 1);
 
-    if (neu.datei) {
-      buch.upload = 5;
-      const klein = await verkleinern(neu.datei);
-      buch.upload = 35;
+  try {
+    for (const [i, datei] of dateien.entries()) {
+      // Der Fortschritt je Datei statt in vier festen Stufen. Behauptet bleibt er
+      // — gemessen wird der Upload von Supabase aus nicht —, aber er behauptet
+      // etwas, das bei vier Bildern nicht bei 35 % stehen bleibt.
+      buch.upload = Math.round((i / dateien.length) * 90);
+      const klein = await verkleinern(datei);
+      // Die Ersparnis des **letzten** Bildes, wie bisher die des einzigen.
       buch.letzteGroesse = { vorher: klein.vorher, nachher: klein.blob.size };
 
       // Pfad mit Benutzerkennung voran: So bleibt nachvollziehbar, wem die
       // Datei gehört, auch wenn die Zeile dazu einmal fehlen sollte.
-      pfad = `${auth.userId}/${crypto.randomUUID()}.jpg`;
+      const pfad = `${auth.userId}/${crypto.randomUUID()}.jpg`;
       const { error } = await sb.storage.from(BUCKET).upload(pfad, klein.blob, {
         contentType: 'image/jpeg',
         upsert: false,
       });
       if (error) throw error;
-      buch.upload = 80;
+      hochgeladen.push(pfad);
+      buch.upload = Math.round(((i + 1) / dateien.length) * 90);
     }
 
-    const { error } = await sb.from('guestbook_post').insert({
+    const zeile: Record<string, unknown> = {
       text: neu.text,
       datum: neu.datum,
       ort_nr: neu.ortNr,
@@ -276,20 +469,33 @@ export async function beitragAnlegen(neu: NeuerBeitrag) {
       ort_lat: neu.ortLat ?? null,
       ort_lng: neu.ortLng ?? null,
       sticker: neu.sticker,
-      bild_pfad: pfad,
+      // Weiter das **erste** Bild, auch mit Migration: Ein Telefon mit altem,
+      // zwischengespeichertem JavaScript liest nur diese Spalte.
+      bild_pfad: hochgeladen[0] ?? null,
       created_by: auth.userId,
-    });
-    if (error) {
-      // Die Zeile kam nicht durch — dann darf das Bild nicht als Waise
-      // liegenbleiben.
-      if (pfad) await sb.storage.from(BUCKET).remove([pfad]);
-      throw error;
+    };
+    // Die neuen Spalten nur, wenn es sie gibt — sonst antwortet PostgREST mit
+    // 400, und zwar erst hier, nach dem Upload.
+    if (mehrbildFaehig()) {
+      zeile.bild_pfade = hochgeladen;
+      zeile.vorlage = neu.vorlage ?? VORGABE;
     }
+
+    const { error } = await sb.from('guestbook_post').insert(zeile);
+    if (error) throw error;
 
     buch.upload = 100;
     await ladeFreundebuch();
     return true;
   } catch (e) {
+    // Alles, was schon oben liegt, wieder weg — egal, woran es gescheitert ist.
+    if (hochgeladen.length) {
+      try {
+        await sb.storage.from(BUCKET).remove(hochgeladen);
+      } catch {
+        /* Dann bleiben Waisen. Der Fehler unten ist der wichtigere. */
+      }
+    }
     buch.fehler = deute(e);
     return false;
   } finally {
@@ -316,10 +522,12 @@ export async function beitragLoeschen(id: string) {
   if (!sb) return false;
   buch.fehler = null;
 
-  const pfad = buch.beitraege.find((b) => b.id === id)?.bildPfad ?? null;
+  // Alle Bilder des Beitrags, nicht nur das erste — sonst bleiben bei einer
+  // Collage drei Dateien liegen, auf die nichts mehr zeigt.
+  const pfade = buch.beitraege.find((b) => b.id === id)?.bildPfade ?? [];
 
-  if (pfad) {
-    const { error } = await sb.storage.from(BUCKET).remove([pfad]);
+  if (pfade.length) {
+    const { error } = await sb.storage.from(BUCKET).remove(pfade);
     if (error) {
       buch.fehler = deute(error);
       return false;
@@ -337,6 +545,27 @@ export async function beitragLoeschen(id: string) {
 
   buch.beitraege = buch.beitraege.filter((b) => b.id !== id);
   return true;
+}
+
+/**
+ * Die Bilder eines Beitrags, wie `Bildfeld` sie braucht.
+ *
+ * Steht hier und nicht zweimal in den Komponenten: Der Alternativtext ist die
+ * einzige Stelle, an der etwas zu entscheiden war, und eine Entscheidung gehört
+ * nicht zweimal aufgeschrieben.
+ *
+ * Bei einem Bild ist der Beitragstext der Alternativtext — das ist die beste
+ * Beschreibung, die es gibt. Bei mehreren kommt die Position dazu: „Abend in
+ * Dotonbori — Bild 2 von 4" sagt einem Screenreader, dass hier eine Reihe steht
+ * und wo man darin ist. Ohne die Position hörte man denselben Satz viermal.
+ */
+export function bilderVon(b: Beitrag): { url: string; alt: string }[] {
+  const grund = b.text || 'Foto';
+  const n = b.bildUrls.length;
+  return b.bildUrls.map((url, i) => ({
+    url,
+    alt: n > 1 ? `${grund} — Bild ${i + 1} von ${n}` : grund,
+  }));
 }
 
 /** Name und Farbe zu einer Kennung — für die Zuordnung der Beiträge. */

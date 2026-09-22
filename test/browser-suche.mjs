@@ -15,7 +15,7 @@ import { chromium, devices } from 'playwright';
 // Der Dev-Server, nicht die Vorschau: Nur dort lassen sich die Module über
 // `import('/src/lib/…')` erreichen, und ohne Anmeldung ist das Formular des
 // Freundebuchs gar nicht im DOM — dann prüfte dieser Test dort nichts.
-import { BASIS, START } from './browserlauf.mjs';
+import { BASIS, START, buchSchreiben } from './browserlauf.mjs';
 const iPhone = devices['iPhone 13'];
 
 let fehler = 0;
@@ -146,11 +146,14 @@ await seite.waitForTimeout(500);
 // Ohne `status = 'bereit'` bleibt der Bilderstrom verborgen — die Komponente
 // wartet dann noch auf die Verbindung, die es hier nicht gibt. Nach dem
 // Anmelden setzen, nicht davor: Der Ladeversuch überschreibt es sonst wieder.
-await seite.evaluate(async () => {
-  const fb = await import('/src/lib/freundebuch.svelte.ts');
-  fb.buch.personen = [{ id: 'aaaa', name: 'Paule', farbe: '#C6402B' }];
-  fb.buch.beitraege = [];
-  fb.buch.status = 'bereit';
+// Über den Prüfhaken `window.__buch` und nicht über einen Modulimport: Vite
+// bedient dasselbe Modul unter mehreren URLs, und ein Import ohne das `?v=<hash>`
+// der Insel ist eine zweite Instanz mit eigenem `$state`. Siehe `buchSchreiben()`
+// in `browserlauf.mjs`.
+await buchSchreiben(seite, {
+  personen: [{ id: 'aaaa', name: 'Paule', farbe: '#C6402B' }],
+  beitraege: [],
+  status: 'bereit',
 });
 await seite.waitForTimeout(500);
 

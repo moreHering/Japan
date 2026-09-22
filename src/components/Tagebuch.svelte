@@ -24,9 +24,12 @@
   import { onMount } from 'svelte';
   import Sticker, { type StickerName } from './Sticker.svelte';
   import MapView from './MapView.svelte';
+  import Bildfeld from './Bildfeld.svelte';
+  import { vorlagenklasse } from '../lib/vorlagen';
   import '../styles/y2k.css';
   import {
     buch,
+    bilderVon,
     ladeFreundebuch,
     person,
     FRAGEN,
@@ -268,8 +271,8 @@
                 {@const wer = person(b.autorId)}
                 {@const ort = ortstext(b)}
                 <article
-                  class="polaroid"
-                  class:nurtext={!b.bildUrl || kaputt.has(b.id)}
+                  class={vorlagenklasse(b.vorlage)}
+                  class:nurtext={!b.bildUrls.length || kaputt.has(b.id)}
                   style={`--k:${wer.farbe}; --kipp:${kippung(b.id)}`}
                 >
                   {#if b.sticker}
@@ -278,15 +281,19 @@
                     </span>
                   {/if}
 
-                  {#if b.bildUrl && !kaputt.has(b.id)}
-                    <img
-                      src={b.bildUrl}
-                      alt={b.text || 'Foto'}
-                      loading="lazy"
-                      decoding="async"
-                      onerror={() => bildKaputt(b.id)}
+                  <!--
+                    Dieselbe Komponente wie im Freundebuch. Sie enthält bewusst
+                    kein `button` und kein `input` — die Zusicherung dieser Seite,
+                    nichts Bedienbares zu tragen, bleibt damit heil.
+                  -->
+                  {#if !kaputt.has(b.id)}
+                    <Bildfeld
+                      vorlage={b.vorlage}
+                      bilder={bilderVon(b)}
+                      erwartet={b.bildPfade.length}
+                      onFehler={() => bildKaputt(b.id)}
                     />
-                  {:else if b.bildPfad}
+                  {:else}
                     <div class="kein">Bild lässt sich gerade nicht laden</div>
                   {/if}
 

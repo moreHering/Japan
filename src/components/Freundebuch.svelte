@@ -24,6 +24,7 @@
   import '../styles/y2k.css';
   import Sticker, { STICKER, type StickerName } from './Sticker.svelte';
   import LoginPanel from './LoginPanel.svelte';
+  import Bildfeld from './Bildfeld.svelte';
   import { auth, initAuth } from '../lib/auth.svelte';
   import {
     buch,
@@ -32,8 +33,19 @@
     steckbriefSetzen,
     beitragAnlegen,
     beitragLoeschen,
+    bilderVon,
+    mehrbildFaehig,
     person,
   } from '../lib/freundebuch.svelte';
+  import {
+    BILDER_MAX,
+    hinweis,
+    VORGABE,
+    VORLAGEN,
+    vorlagenklasse,
+    vorlageVon,
+    type VorlageName,
+  } from '../lib/vorlagen';
   import { places, plainText } from '../lib/places';
   import { plan } from '../lib/store.svelte';
   import { formatFull, trip } from '../lib/trip';
@@ -48,9 +60,28 @@
   let neuDatum = $state(new Date().toISOString().slice(0, 10));
   let neuOrt = $state<string>('');
   let neuSticker = $state<StickerName>('sushi');
-  let neuDatei = $state<File | null>(null);
-  let vorschau = $state<string | null>(null);
+  /**
+   * Die gewählten Bilder und ihre Vorschau-URLs, im Gleichschritt.
+   *
+   * War bis zum 22.09.2026 eine einzelne Datei mit einer Vorschau. Zwei parallele
+   * Listen und kein Array von Paaren, weil `neuDateien` unverändert an
+   * `beitragAnlegen()` durchgeht und die URLs eine reine Anzeigesache sind, die
+   * am Ende widerrufen werden muss.
+   */
+  let neuDateien = $state<File[]>([]);
+  let vorschauen = $state<string[]>([]);
+  let neuVorlage = $state<VorlageName>(VORGABE);
   let formOffen = $state(false);
+
+  /*
+   * Ohne Migration 0009 nimmt die Tabelle nur ein Bild. Dann stehen nur die drei
+   * Ein-Bild-Vorlagen zur Wahl — und es steht dabei, warum. Eine Collage
+   * anzubieten, die beim Absenden scheitert, wäre die schlechtere Hälfte von
+   * beidem.
+   */
+  let mehrbild = $derived(mehrbildFaehig());
+  let waehlbar = $derived(mehrbild ? VORLAGEN : VORLAGEN.filter((v) => v.max === 1));
+  let bildHinweis = $derived(hinweis(vorlageVon(neuVorlage), neuDateien.length));
 
   onMount(() => {
     initAuth();
@@ -107,24 +138,46 @@
 
   let meinBrief = $derived(auth.userId ? (buch.steckbriefe[auth.userId] ?? {}) : {});
 
+  /**
+   * Gewählte Bilder **anhängen**, nicht ersetzen.
+   *
+   * Anhängen ist der Punkt: Die Galerie liefert mehrere auf einmal, die Kamera
+   * eines — wer erst zwei aus der Galerie nimmt und dann eines aufnimmt, will
+   * drei haben und nicht eines. Über `BILDER_MAX` hinaus wird abgeschnitten, und
+   * der Hinweis darunter sagt es.
+   */
   async function dateiGewaehlt(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
-    const f = input.files?.[0] ?? null;
-    if (!f) return; // Abbruch im Dateidialog darf die Auswahl nicht löschen
-    if (vorschau) URL.revokeObjectURL(vorschau);
-    neuDatei = f;
-    vorschau = URL.createObjectURL(f);
+    const neue = [...(input.files ?? [])];
+    if (!neue.length) return; // Abbruch im Dateidialog darf die Auswahl nicht löschen
+    const grenze = mehrbild ? BILDER_MAX : 1;
+    const zusammen = [...neuDateien, ...neue].slice(0, grenze);
+    // Die Vorschauen neu aufbauen und die alten widerrufen — sonst sammeln sich
+    // Blob-URLs, die der Browser bis zum Neuladen hält.
+    for (const u of vorschauen) URL.revokeObjectURL(u);
+    neuDateien = zusammen;
+    vorschauen = zusammen.map((f) => URL.createObjectURL(f));
+    // Das Feld leeren, sonst löst dieselbe Datei kein zweites `change` aus.
+    input.value = '';
+  }
+
+  /** Ein einzelnes Bild aus der Auswahl nehmen. */
+  function bildWeg(i: number) {
+    const u = vorschauen[i];
+    if (u) URL.revokeObjectURL(u);
+    neuDateien = neuDateien.filter((_, j) => j !== i);
+    vorschauen = vorschauen.filter((_, j) => j !== i);
   }
 
   /**
-   * Bild wieder wegnehmen, ohne den halb geschriebenen Text zu verlieren.
-   * Die beiden Eingabefelder müssen dabei geleert werden: Sonst löst dieselbe
+   * Alle Bilder wegnehmen, ohne den halb geschriebenen Text zu verlieren.
+   * Die Eingabefelder müssen dabei geleert werden: Sonst löst dieselbe
    * Datei danach kein `change` mehr aus und lässt sich nicht erneut wählen.
    */
   function bildVerwerfen() {
-    if (vorschau) URL.revokeObjectURL(vorschau);
-    vorschau = null;
-    neuDatei = null;
+    for (const u of vorschauen) URL.revokeObjectURL(u);
+    vorschauen = [];
+    neuDateien = [];
     for (const el of document.querySelectorAll<HTMLInputElement>('.bildwahl input[type=file]')) {
       el.value = '';
     }
@@ -132,14 +185,15 @@
 
   async function absenden(e: Event) {
     e.preventDefault();
-    if (!neuDatei && !neuText.trim()) return;
+    if (!neuDateien.length && !neuText.trim()) return;
 
     // Ort samt Koordinate mitschreiben, nicht nur die Nummer: Die öffentliche
     // Tagebuchansicht kann `places_custom` nicht lesen — dort stehen die
     // Unterkünfte —, und selbst angelegte Orte werden unterwegs am häufigsten
     // getaggt. `gewaehlterOrt` ist hier ohnehin schon aufgelöst.
     const ok = await beitragAnlegen({
-      datei: neuDatei,
+      dateien: neuDateien,
+      vorlage: neuVorlage,
       text: neuText.trim(),
       datum: neuDatum,
       ortNr: neuOrt ? Number(neuOrt) : null,
@@ -153,9 +207,10 @@
     neuText = '';
     neuOrt = '';
     ortSuche = '';
-    neuDatei = null;
-    if (vorschau) URL.revokeObjectURL(vorschau);
-    vorschau = null;
+    for (const u of vorschauen) URL.revokeObjectURL(u);
+    neuDateien = [];
+    vorschauen = [];
+    neuVorlage = VORGABE;
     formOffen = false;
   }
 
@@ -289,8 +344,12 @@
             Hersteller nur eins. Also beide Wege ausschreiben.
           -->
           <div class="bildwahl">
+            <!--
+              `multiple` nur an der Galerie. Die Kamera nimmt eines auf und hängt
+              es an — zwei getrennte Felder, weil `capture` die Galerie aussperrt.
+            -->
             <label class="datei">
-              <input type="file" accept="image/*" onchange={dateiGewaehlt} />
+              <input type="file" accept="image/*" multiple={mehrbild} onchange={dateiGewaehlt} />
               <span>🖼️ Aus den Aufnahmen</span>
             </label>
             <label class="datei">
@@ -299,17 +358,65 @@
             </label>
           </div>
 
-          {#if vorschau}
-            <div class="vorschaurahmen">
-              <img class="vorschau" src={vorschau} alt="Vorschau" />
-              <button type="button" class="bildweg" onclick={bildVerwerfen} title="Bild wieder wegnehmen"
-                >✕ Bild weg</button
-              >
+          {#if vorschauen.length}
+            <!--
+              Eine Reihe mit einem ✕ je Bild. Kein Ziehen und Fallenlassen: Auf
+              einem Telefon ist das Fummelei, und wer umsortieren will, nimmt
+              heraus und wählt neu. Die Reihenfolge ist die Auswahlreihenfolge.
+            -->
+            <div class="vorschaureihe">
+              {#each vorschauen as u, i (u)}
+                <div class="vorschaurahmen">
+                  <img class="vorschau" src={u} alt={`Vorschau ${i + 1}`} />
+                  <button
+                    type="button"
+                    class="bildweg"
+                    onclick={() => bildWeg(i)}
+                    title="dieses Bild wieder wegnehmen">✕</button
+                  >
+                </div>
+              {/each}
             </div>
-            {#if neuDatei}
-              <p class="mini">{neuDatei.name} · {groesse(neuDatei.size)}</p>
-            {/if}
+            <p class="mini">
+              {neuDateien.length}
+              {neuDateien.length === 1 ? 'Bild' : 'Bilder'} ·
+              {groesse(neuDateien.reduce((s, f) => s + f.size, 0))}
+              {#if neuDateien.length > 1}
+                <button type="button" class="alleweg" onclick={bildVerwerfen}>alle weg</button>
+              {/if}
+            </p>
           {/if}
+
+          <!--
+            Die Vorlagenwahl, nach dem Muster der Aufkleberwahl darunter: ein Knopf
+            je Vorlage, genau einer aktiv, jeder mit dem Daumen zu treffen.
+          -->
+          <fieldset class="vorlagewahl">
+            <legend class="mini">Layout</legend>
+            <div class="vorlagereihe">
+              {#each waehlbar as v (v.id)}
+                <button
+                  type="button"
+                  class="vorlageknopf"
+                  class:on={neuVorlage === v.id}
+                  onclick={() => (neuVorlage = v.id)}
+                  title={v.was}
+                >
+                  <span class="vzeichen">{v.zeichen}</span>
+                  <span class="vname">{v.name}</span>
+                </button>
+              {/each}
+            </div>
+            {#if bildHinweis}
+              <p class="mini vorlagehinweis">{bildHinweis}</p>
+            {/if}
+            {#if !mehrbild}
+              <p class="mini vorlagehinweis">
+                Filmstreifen und Collage fehlen noch: Die Datenbank kennt erst ein Bild je Beitrag
+                (Migration 0009 ist nicht eingespielt).
+              </p>
+            {/if}
+          </fieldset>
 
           <textarea bind:value={neuText} rows="2" placeholder="Was war da los?" maxlength="500"
           ></textarea>
@@ -414,19 +521,22 @@
         {#each buch.beitraege as b (b.id)}
           {@const wer = person(b.autorId)}
           <article
-            class="polaroid"
-            class:nurtext={!b.bildPfad}
+            class={vorlagenklasse(b.vorlage)}
+            class:nurtext={!b.bildPfade.length}
             style={`--k:${wer.farbe}; --kipp:${kippung(b.id)}deg`}
           >
             {#if b.sticker}
               <span class="klebe"><Sticker name={b.sticker as StickerName} size={38} /></span>
             {/if}
 
-            {#if b.bildUrl}
-              <img src={b.bildUrl} alt={b.text || 'Foto'} loading="lazy" />
-            {:else if b.bildPfad}
-              <div class="kein">Bild lässt sich gerade nicht laden</div>
-            {/if}
+            <!--
+              Die Bilder samt Vorlage macht `Bildfeld` — dieselbe Komponente wie
+              in der Gästeansicht. Vorher stand hier ein `<img>` mit einer
+              `{:else if}`-Zweigstelle, und in `Tagebuch.svelte` ein zweites,
+              leicht anderes. Fünf Vorlagen zweimal zu pflegen ist die
+              Fehlerquelle, die sich sicher realisiert.
+            -->
+            <Bildfeld vorlage={b.vorlage} bilder={bilderVon(b)} erwartet={b.bildPfade.length} />
 
             <div class="unten">
               {#if b.text}<p>{b.text}</p>{/if}
@@ -743,6 +853,90 @@
     display: flex;
     flex-direction: column;
     gap: 5px;
+  }
+
+  /* ------------------------------------------------ Bildvorschau und Vorlage */
+
+  /*
+   * Die Vorschauen liegen in einer Reihe, die bei Bedarf umbricht — bei vier
+   * Bildern auf 390 px sind es zwei Zeilen à zwei. Kein Querscrollen: Eine
+   * waagerecht scrollende Auswahl verbirgt, was man gewählt hat, und genau das
+   * will man vor dem Absenden sehen.
+   */
+  .vorschaureihe {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 6px;
+  }
+  /* In der Reihe sind die Vorschauen kleiner als eine einzelne war (260 px) —
+     sonst füllt die Auswahl den halben Schirm, bevor man etwas geschrieben hat. */
+  .vorschaureihe .vorschau {
+    max-height: 150px;
+  }
+  /* Ein ✕ je Bild, und trotzdem 44 px: In der Reihe ist der Knopf nur so groß
+     wie das Zeichen, deshalb hier eine feste Fläche statt Innenabstand. */
+  .vorschaureihe .bildweg {
+    min-width: 44px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+  }
+  .alleweg {
+    background: none;
+    border: none;
+    color: var(--pink);
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+    padding: 0 4px;
+    /* Kein 44 px: Das ist ein Nebenweg neben den ✕ je Bild, und ein zweiter
+       großer Knopf daneben würde die Reihe erdrücken. Wer ihn verfehlt, tippt die
+       ✕ einzeln — es geht nichts verloren. */
+  }
+
+  .vorlagewahl {
+    border: none;
+    padding: 0;
+    margin: 0;
+  }
+  .vorlagereihe {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  /*
+   * Dasselbe Maß wie die Aufkleberknöpfe darunter — beides ist eine Wahl aus
+   * wenigen Möglichkeiten, und zwei verschiedene Knopfgrößen im selben Formular
+   * sehen nach Versehen aus.
+   */
+  .vorlageknopf {
+    background: #fff;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 4px 8px;
+    cursor: pointer;
+    min-height: 44px;
+    display: grid;
+    place-items: center;
+    gap: 1px;
+    font: inherit;
+  }
+  .vorlageknopf .vzeichen {
+    font-size: 1.05rem;
+    line-height: 1;
+    color: var(--tinte);
+  }
+  .vorlageknopf .vname {
+    font-size: 0.62rem;
+    letter-spacing: 0.02em;
+  }
+  .vorlageknopf.on {
+    border-color: var(--pink);
+    background: #ffe9f4;
+    box-shadow: 0 0 0 2px var(--sonne);
+  }
+  .vorlagehinweis {
+    margin: 4px 0 0;
   }
 
   .stickerreihe {

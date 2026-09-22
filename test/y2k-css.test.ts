@@ -17,6 +17,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
+import { VORGABE, VORLAGEN } from '../src/lib/vorlagen';
+
 /**
  * Über das Dateisystem und nicht als `?raw`-Import: Vitest behandelt CSS eigens und
  * liefert für `.css?raw` einen Leerstring — der Test wäre grün, ohne etwas geprüft
@@ -24,6 +26,7 @@ import { readFileSync } from 'node:fs';
  */
 const y2k = readFileSync('src/styles/y2k.css', 'utf8');
 const komponente = readFileSync('src/components/Freundebuch.svelte', 'utf8');
+const bildfeld = readFileSync('src/components/Bildfeld.svelte', 'utf8');
 
 type Regel = {
   /** Selektorzeile, wie sie in der Datei steht, Leerraum zusammengezogen. */
@@ -314,6 +317,61 @@ describe('Freundebuch.svelte nach dem Herauslösen', () => {
     expect(VERSCHOBEN.length).toBeGreaterThan(40);
     for (const erwartet of ['.y2k .polaroid', '.y2k .kopf', '.y2k .strom', '.y2k .laufband']) {
       expect(VERSCHOBEN, `${erwartet} fehlt in y2k.css`).toContain(erwartet);
+    }
+  });
+});
+
+/** Der Markupteil einer Svelte-Datei — alles hinter dem letzten `</script>`. */
+const markupVon = (quelle: string) => quelle.slice(quelle.lastIndexOf('</script>'));
+
+describe('Bildfeld.svelte — die gemeinsame Darstellung', () => {
+  /*
+   * Die Komponente, die beide Ansichten für die Bilder benutzen. Drei
+   * Zusicherungen, und jede verteidigt eine Entscheidung, die man sonst
+   * versehentlich zurücknimmt.
+   */
+
+  it('bringt keinen eigenen Stilblock mit', () => {
+    /*
+     * Ihre Regeln stehen in `y2k.css`. Ein `<style>` hier wäre eine zweite
+     * Quelle für dieselbe Regel, und welche gewinnt, hinge an der Reihenfolge
+     * der Stylesheets. Die Prüfung darüber (`führt die verschobenen Regeln nicht
+     * doppelt`) sieht nur `Freundebuch.svelte` — eine Doppelung hier wäre ihr
+     * entgangen.
+     *
+     * Geprüft wird das **Markup** und nicht die ganze Datei: Der Kopfkommentar der
+     * Komponente erklärt, warum sie keinen Stilblock hat, und nennt dabei das Wort.
+     * Eine Prüfung, die daran anschlägt, verbietet das Erklären.
+     */
+    expect(markupVon(bildfeld)).not.toContain('<style');
+  });
+
+  it('enthält nichts Bedienbares', () => {
+    /*
+     * Die Gästeansicht verspricht, kein `input`, `form` oder `button` zu tragen
+     * (`browser-tagebuch.mjs` zählt genau diese Knoten). Sie benutzt diese
+     * Komponente — also darf hier keines davon stehen. Sonst bricht das
+     * Versprechen an einer Stelle, an der niemand danach sucht.
+     */
+    for (const tag of ['<input', '<form', '<button', '<select', '<textarea']) {
+      expect(markupVon(bildfeld), `${tag} steht in Bildfeld.svelte`).not.toContain(tag);
+    }
+  });
+
+  it('hat für jede Vorlage eine Regel in y2k.css', () => {
+    /*
+     * **Abgeleitet aus `VORLAGEN`, nicht getippt.** Eine sechste Vorlage in
+     * `src/lib/vorlagen.ts` ohne Regel hier bekäme sonst still die Polaroid-Form:
+     * Die Maske zeigte einen Knopf, der Beitrag speicherte eine Kennung, und
+     * aussehen würde er wie jeder andere. Niemand sucht den Fehler im CSS.
+     *
+     * `polaroid` ist ausgenommen und das ist der Punkt seiner Existenz: Es **ist**
+     * die Regel `.y2k .polaroid`, die es schon gibt, und braucht keine eigene.
+     */
+    const selektoren = VERSCHOBEN.join(' ');
+    for (const v of VORLAGEN) {
+      if (v.id === VORGABE) continue;
+      expect(selektoren, `keine Regel für .${v.id} in y2k.css`).toContain(`.${v.id}`);
     }
   });
 });

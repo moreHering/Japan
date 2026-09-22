@@ -120,11 +120,21 @@ Löschknopf.
 und trägt weiter das erste Bild, weil ein Telefon mit zwischengespeichertem altem
 JavaScript nur diese Spalte liest.
 
-Der Code wird per Push ausgeliefert, das SQL spielt ein Mensch im Dashboard ein —
-**dazwischen liegt eine Lücke**, und sie dauert nicht Minuten, sondern bis jemand
-am Rechner sitzt. `ladeFreundebuch()` selektiert namentlich; ein `bild_pfade` in
-der Liste hätte gegen die alte Tabelle 400 ergeben, und das Freundebuch wäre bis
-dahin **tot** gewesen — kein Bilderstrom, keine Steckbriefe.
+Eingespielt wird die Migration **automatisch**: `.github/workflows/migrate.yml`
+läuft bei jedem Push auf `main` und `claude/**`, wenn sich unter
+`supabase/migrations/` etwas geändert hat, und hat die Zugangsdaten als Secret.
+Für 0009 ist das um 14:17 passiert (`ALTER TABLE`, `COMMENT`, `ALTER TABLE`,
+`COMMENT`, `UPDATE 0` — null Zeilen, weil noch kein Beitrag ein Bild hatte). Das
+Dashboard braucht es nur, wenn dieser Lauf scheitert.
+
+**Die Fähigkeitsprobe bleibt trotzdem nötig**, und der Grund ist die
+Reihenfolge: Migration und Deploy starten **gleichzeitig** und sind zwei
+getrennte Läufe. Bei 0009 war die Datenbank 5 Minuten vor der Seite fertig — das
+war Glück, keine Zusicherung. Kippt die Migration (Secret abgelaufen, Projekt
+angehalten, Netz), geht der Deploy trotzdem hinaus. `ladeFreundebuch()` selektiert
+namentlich; ein `bild_pfade` gegen die alte Tabelle ergibt 400, und das
+Freundebuch wäre dann **tot** — kein Bilderstrom, keine Steckbriefe, bis jemand
+am Rechner sitzt.
 
 Deshalb eine Fähigkeitsprobe: voller Select, bei „Spalte gibt es nicht" (`42703`)
 einmal zurück auf die alte Liste, Ergebnis für die Sitzung gemerkt. Ist sie

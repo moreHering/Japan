@@ -638,8 +638,8 @@ export function plannedCount(): number {
 /**
  * Nächste vorläufige Nummer: negativ, absteigend.
  *
- * Positive Nummern gehören der Datenbanksequenz (ab 165) und dem gedruckten
- * Reiseband (1–164). Eine negative kann mit keiner von beiden kollidieren und
+ * Positive Nummern gehören der Datenbanksequenz (ab 1001, seit 0010) und dem
+ * Reiseband (1–1000). Eine negative kann mit keiner von beiden kollidieren und
  * ist auf den ersten Blick als „noch nicht endgültig" erkennbar.
  */
 function naechsteVorlaeufigeNr(): number {

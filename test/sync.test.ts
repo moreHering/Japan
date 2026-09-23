@@ -474,9 +474,9 @@ describe('Eigene Orte', () => {
 
     await abgleichen();
 
-    // 165 ist der Start der Sequenz: 1–164 gehören dem gedruckten Reiseband.
-    expect(ablage.tabellen.places_custom[0].nr).toBe(165);
-    expect(plan.customPlaces[0].nr).toBe(165);
+    // 1001 ist der Start der Sequenz: 1–1000 gehören dem Reiseband (0010).
+    expect(ablage.tabellen.places_custom[0].nr).toBe(1001);
+    expect(plan.customPlaces[0].nr).toBe(1001);
     expect(plan.customPlaces[0].vorlaeufig).toBe(false);
     expect(vorlaeufigeOrte()).toHaveLength(0);
   });
@@ -487,7 +487,7 @@ describe('Eigene Orte', () => {
     ortAnlegen({ ...HOSHINO, name: 'Ninja Café Asakusa' }, WER);
     await abgleichen();
 
-    expect(plan.customPlaces.map((p) => p.nr)).toEqual([165, 166]);
+    expect(plan.customPlaces.map((p) => p.nr)).toEqual([1001, 1002]);
   });
 
   it('zieht die neue Nummer in Tagesplan und Häkchen nach', async () => {
@@ -499,12 +499,12 @@ describe('Eigene Orte', () => {
 
     await abgleichen();
 
-    expect(plan.customPlaces[0].nr).toBe(165);
-    expect(plan.days['2026-10-12'].placeNrs).toEqual([165]);
-    expect(plan.done).toEqual([165]);
+    expect(plan.customPlaces[0].nr).toBe(1001);
+    expect(plan.days['2026-10-12'].placeNrs).toEqual([1001]);
+    expect(plan.done).toEqual([1001]);
     // Und in der Ablage steht die echte Nummer, keine vorläufige.
-    expect(ablage.tabellen.plan_days.map((z) => z.place_nr)).toEqual([165]);
-    expect(ablage.tabellen.plan_flags.map((z) => z.schluessel)).toEqual(['165']);
+    expect(ablage.tabellen.plan_days.map((z) => z.place_nr)).toEqual([1001]);
+    expect(ablage.tabellen.plan_flags.map((z) => z.schluessel)).toEqual(['1001']);
   });
 
   it('legt den Ort vor dem Tag an, der ihn enthält', async () => {
@@ -529,18 +529,18 @@ describe('Eigene Orte', () => {
 
     verbinde();
     await abgleichen();
-    expect(plan.customPlaces[0].nr).toBe(165);
+    expect(plan.customPlaces[0].nr).toBe(1001);
   });
 
   it('ändert einen Ort ohne neue Nummer', async () => {
     ortAnlegen(HOSHINO, WER);
     await abgleichen();
-    ortAendern(165, { name: 'Hoshino Coffee (Shinjuku)' });
+    ortAendern(1001, { name: 'Hoshino Coffee (Shinjuku)' });
     await abgleichen();
 
     expect(ablage.tabellen.places_custom).toHaveLength(1);
     expect(ablage.tabellen.places_custom[0]).toMatchObject({
-      nr: 165,
+      nr: 1001,
       name: 'Hoshino Coffee (Shinjuku)',
     });
   });
@@ -548,11 +548,11 @@ describe('Eigene Orte', () => {
   it('löscht einen Ort samt seiner Spuren im Plan', async () => {
     ortAnlegen(HOSHINO, WER);
     await abgleichen();
-    addToDay('2026-10-12', 165);
-    toggleDone(165);
+    addToDay('2026-10-12', 1001);
+    toggleDone(1001);
     await abgleichen();
 
-    ortLoeschen(165);
+    ortLoeschen(1001);
     await abgleichen();
 
     expect(ablage.tabellen.places_custom).toHaveLength(0);

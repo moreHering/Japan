@@ -43,14 +43,16 @@ begin
     fehler := fehler || format('%s Tabelle(n) ohne RLS', n);
   end if;
 
-  -- ------------------------------------------------ Nummernvergabe ab 165
+  -- ----------------------------------------------- Nummernvergabe ab 1001
+  -- 1–1000 gehören dem Reiseband (0010_nummernraum.sql): 165–181 sind seit dem
+  -- Mietwagen-Plan die Orte der Straße.
   insert into public.places_custom (name, kategorie, station, lat, lng)
   values ('Testort A', 'kultur', 'osaka', 34.7, 135.5) returning nr into nr1;
   insert into public.places_custom (name, kategorie, station, lat, lng)
   values ('Testort B', 'essen', 'kyoto', 35.0, 135.7) returning nr into nr2;
 
-  if nr1 <> 165 then
-    fehler := fehler || format('erste eigene Nummer ist %s, erwartet 165', nr1);
+  if nr1 <> 1001 then
+    fehler := fehler || format('erste eigene Nummer ist %s, erwartet 1001', nr1);
   end if;
   if nr2 <> nr1 + 1 then
     fehler := fehler || format('zweite Nummer ist %s, erwartet %s', nr2, nr1 + 1);

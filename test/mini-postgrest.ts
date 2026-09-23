@@ -110,9 +110,9 @@ const SPALTEN_0009 = ['bild_pfade', 'vorlage'];
 
 /**
  * Spalten mit Standardwert — sie dürfen beim Einfügen fehlen.
- * `places_custom.nr` kommt aus einer Sequenz ab 165, wie in der Migration.
+ * `places_custom.nr` kommt aus einer Sequenz ab 1001, wie nach Migration 0010.
  */
-const SEQUENZ_START = 165;
+const SEQUENZ_START = 1001;
 
 export class Ablage {
   tabellen: Record<string, Zeile[]> = {

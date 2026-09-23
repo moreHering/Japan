@@ -38,7 +38,7 @@ fi
 # Setzt die Datenbank auf den Stand „frisch migriert".
 #
 # Muss vor **jeder** Gegenprobe laufen, und das ist kein Luxus: schema-test.sql
-# prüft als Erstes, dass die Nummernsequenz bei 165 beginnt. Ein zweiter Lauf auf
+# prüft als Erstes, dass die Nummernsequenz bei 1001 beginnt. Ein zweiter Lauf auf
 # derselben Datenbank scheitert deshalb immer an dieser Prüfung — eine Gegenprobe,
 # die bloß den Rückgabewert ansieht, hätte also aus dem falschen Grund bestanden
 # und die Löcher nie geprüft. (Genau so lief die RLS-Gegenprobe vorher.)

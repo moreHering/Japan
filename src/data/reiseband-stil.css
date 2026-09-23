@@ -600,3 +600,53 @@ font-weight:700;font-size:.85rem;text-decoration:none}
 .bandtext a.app-orte .ao-text small{ color: #AEB7C6; }
 .bandtext a.app-orte .ao-go{ color: var(--kin-soft); }
 @media print{.bandtext .m-nav, .bandtext .m-top{ display: none; }}
+@media (max-width: 767px){.bandtext details.kap{
+    margin: 0 calc(-1 * var(--seitenrand, 16px));
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+.bandtext details.kap > .dbody{ padding: 0 var(--seitenrand, 16px) 18px; }
+.bandtext details.teil{
+    background: none;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    margin: 6px 0 0;
+  }
+.bandtext details.teil[open]{ background: none; }
+.bandtext details.teil > summary{ padding-left: 0; padding-right: 0; }
+.bandtext details.teil > .dbody{ padding: 0 0 12px; }
+.bandtext .wrap{ padding-left: 0; padding-right: 0; }
+.bandtext .anchor, .bandtext .box{ padding-left: 14px; padding-right: 14px; }
+.bandtext .back{ padding: 28px var(--seitenrand, 16px); }
+.bandtext .legend-grid, .bandtext .whygrid, .bandtext .src{ grid-template-columns: 1fr; }
+.bandtext .badge, .bandtext .meta .badge, .bandtext .st-facts .badge{ white-space: normal; }
+.bandtext .st-facts, .bandtext .meta{ flex-wrap: wrap; }
+.bandtext .vocab dl{ display: block; }
+.bandtext .vocab dt{ white-space: normal; margin-top: 10px; }
+.bandtext .vocab dd{ margin: 2px 0 0; }
+.bandtext .transition{ display: block; }
+.bandtext .transition .arr{ display: inline-block; margin: 0 0 6px; }
+.bandtext .st-head{ display: block; }
+.bandtext .st-head .st-no{ display: none; }
+.bandtext .st-title h2, .bandtext .st-head h2{ font-size: 1.6rem; line-height: 1.15; overflow-wrap: anywhere; }
+.bandtext .box.wisdom{ padding-right: 14px; }
+.bandtext .box.wisdom .box-h{ padding-right: 56px; }
+.bandtext .lead .drop{ font-size: 2.6rem; }
+.bandtext .mlbl, .bandtext .praxis span, .bandtext .a-tag, .bandtext .thread, .bandtext .fun, .bandtext .badge, .bandtext .seek b, .bandtext .box-h, .bandtext .cat, .bandtext .pin, .bandtext h3.sect, .bandtext details.kap .yr, .bandtext details.kap .tag, .bandtext details.kap .route, .bandtext details.kap .rd, .bandtext details.kap .eyebrow, .bandtext details.kap .ao-go, .bandtext details.kap small, .bandtext .back small, .bandtext .back .ce, .bandtext .anchor .a-head .a-tag, .bandtext .opt .o-name small, .bandtext .tryin .name small{
+    font-size: 12.5px;
+  }}
+.bandtext .back .bknote b{ font-size: 12.5px; }
+.bandtext .back .bknote a.tel{
+  display: inline-block;
+  padding: 6px 10px;
+  margin: 2px 0;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+.bandtext .back .mrow{ background: transparent; border-color: #33415C; }
+.bandtext .back .mlbl{ color: #C4BBA6; }

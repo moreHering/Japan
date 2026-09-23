@@ -596,12 +596,14 @@ await seite.waitForTimeout(500);
  * nicht nur die früheren Tabellen — sonst wäre die nächste zu breite Auszeichnung
  * wieder unsichtbar, bis jemand auf dem Telefon danebenwischt.
  *
- * Der Deckel und die klebende Leiste sind ausgenommen: Sie stehen mit
- * `margin: 0 -16px` absichtlich randlos und sind damit breiter als ihr Elter.
+ * Gemessen wird gegen die **Fensterbreite**, nicht gegen `.bandtext`: Deckel,
+ * Leiste und seit dem 23.09. auch die Kapitel stehen auf dem Telefon absichtlich
+ * randlos (`margin: 0 -16px`), sonst blieben dem Text 151 px. Breiter als das
+ * Fenster darf trotzdem nichts sein.
  */
 const zuBreit = await seite.evaluate(() => {
   const bt = document.querySelector('.bandtext');
-  const breite = bt.clientWidth;
+  const breite = document.documentElement.clientWidth;
   return [...bt.querySelectorAll('*')]
     .filter((e) => !e.closest('.m-cover') && !e.closest('.m-nav'))
     .filter((e) => e.scrollWidth > breite + 1)
@@ -610,7 +612,7 @@ const zuBreit = await seite.evaluate(() => {
 });
 pruefe(
   zuBreit.length === 0,
-  `kein Element im Band ist breiter als seine ${await seite.evaluate(() => document.querySelector('.bandtext').clientWidth)} px`,
+  `kein Element im Band ist breiter als das Fenster (${await seite.evaluate(() => document.documentElement.clientWidth)} px)`,
   zuBreit.join(' | '),
 );
 
@@ -820,6 +822,114 @@ pruefe(
  * Was von den Prüfungen bleibt, steht in `browser-orte.mjs`: die drei Knöpfe und
  * wohin sie führen.
  */
+
+// ============================================= Lesbarkeit auf dem Telefon ===
+/*
+ * Gemessen am 23.09. vor dem Umbau: 151 px Textspalte in Osaka, 185 px im Prolog,
+ * rund 500 Stellen mit Schrift unter 12 px, die Rückseite hell auf Weiß. Diese
+ * Prüfungen halten die Mobil-Schicht (`MOBIL_CSS` in `build-data.mjs`) fest.
+ *
+ * Gegenprobe: `MOBIL_CSS` aus dem `scope()`-Aufruf nehmen, neu erzeugen → die
+ * Breiten-, Schrift- und Kontrastprüfungen fallen.
+ */
+console.log('\nLesbarkeit auf dem Telefon:');
+await seite.setViewportSize({ width: 390, height: 844 });
+await seite.goto(`${BASIS}/`, { waitUntil: 'load' });
+await seite.waitForTimeout(500);
+const lesbar = await seite.evaluate(() => {
+  document.querySelectorAll('.bandtext details').forEach((d) => (d.open = true));
+  const min = (sel) => {
+    const w = [...document.querySelectorAll(sel)]
+      .map((e) => e.getBoundingClientRect().width)
+      .filter((x) => x > 0);
+    return w.length ? Math.round(Math.min(...w)) : 0;
+  };
+  // Überstand: kein Element ragt über sein Kapitel hinaus — auch nicht versteckt
+  // hinter `overflow: hidden`, was die Prüfung auf Querscrollen nicht sieht.
+  const raus = [];
+  for (const kap of document.querySelectorAll('.bandtext details.kap')) {
+    const k = kap.getBoundingClientRect();
+    for (const el of kap.querySelectorAll('*')) {
+      const r = el.getBoundingClientRect();
+      if (r.width && (r.right > k.right + 1 || r.left < k.left - 1)) raus.push(`${kap.id} ${el.className}`);
+    }
+  }
+  let kleinste = 99;
+  let wo = '';
+  for (const el of document.querySelectorAll('.bandtext *')) {
+    if (el.closest('.bigk, .kanji-mark, .m-cover, .m-nav')) continue;
+    if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+    const f = parseFloat(cs.fontSize);
+    if (f < kleinste) {
+      kleinste = f;
+      wo = `${el.tagName}.${el.className}`;
+    }
+  }
+  const lum = (c) => {
+    const [r, g, b] = c.match(/\d+(\.\d+)?/g).slice(0, 3).map((v) => {
+      const x = Number(v) / 255;
+      return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  // Kontrast der Rückseite: Text gegen den Grund, den er wirklich hat — die Karte
+  // ist jetzt durchsichtig, also zählt der dunkle Grund von `.back`.
+  const wert = document.querySelector('.back .mval');
+  const back = document.querySelector('.back');
+  let kontrast = 0;
+  if (wert && back) {
+    let grund = getComputedStyle(wert.closest('.mrow')).backgroundColor;
+    if (/rgba\(.*, 0\)|transparent/.test(grund)) grund = getComputedStyle(back).backgroundColor;
+    const a = lum(getComputedStyle(wert).color);
+    const b = lum(grund);
+    kontrast = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  }
+  return {
+    lead: min('#osaka p.lead'),
+    anker: min('.bandtext .anchor p'),
+    prolog: min('#prolog .dbody > .wrap > p, #prolog p.lead'),
+    raus: raus.slice(0, 5),
+    kleinste,
+    wo,
+    kontrast: Math.round(kontrast * 10) / 10,
+    tel: [...document.querySelectorAll('.bandtext a[href^="tel:"]')].map((a) => a.getAttribute('href')),
+  };
+});
+pruefe(lesbar.lead >= 340, 'der Fließtext eines Stationskapitels ist mindestens 340 px breit', `${lesbar.lead} px (vorher 151)`);
+pruefe(lesbar.prolog >= 340, 'auch im Prolog', `${lesbar.prolog} px (vorher 185)`);
+pruefe(lesbar.anker >= 320, 'in einem Ankerkasten mindestens 320 px', `${lesbar.anker} px`);
+pruefe(lesbar.raus.length === 0, 'nichts ragt über sein Kapitel hinaus', lesbar.raus.join(' | '));
+pruefe(lesbar.kleinste >= 12, 'keine Schrift unter 12 px', `${lesbar.kleinste} px bei ${lesbar.wo}`);
+pruefe(lesbar.kontrast >= 4.5, 'die Rückseite ist lesbar (Kontrast ≥ 4,5)', `${lesbar.kontrast} : 1`);
+pruefe(
+  JSON.stringify(lesbar.tel) === JSON.stringify(['tel:110', 'tel:119', 'tel:+81-50-3816-2787']),
+  'die drei Notrufnummern sind antippbar, die Hotline in internationaler Form',
+  lesbar.tel.join(', '),
+);
+
+console.log('\nImmer nur ein Kapitel offen:');
+await seite.goto(`${BASIS}/`, { waitUntil: 'load' });
+await seite.waitForTimeout(400);
+await seite.locator('details.kap#osaka > summary').click();
+await seite.waitForTimeout(300);
+await seite.locator('details.kap#kyoto > summary').click();
+await seite.waitForTimeout(400);
+const offen = await seite.evaluate(() =>
+  [...document.querySelectorAll('.bandtext details.kap')].filter((d) => d.open).map((d) => d.id),
+);
+pruefe(JSON.stringify(offen) === '["kyoto"]', 'nach Osaka und Kyoto ist nur Kyoto offen', offen.join(', '));
+const kopf = await seite.evaluate(() => {
+  const r = document.querySelector('details.kap#kyoto').getBoundingClientRect();
+  const nav = document.querySelector('.m-nav').getBoundingClientRect();
+  return { top: Math.round(r.top), nav: Math.round(nav.bottom) };
+});
+pruefe(
+  kopf.top >= kopf.nav - 2 && kopf.top < 400,
+  'das geöffnete Kapitel steht oben, direkt unter der Leiste',
+  `Kopf bei ${kopf.top} px, Leiste endet bei ${kopf.nav} px`,
+);
 
 // ---------------------------------------------------------------- Aufräumen ---
 

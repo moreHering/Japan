@@ -739,6 +739,20 @@ function writeGuide() {
 
   html = rewriteIntro(html);
 
+  // Die Notrufnummern der Rückseite zum Antippen. Im Druck sind es Zahlen, auf
+  // dem Telefon muss man sie sonst abtippen — mit zitternden Fingern. Die
+  // Hotline in internationaler Form: So wählt sie jedes Telefon, auch eines
+  // mit deutscher SIM im japanischen Netz.
+  const NOTRUF = [
+    ['<b class="i">110</b>', '<a class="i tel" href="tel:110">110</a>'],
+    ['<b class="i">119</b>', '<a class="i tel" href="tel:119">119</a>'],
+    ['<b class="i">050-3816-2787</b>', '<a class="i tel" href="tel:+81-50-3816-2787">050-3816-2787</a>'],
+  ];
+  for (const [alt, neu] of NOTRUF) {
+    if (html.split(alt).length !== 2) fail(`Notrufnummer nicht genau einmal gefunden: ${alt}`);
+    html = html.replace(alt, neu);
+  }
+
   const injected = `<style>
 .app-back{position:fixed;top:14px;right:14px;z-index:99;font-family:"Zen Kaku Gothic New",sans-serif;
 font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;background:#16233CEE;color:#EFE7D6;
@@ -1068,7 +1082,11 @@ function akkordeon(inhalt, kapitelDaten, stationen) {
 
       const koerper = st ? teileKapitel(inneres, id, st.name) : inneres.trim();
       const offen = n === 1 ? ' open' : '';
-      return `<details class="kap" id="${id}"${offen}><summary>${kopf}</summary><div class="dbody">${koerper}</div></details>`;
+      // `name="kap"`: Kapitel schließen einander. Offen gebliebene Kapitel ließen
+      // die Seite bei jedem Tipp wachsen (gemessen: 8.400 → 10.400 px nach zwei
+      // Sprüngen), und der nächste Sprung landete irgendwo. Safari ab 17.2,
+      // Chrome ab 120; ältere Browser öffnen einfach mehrere, wie bisher.
+      return `<details class="kap" name="kap" id="${id}"${offen}><summary>${kopf}</summary><div class="dbody">${koerper}</div></details>`;
     },
   );
 
@@ -1638,11 +1656,99 @@ function tabellenZuKarten(inhalt) {
   });
 }
 
+/**
+ * Die Mobil-Schicht des Bandes — **zuletzt** angehängt, damit sie gewinnt.
+ *
+ * Gemessen am 23.09. bei 390 px: In einem Stationskapitel blieben dem Text
+ * **151 px**, im Prolog 185 px — rund 20 Zeichen je Zeile. Die Ursache war keine
+ * einzelne Regel, sondern eine Kette: Seitenrand, Kapitelrahmen, `.dbody` 15 px,
+ * `.wrap` 26 px aus dem Druckdokument, dann derselbe Satz noch einmal für den
+ * Teilabschnitt und noch einmal für einen Ankerkasten. Jede Stufe für sich
+ * vernünftig, zusammen ein Streifen.
+ *
+ * Die Antwort ist deshalb auch keine Einzelregel, sondern: **nur eine Ebene hat
+ * Innenabstand.** Das Kapitel läuft randlos über die Breite (nur Linien oben und
+ * unten, wie eine Liste), `.wrap` verliert seinen Druckrand, der Teilabschnitt
+ * ist eine Überschrift mit Linie statt eines zweiten Kastens. Danach hat der
+ * Fließtext rund 358 px, ein Kasten darin etwa 328.
+ *
+ * Dazu die Stellen, an denen Druck-Bausteine in der schmalen Spalte kaputtgehen:
+ * Raster mit Mindestspalten von 210–250 px werden einspaltig, Plaketten dürfen
+ * umbrechen (global steht `white-space: nowrap`, `tokens.css`), die Vokabelliste
+ * und der Übergang stehen untereinander, das Siegel verdeckt keine Überschrift.
+ * Und keine Schrift unter 12,5 px — gemessen waren es rund 500 Stellen.
+ *
+ * Alles unter 768 px: Am Rechner bleibt das Band, wie es war.
+ */
+const MOBIL_CSS = `
+@media (max-width: 767px) {
+  details.kap {
+    margin: 0 calc(-1 * var(--seitenrand, 16px));
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+  details.kap > .dbody { padding: 0 var(--seitenrand, 16px) 18px; }
+  details.teil {
+    background: none;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    margin: 6px 0 0;
+  }
+  details.teil[open] { background: none; }
+  details.teil > summary { padding-left: 0; padding-right: 0; }
+  details.teil > .dbody { padding: 0 0 12px; }
+  .wrap { padding-left: 0; padding-right: 0; }
+  .anchor, .box { padding-left: 14px; padding-right: 14px; }
+  .back { padding: 28px var(--seitenrand, 16px); }
+
+  .legend-grid, .whygrid, .src { grid-template-columns: 1fr; }
+  .badge, .meta .badge, .st-facts .badge { white-space: normal; }
+  .st-facts, .meta { flex-wrap: wrap; }
+  .vocab dl { display: block; }
+  .vocab dt { white-space: normal; margin-top: 10px; }
+  .vocab dd { margin: 2px 0 0; }
+  .transition { display: block; }
+  .transition .arr { display: inline-block; margin: 0 0 6px; }
+  .st-head { display: block; }
+  .st-head .st-no { display: none; }
+  .st-title h2, .st-head h2 { font-size: 1.6rem; line-height: 1.15; overflow-wrap: anywhere; }
+  .box.wisdom { padding-right: 14px; }
+  .box.wisdom .box-h { padding-right: 56px; }
+  .lead .drop { font-size: 2.6rem; }
+
+  /* Mit \`details.kap\` davor: Die Quellregeln sind oft zweistufig (\`.era .yr\`,
+     \`.opt .o-name small\`) und schlugen die einstufige Fassung. */
+  .mlbl, .praxis span, .a-tag, .thread, .fun, .badge, .seek b, .box-h, .cat, .pin,
+  h3.sect, details.kap .yr, details.kap .tag, details.kap .route, details.kap .rd,
+  details.kap .eyebrow, details.kap .ao-go, details.kap small, .back small, .back .ce,
+  .anchor .a-head .a-tag, .opt .o-name small, .tryin .name small {
+    font-size: 12.5px;
+  }
+}
+.back .bknote b { font-size: 12.5px; }
+.back .bknote a.tel {
+  display: inline-block;
+  padding: 6px 10px;
+  margin: 2px 0;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+/* Die Rückseite ist dunkel; ihre Karten erbten Weiß als Grund — helle Schrift auf
+   Weiß, Kontrast 1,2 : 1. Unabhängig von der Breite falsch, deshalb ohne Medienregel. */
+.back .mrow { background: transparent; border-color: #33415C; }
+.back .mlbl { color: #C4BBA6; }
+`;
+
 function schreibeLesefassung(html, kapitelDaten, stationen) {
   const roh = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
   if (!roh.trim()) fail('Kein Stylesheet im Reiseband gefunden');
 
-  const stil = scope(`${roh}\n${KLAPPEN_CSS}`, BAND_CONTAINER);
+  const stil = scope(`${roh}\n${KLAPPEN_CSS}\n${MOBIL_CSS}`, BAND_CONTAINER);
   // Eine ungebundene Regel würde in die App durchschlagen. Lieber hier
   // abbrechen als im Browser suchen.
   const offen = [...stil.matchAll(/(?:^|\n)([^@\s][^{}\n]*)\{/g)]

@@ -95,10 +95,42 @@ const chapterOf: Record<string, string> = {
           if (k.tagName === 'DETAILS') k.open = true;
           k = k.parentElement;
         }
-        ziel.scrollIntoView();
+        // Erst im nächsten Frame: Seit `name="kap"` klappt das Öffnen das vorige
+        // Kapitel zu, und das verschiebt alles darunter. Sofort gescrollt stand
+        // die Überschrift danach 800 px tiefer, außerhalb des Fensters.
+        requestAnimationFrame(function () {
+          ziel.scrollIntoView({ block: 'start', behavior: 'instant' });
+        });
       }
       window.addEventListener('hashchange', aufklappen);
       aufklappen();
+      // Nach dem Laden noch einmal: Bilder und Schriften verschieben die Seite.
+      window.addEventListener('load', aufklappen);
+
+      /*
+       * Ein geöffnetes Kapitel an den Anfang holen.
+       *
+       * Seit `name="kap"` schließt das Öffnen eines Kapitels das vorige. Lag das
+       * oberhalb, klappt es zusammen, und das gerade angetippte rutscht nach oben
+       * aus dem Bild — man sieht die Mitte eines Kapitels und weiß nicht, wo.
+       * Deshalb: Kopf direkt unter die klebende Leiste. `instant`, weil
+       * `tokens.css` für die ganze Seite weiches Scrollen setzt und die
+       * Bewegung sonst gegen das Zusammenklappen läuft.
+       */
+      document.addEventListener(
+        'toggle',
+        function (e) {
+          var d = e.target;
+          if (!d || !d.matches || !d.matches('details.kap') || !d.open) return;
+          var nav = document.querySelector('.m-nav');
+          var oben = nav ? nav.getBoundingClientRect().bottom : 60;
+          var t = d.getBoundingClientRect().top;
+          if (t < oben || t > window.innerHeight * 0.6) {
+            window.scrollBy({ top: t - oben - 4, behavior: 'instant' });
+          }
+        },
+        true,
+      );
 
       /*
        * Die klebende Stationsleiste markiert, wo man liest.
@@ -273,7 +305,7 @@ const chapterOf: Record<string, string> = {
        traf nichts — die Art Regel, die man erst bemerkt, wenn eine Überschrift
        unter der Kopfzeile steckt. */
     .bandtext :global(details[id]) {
-      scroll-margin-top: 70px;
+      scroll-margin-top: 116px; /* Kopfleiste 48 + Stationsleiste ~63 + Luft */
     }
     /* Hier stand der Scrollrahmen `.bandtabelle` um jede der 19 Tabellen. Er ist
        weg, weil es keine Tabellen mehr gibt: `tabellenZuKarten()` in

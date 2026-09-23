@@ -28,7 +28,16 @@ const UNTERKUNFT = resolve(root, 'data/source/unterkunft.json');
  * dieselben Angaben, die die Vorlage im Summary zeigt. Von Hand abgeschrieben
  * stünden sie zweimal im Repo und wären nach der ersten Änderung uneinig.
  */
-const STATIONEN = JSON.parse(readFileSync(resolve(root, 'src/data/stations.json'), 'utf8'));
+const ALLE_STATIONEN = JSON.parse(readFileSync(resolve(root, 'src/data/stations.json'), 'utf8'));
+/**
+ * Die sechs Stationen des Bandes. `stations.json` führt seit dem Mietwagen-Plan
+ * auch die Zwischennacht in Kawaguchiko (der Tagesplan braucht für den 07.10.
+ * einen Schlafort); das Band zählt sie ausdrücklich **nicht** mit — „die einzige
+ * Nacht außerhalb der sechs Stationen". Kopf, Leiste und Kennzahlen nehmen diese
+ * Liste, die Zuordnung der Straßen-Orte die vollständige.
+ */
+const STATIONEN = ALLE_STATIONEN.filter((s) => !s.zwischennacht);
+const LEGS = JSON.parse(readFileSync(resolve(root, 'src/data/legs.json'), 'utf8'));
 /*
  * Die harten Reisezahlen für den Deckel der Lesefassung.
  *
@@ -43,8 +52,10 @@ const OUT = resolve(root, 'src/data/places.json');
 
 /** Erwartungswerte, gegen die das Ergebnis geprüft wird. */
 const EXPECT = {
-  total: 164,
-  categories: { kultur: 54, essen: 35, natur: 26, hotel: 25, shop: 24 },
+  total: 181,
+  categories: { kultur: 59, essen: 36, natur: 35, hotel: 27, shop: 24 },
+  /** Orte der Mietwagen-Strecke (Nr. 165–181), Ordner „Die Straße" in der KML. */
+  strasse: 17,
   friendTips: 7,
   /** Einträge unter "Weitere Optionen — ohne Nummer"; ohne Koordinaten, nur im Band. */
   unnumbered: 7,
@@ -108,6 +119,40 @@ function fail(msg) {
 
 // ------------------------------------------------------------------ KML lesen
 
+/** Slug einer Station aus dem Namen, wie ihn `legs.json` führt („Kawaguchiko"). */
+function slugVonName(name) {
+  const s = ALLE_STATIONEN.find((x) => x.name === name);
+  if (!s) fail(`legs.json nennt "${name}", das steht nicht in stations.json`);
+  return s.slug;
+}
+
+/**
+ * Der Tag, an dem ein Straßen-Ort angefahren wird, und die Strecke dazu.
+ *
+ * Gelesen aus dem Kopf der KML-Beschreibung — „Kultur · Etappe 1", „Natur ·
+ * Tag Takayama", „Übernachten · Nacht 07./08.". Die Etappen selbst stehen mit
+ * Datum und Strecke in `legs.json`; hier wird nur die Nummer nachgeschlagen.
+ * Eine unbekannte Marke bricht ab: Ein Ort ohne Tag stünde im Planer an keinem
+ * Reisetag und wäre damit auf der Reise unauffindbar.
+ */
+function etappeVon(block, name) {
+  const kopf = decode(block.match(/<description><!\[CDATA\[<b>[^<]*<\/b>\s*·\s*([^<]+)</)?.[1] ?? '').trim();
+  const n = kopf.match(/^Etappe (\d)$/)?.[1];
+  if (n) {
+    const leg = LEGS.find((l) => l.etappe === Number(n));
+    if (!leg) fail(`"${name}": Etappe ${n} steht nicht in legs.json`);
+    return { nr: Number(n), datum: leg.date, von: slugVonName(leg.from), nach: slugVonName(leg.to) };
+  }
+  // Der Kamikōchi-Tag ist keine Etappe: Man fährt ab Takayama hin und zurück.
+  if (kopf === 'Tag Takayama') return { nr: null, datum: '2026-10-06', von: 'takayama', nach: 'takayama' };
+  // Die Unterkunft der Zwischennacht gehört zum Ankunftstag der Etappe 3.
+  if (kopf === 'Nacht 07./08.') {
+    const leg = LEGS.find((l) => l.date === '2026-10-07');
+    return { nr: leg.etappe, datum: leg.date, von: slugVonName(leg.from), nach: slugVonName(leg.to) };
+  }
+  fail(`"${name}": unbekannte Etappenmarke "${kopf}" in der KML-Beschreibung`);
+}
+
 /**
  * @param {Map<string, number[]>} htmlByName Name → Nummern aus dem Reiseband
  * @returns {{places: Map<number, object>, corrections: string[]}}
@@ -121,11 +166,12 @@ function readKml(htmlByName) {
   for (const folder of xml.matchAll(/<Folder><name>(.*?)<\/name>([\s\S]*?)<\/Folder>/g)) {
     folderCount++;
     const [stationLabel, areaLabel] = folder[1].split('—').map((s) => s.trim());
+    const strasse = /^Die Straße$/.test(stationLabel);
     const station = stationLabel
       .toLowerCase()
       .replace(/ō/g, 'o')
       .replace(/[^a-z]/g, '');
-    const area = /ausfl/i.test(areaLabel ?? '') ? 'ausflug' : 'zentrum';
+    const area = strasse || /ausfl/i.test(areaLabel ?? '') ? 'ausflug' : 'zentrum';
 
     for (const pm of folder[2].matchAll(/<Placemark>([\s\S]*?)<\/Placemark>/g)) {
       const block = pm[1];
@@ -157,13 +203,19 @@ function readKml(htmlByName) {
         fail(`Nr. ${nr} ("${kmlName}") doppelt im KML, kein Name im Reiseband passt dazu`);
       }
 
+      // Die Straße ist keine Station: Jeder ihrer Orte gehört zu dem Tag, an dem
+      // er angefahren wird, und damit zu der Station, in der man dann schläft.
+      const etappe = strasse ? etappeVon(block, kmlName) : null;
+      const eigeneStation = etappe ? ALLE_STATIONEN.find((s) => s.slug === etappe.nach) : null;
+
       const entry = {
         nr,
         kmlName,
         category,
-        station,
-        stationLabel,
+        station: eigeneStation ? eigeneStation.slug : station,
+        stationLabel: eigeneStation ? eigeneStation.name : stationLabel,
         area,
+        etappe,
         lng: Number(coords[1]), // KML-Reihenfolge ist lng,lat — hier gedreht
         lat: Number(coords[2]),
         placeId: block.match(/query_place_id=([\w-]+)/)?.[1] ?? null,
@@ -173,7 +225,7 @@ function readKml(htmlByName) {
     }
   }
 
-  if (folderCount !== 10) fail(`${folderCount} KML-Folder statt der erwarteten 10`);
+  if (folderCount !== 11) fail(`${folderCount} KML-Folder statt der erwarteten 11`);
   return { places, corrections };
 }
 
@@ -217,7 +269,7 @@ function readHtml() {
 function detectClosedDay(text) {
   const m =
     text.match(/\b(Mo|Di|Mi|Do|Fr|Sa|So)\s+geschlossen/i) ??
-    text.match(/\b(MONTAGS|DIENSTAGS|MITTWOCHS|DONNERSTAGS|FREITAGS|SAMSTAGS|SONNTAGS)\s+GESCHLOSSEN/i);
+    text.match(/\b(MONTAGS|DIENSTAGS|MITTWOCHS|DONNERSTAGS|FREITAGS|SAMSTAGS|SONNTAGS)\s+(?:GESCHLOSSEN|ZU)\b/i);
   return m ? WEEKDAYS[m[1].toLowerCase()] ?? null : null;
 }
 
@@ -319,6 +371,8 @@ for (const [nr, t] of texts) {
 function markiereUnterkuenfte(places) {
   const cfg = JSON.parse(readFileSync(UNTERKUNFT, 'utf8'));
   const keine = new Set(cfg.keineUebernachtung ?? []);
+  // Empfohlen, aber noch nicht gebucht: bleibt sichtbar, gilt nicht als gebucht.
+  const empfohlen = new Set(cfg.empfohlen ?? []);
   const gebucht = new Map(
     Object.entries(cfg.gebucht ?? {}).filter(([, nr]) => Number.isInteger(nr)),
   );
@@ -328,7 +382,7 @@ function markiereUnterkuenfte(places) {
   let belegt = 0;
 
   for (const p of places) {
-    if (p.category !== 'hotel' || keine.has(p.nr)) continue;
+    if (p.category !== 'hotel' || keine.has(p.nr) || empfohlen.has(p.nr)) continue;
     if (gebuchteNrn.has(p.nr)) {
       p.uebernachtung = 'gebucht';
       belegt += 1;
@@ -347,7 +401,7 @@ function markiereUnterkuenfte(places) {
       fail(`unterkunft.json: Nr. ${nr} liegt in ${p.station}, nicht in ${station}`);
     }
   }
-  for (const nr of keine) {
+  for (const nr of [...keine, ...empfohlen]) {
     if (!places.some((x) => x.nr === nr)) fail(`unterkunft.json: Nr. ${nr} gibt es nicht`);
   }
 
@@ -378,6 +432,7 @@ for (const nr of [...geo.keys()].sort((a, b) => a - b)) {
     lat: g.lat,
     lng: g.lng,
     placeId: g.placeId,
+    ...(g.etappe ? { etappe: g.etappe } : {}),
     descriptionHtml: t.descriptionHtml,
     isFriendTip,
     needsBooking: needsBooking(haystack),
@@ -420,6 +475,11 @@ const counts = {};
 for (const p of places) counts[p.category] = (counts[p.category] ?? 0) + 1;
 for (const [cat, want] of Object.entries(EXPECT.categories)) {
   if (counts[cat] !== want) problems.push(`Kategorie ${cat}: ${counts[cat] ?? 0} statt ${want}`);
+}
+
+const strassenOrte = places.filter((p) => p.etappe).length;
+if (strassenOrte !== EXPECT.strasse) {
+  problems.push(`${strassenOrte} Orte der Straße statt ${EXPECT.strasse}`);
 }
 
 const tips = places.filter((p) => p.isFriendTip).length;
@@ -480,7 +540,7 @@ for (const p of places) byStation[p.stationLabel] = (byStation[p.stationLabel] ?
 const STATION_CHAPTERS = ['osaka', 'kyoto', 'kanazawa', 'takayama', 'hakone', 'tokio'];
 
 const CHAPTER_IDS = [
-  'einladung', 'prolog', 'route', 'ankunft', 'osaka', 'kyoto',
+  'einladung', 'prolog', 'route', 'ankunft', 'strasse', 'osaka', 'kyoto',
   'kanazawa', 'takayama', 'hakone', 'tokio', 'epilog',
 ];
 
@@ -518,12 +578,12 @@ function listLink(slug) {
 function rewriteIntro(html) {
   const replacements = [
     [
-      '<p>Noch ein Wort zu den <strong>Nummern</strong>: Jeder Ort in diesem Buch trägt eine — von 1 in Osaka bis 164 in Tokio. Dieselben Nummern stehen auf eurer Karte in Google My Maps — QR-Code auf der Rückseite, einmal scannen und sie ist auf dem Handy. Ihr lest hier „Nr. 96", sucht auf der Karte „096" — fertig. Das Buch erzählt, die Karte führt.</p>',
-      '<p>Noch ein Wort zu den <strong>Nummern</strong>: Jeder Ort trägt eine — von 1 in Osaka bis 164 in Tokio. Die vollständigen Ortslisten stehen nicht mehr in diesem Buch, sondern im <a href="./orte/">Reiseplaner</a>: dort sind sie durchsuchbar, nach Kategorie filterbar, liegen auf der Karte und lassen sich auf einzelne Reisetage legen. Ihr lest hier „Nr. 96" und findet denselben Punkt dort wieder. <strong>Das Buch erzählt, der Planer führt.</strong></p>',
+      '<p>Noch ein Wort zu den <strong>Nummern</strong>: Jeder Ort in diesem Buch trägt eine — von 1 in Osaka bis 164 in Tokio, dazu 165 bis 181 für die Straße dazwischen. Dieselben Nummern stehen auf eurer Karte in Google My Maps — QR-Code auf der Rückseite, einmal scannen und sie ist auf dem Handy. Ihr lest hier „Nr. 96", sucht auf der Karte „096" — fertig. Das Buch erzählt, die Karte führt.</p>',
+      '<p>Noch ein Wort zu den <strong>Nummern</strong>: Jeder Ort trägt eine — von 1 in Osaka bis 164 in Tokio, dazu 165 bis 181 für die Straße dazwischen. Die vollständigen Ortslisten stehen nicht mehr in diesem Buch, sondern im <a href="./orte/">Reiseplaner</a>: dort sind sie durchsuchbar, nach Kategorie filterbar, liegen auf der Karte und lassen sich auf einzelne Reisetage legen. Ihr lest hier „Nr. 96" und findet denselben Punkt dort wieder. <strong>Das Buch erzählt, der Planer führt.</strong></p>',
     ],
     [
       '\n        <div><b>🔢 Orte auf der Karte</b> — nummeriert und nach Kategorie gefärbt: Kultur, Essen, Einkaufen, Natur, Übernachten.</div>',
-      '\n        <div><b>🔢 Orte im Planer</b> — alle 164, nummeriert und nach Kategorie gefärbt: Kultur, Essen, Einkaufen, Natur, Übernachten.</div>',
+      `\n        <div><b>🔢 Orte im Planer</b> — alle ${EXPECT.total}, nummeriert und nach Kategorie gefärbt: Kultur, Essen, Einkaufen, Natur, Übernachten.</div>`,
     ],
     [
       '<span class="badge">Nummern im Text = <b>Nummern auf der Karte</b></span>',
@@ -533,8 +593,8 @@ function rewriteIntro(html) {
     // Offline-Karten, was der Planer nicht leistet. Nur der Verweis "wie im
     // Buch" stimmt nicht mehr, seit die Listen dort nicht mehr stehen.
     [
-      'Scannen — alle 164 Orte mit denselben Nummern wie im Buch, nach Stationen sortiert und nach Kategorie gefärbt.',
-      'Scannen — alle 164 Orte mit denselben Nummern wie im Planer, nach Stationen sortiert und nach Kategorie gefärbt. Für Navigation und Offline-Karten unterwegs.',
+      'Scannen — alle 181 Orte mit denselben Nummern wie im Buch, nach Stationen sortiert und nach Kategorie gefärbt.',
+      `Scannen — alle ${EXPECT.total} Orte mit denselben Nummern wie im Planer, nach Stationen sortiert und nach Kategorie gefärbt. Für Navigation und Offline-Karten unterwegs.`,
     ],
   ];
 
@@ -582,7 +642,30 @@ function writeGuide() {
     fail(`${i} Kapitel im Reiseband statt ${CHAPTER_IDS.length} — Ankerliste anpassen`);
   }
 
-  const stats = { rows: 0, tables: 0, cats: 0, blocks: 0, kept: 0 };
+  const stats = { rows: 0, tables: 0, cats: 0, blocks: 0, kept: 0, stopps: 0 };
+
+  // 0. Im Kapitel „Die Straße" bleiben die Orte stehen, als Stoppliste.
+  //
+  // Bei den Stationen ist die Ortsliste ein Duplikat des Planers. Bei den
+  // Etappen nicht: „Zwei Stopps tragen den Tag, ein dritter ist Zugabe" ist ohne
+  // die Stopps darunter ein Satz ins Leere, und unterwegs im Auto will man die
+  // Reihenfolge und den Maps-Link zur Navigation genau hier haben. Die Nummer
+  // führt in den Planer (`?nr=`), der Link in die Navigation.
+  html = html.replace(/(<section class="[^"]*" id="strasse"[^>]*>)([\s\S]*?)(<\/section>)/, (_t, auf, innen, zu) => {
+    const umgebaut = innen.replace(/<table class="pins">([\s\S]*?)<\/table>/g, (_tab, zeilen) => {
+      const li = [...zeilen.matchAll(/<tr><td class="b"><span class="pin ([a-z]+)">(\d+)<\/span><\/td><td>([\s\S]*?)<\/td><\/tr>/g)]
+        .map(([, kat, nr, zelle]) => {
+          stats.stopps++;
+          return `<li class="stopp ${kat}"><a class="snr" href="./orte/?nr=${nr}">${nr}</a><div>${zelle.trim()}</div></li>`;
+        })
+        .join('\n');
+      return `<ol class="stopps">\n${li}\n</ol>`;
+    });
+    return auf + umgebaut + zu;
+  });
+  if (stats.stopps !== EXPECT.strasse) {
+    fail(`${stats.stopps} Stopps im Kapitel „Die Straße", erwartet ${EXPECT.strasse}`);
+  }
 
   // 1. Die nummerierten Ortszeilen entfernen — das ist das Duplikat zur App.
   html = html.replace(
@@ -633,8 +716,8 @@ function writeGuide() {
   if (stats.blocks !== EXPECTED_LIST_BLOCKS) {
     fail(`${stats.blocks} Listenblöcke ersetzt, erwartet ${EXPECTED_LIST_BLOCKS}`);
   }
-  if (stats.rows !== EXPECT.total) {
-    fail(`${stats.rows} Ortszeilen entfernt, erwartet ${EXPECT.total}`);
+  if (stats.rows !== EXPECT.total - EXPECT.strasse) {
+    fail(`${stats.rows} Ortszeilen entfernt, erwartet ${EXPECT.total - EXPECT.strasse}`);
   }
   if (stats.kept !== EXPECT.unnumbered) {
     fail(`${stats.kept} nummernlose Einträge erhalten, erwartet ${EXPECT.unnumbered}`);
@@ -677,6 +760,17 @@ color:#4B5468;line-height:1.45}
 text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
 @media(max-width:600px){.app-orte{flex-wrap:wrap;gap:10px;padding:14px 16px}
 .app-orte .ao-go{width:100%}}
+
+/* Stoppliste im Kapitel „Die Straße" — die Nummer führt in den Planer */
+.stopps{list-style:none;padding:0;margin:14px 0}
+.stopp{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #E2DBCD}
+.stopp .snr{flex:none;width:40px;height:40px;border-radius:50%;background:#C6402B;color:#fff;
+display:flex;align-items:center;justify-content:center;font-family:"Zen Kaku Gothic New",sans-serif;
+font-weight:700;font-size:.85rem;text-decoration:none}
+.stopp.essen .snr{background:#A67C33}.stopp.shop .snr{background:#3C2316}
+.stopp.natur .snr{background:#3E6B5E}.stopp.hotel .snr{background:#6B5D2F}
+.stopp>div{flex:1;min-width:0}
+.stopp>div a{display:inline-block;padding:6px 0;font-family:"Zen Kaku Gothic New",sans-serif;font-size:.85rem}
 @media print{.app-back{display:none}}
 </style>
 <a class="app-back" href="./">← Zum Reiseplaner</a>
@@ -763,6 +857,7 @@ const KAPITEL_MARKE = {
   prolog: '🕰️',
   route: '🗺️',
   ankunft: '🛬',
+  strasse: '🚗',
   epilog: '🎁',
 };
 

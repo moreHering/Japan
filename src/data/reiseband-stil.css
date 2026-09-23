@@ -384,6 +384,17 @@ color:#4B5468;line-height:1.45}
 text-transform:uppercase;color:#A63220;white-space:nowrap;flex:none}
 @media(max-width:600px){.bandtext .app-orte{flex-wrap:wrap;gap:10px;padding:14px 16px}
 .bandtext .app-orte .ao-go{width:100%}}
+.bandtext .stopps{list-style:none;padding:0;margin:14px 0}
+.bandtext .stopp{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #E2DBCD}
+.bandtext .stopp .snr{flex:none;width:40px;height:40px;border-radius:50%;background:#C6402B;color:#fff;
+display:flex;align-items:center;justify-content:center;font-family:"Zen Kaku Gothic New",sans-serif;
+font-weight:700;font-size:.85rem;text-decoration:none}
+.bandtext .stopp.essen .snr{background:#A67C33}
+.bandtext .stopp.shop .snr{background:#3C2316}
+.bandtext .stopp.natur .snr{background:#3E6B5E}
+.bandtext .stopp.hotel .snr{background:#6B5D2F}
+.bandtext .stopp>div{flex:1;min-width:0}
+.bandtext .stopp>div a{display:inline-block;padding:6px 0;font-family:"Zen Kaku Gothic New",sans-serif;font-size:.85rem}
 @media print{.bandtext .app-back{display:none}}
 .bandtext details.kap, .bandtext details.teil{
   background: var(--card);

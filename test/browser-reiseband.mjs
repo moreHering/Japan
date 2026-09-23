@@ -34,7 +34,11 @@ const kapitel = JSON.parse(readFileSync('src/data/chapters.json', 'utf8'));
  * gleichzeitig mit der Seite, sodass sie grün bleibt.
  */
 const trip = JSON.parse(readFileSync('src/data/trip.json', 'utf8'));
-const stationen = JSON.parse(readFileSync('src/data/stations.json', 'utf8'));
+// Die sechs Stationen des Bandes — die Zwischennacht in Kawaguchiko steht in
+// stations.json, ist aber ausdrücklich keine Station des Bandes.
+const stationen = JSON.parse(readFileSync('src/data/stations.json', 'utf8')).filter(
+  (s) => !s.zwischennacht,
+);
 const orte = JSON.parse(readFileSync('src/data/places.json', 'utf8'));
 
 const browser = await chromium.launch({
@@ -578,7 +582,7 @@ const druckfassung = await seite.evaluate(() => ({
   tabellen: document.querySelectorAll('table').length,
 }));
 pruefe(druckfassung.details === 0, 'sie enthält kein einziges <details>', String(druckfassung.details));
-pruefe(druckfassung.kapitel === 11, 'die elf Kapitel stehen als <section>', String(druckfassung.kapitel));
+pruefe(druckfassung.kapitel === 12, 'die zwölf Kapitel stehen als <section> (mit „Die Straße")', String(druckfassung.kapitel));
 pruefe(druckfassung.tabellen === 19, 'mit ihren 19 Tabellen', String(druckfassung.tabellen));
 await seite.goto(`${BASIS}/`, { waitUntil: 'load' });
 await seite.waitForTimeout(500);
@@ -792,8 +796,8 @@ await seite.goto(`${BASIS}/plan/`, { waitUntil: 'load' });
 await seite.waitForSelector('.daybar .daytab', { timeout: 10000 });
 await seite.waitForTimeout(400);
 pruefe(
-  (await seite.locator('.daytab.leg').count()) === 5,
-  'der Tagesplan markiert fünf Umzugstage',
+  (await seite.locator('.daytab.leg').count()) === 6,
+  'der Tagesplan markiert sechs Umzugstage',
 );
 pruefe(
   (await seite.locator('.poolcats .chip b').count()) >= 5,

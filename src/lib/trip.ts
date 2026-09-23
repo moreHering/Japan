@@ -48,6 +48,8 @@ export type Leg = {
    * fünf Einträgen sind billiger als jede Heuristik.
    */
   booking?: string;
+  /** Nummer der Mietwagen-Etappe (1–5), seit dem Plan vom 23.09. Sonst fehlt sie. */
+  etappe?: number;
 };
 
 export const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'] as const;
@@ -55,6 +57,17 @@ export type Weekday = (typeof WEEKDAYS)[number];
 
 export const trip = tripData;
 export const stations: Station[] = stationsData;
+
+/**
+ * Die sechs Stationen des Reisebands — ohne Zwischennacht.
+ *
+ * Seit dem Mietwagen-Plan steht Kawaguchiko als Station in `stations.json`: Der
+ * Tagesplan braucht für den 07.10. einen Schlafort, sonst fiele `stationOf()` auf
+ * Osaka zurück. Das Band zählt aber „sechs Stationen" und nennt die Nacht am
+ * Kawaguchi-See ausdrücklich „die einzige außerhalb der sechs". Überall, wo
+ * gezählt oder ein Kapitel erwartet wird, gilt deshalb diese Liste.
+ */
+export const hauptstationen: Station[] = stations.filter((s) => !s.zwischennacht);
 
 /** Tage zwischen zwei ISO-Daten, zeitzonenfrei über UTC gerechnet. */
 function toUtc(iso: string): number {

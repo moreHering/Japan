@@ -24,8 +24,9 @@ const buchungen = bookingsData as Booking[];
 const nachId = new Map(buchungen.map((b) => [b.id, b]));
 
 describe('Etappen', () => {
-  it('sind fünf und liegen alle innerhalb der Reise', () => {
-    expect(legs).toHaveLength(5);
+  it('sind sechs und liegen alle innerhalb der Reise', () => {
+    // Osaka → Kyoto mit der Bahn, danach fünf Mietwagen-Etappen (Plan vom 23.09.).
+    expect(legs).toHaveLength(6);
     for (const l of legs) {
       expect(l.date >= trip.start, `${l.date} liegt vor dem Reisebeginn`).toBe(true);
       expect(l.date <= trip.end, `${l.date} liegt nach dem Reiseende`).toBe(true);
@@ -38,6 +39,12 @@ describe('Etappen', () => {
     const daten = legs.map((l) => l.date);
     expect([...daten].sort()).toEqual(daten);
     expect(new Set(daten).size).toBe(daten.length);
+  });
+
+  it('nummerieren die fünf Mietwagen-Etappen lückenlos in Fahrtrichtung', () => {
+    // Die Straßen-Orte (Nr. 165–181) finden ihren Tag über diese Nummer. Eine
+    // doppelte oder fehlende Etappe hieße: Hikone-jō stünde am falschen Tag.
+    expect(legs.filter((l) => l.etappe).map((l) => l.etappe)).toEqual([1, 2, 3, 4, 5]);
   });
 
   it('haben eine lückenlose Kette von Station zu Station', () => {
@@ -81,22 +88,19 @@ describe('Etappen und Buchungen', () => {
     expect(vergessen, `keine Etappe nennt: ${vergessen.join(', ')}`).toEqual([]);
   });
 
-  it('lassen genau die Etappe ohne Buchung, die keine braucht', () => {
-    // Osaka → Kyoto mit dem JR Special Rapid: freie Platzwahl, nichts zu
-    // reservieren. Eine Referenz dort wäre eine Behauptung, die zu einem Haken
-    // führt, den niemand setzen kann.
-    const ohne = legs.filter((l) => !l.booking);
-    expect(ohne).toHaveLength(1);
-    expect(ohne[0].from).toBe('Osaka');
-    expect(ohne[0].to).toBe('Kyoto');
+  it('hängen den Mietwagen an die erste Etappe und nur dort', () => {
+    // Ein Wagen für alle fünf Etappen: gebucht wird er einmal, abgehakt am Tag
+    // der Übernahme. Stünde er an jeder Etappe, wäre derselbe Haken fünfmal da.
+    const mitBuchung = legs.filter((l) => l.booking);
+    expect(mitBuchung.map((l) => [l.date, l.booking])).toEqual([['2026-10-03', 'mietwagen']]);
+    expect(legs.find((l) => l.etappe === 1)!.booking).toBe('mietwagen');
   });
 
-  it('nennen bei der reservierungspflichtigen Fahrt auch im Detail, dass sie es ist', () => {
-    // Der Nōhi-Bus über Shirakawa-gō ist die einzige Fahrt, die ohne Reservierung
-    // gar nicht geht. Der Planer zeigt `detail` an, solange nicht gebucht ist —
-    // der Text muss also sagen, worum es geht.
-    const bus = legs.find((l) => l.to === 'Takayama')!;
-    expect(bus.booking).toBe('nohi-bus');
-    expect(nachId.get('nohi-bus')!.detail.toLowerCase()).toContain('reservierungspflichtig');
+  it('nennen beim Mietwagen Übernahme und Rückgabe', () => {
+    // Der Planer zeigt `detail`, solange nicht gebucht ist. Wo der Wagen steht und
+    // wo er zurückmuss, ist genau das, was man am Schalter sagen muss.
+    const detail = nachId.get('mietwagen')!.detail;
+    expect(detail).toContain('Bahnhof Kyoto');
+    expect(detail).toContain('Shinjuku');
   });
 });

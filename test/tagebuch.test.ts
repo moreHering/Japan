@@ -459,8 +459,11 @@ describe('Kennzahlen', () => {
     const k = kennzahlen([], personen, '2026-10-02');
     expect(k.tageGesamt).toBe(20);
     expect(k.naechte).toBe(trip.nights);
-    expect(k.stationen).toBe(stations.length);
-    expect(k.etappen).toBe(5);
+    // Sechs Stationen des Bandes, die Nacht in Kawaguchiko zählt nicht mit; dazu
+    // Osaka → Kyoto und fünf Mietwagen-Etappen (Plan vom 23.09.).
+    expect(k.stationen).toBe(stations.filter((s) => !s.zwischennacht).length);
+    expect(k.stationen).toBe(6);
+    expect(k.etappen).toBe(6);
   });
 
   it('ordnet die Personen absteigend und nennt auch die ohne Beitrag', () => {
@@ -525,11 +528,14 @@ describe('Kennzahlen', () => {
 });
 
 describe('Route der Stationen', () => {
-  it('gibt die sechs Stationsmitten in Reihenfolge', () => {
+  it('gibt die Schlaforte in Reihenfolge — samt der Nacht am Kawaguchi-See', () => {
+    // Die Linie zeigt, wo die Reise entlanggeht. Ohne Kawaguchiko liefe sie von
+    // Takayama gerade nach Hakone, quer über die Alpen, an der Strecke vorbei.
     const route = stationsRoute();
-    expect(route).toHaveLength(6);
+    expect(route).toHaveLength(7);
     expect(route[0]).toEqual([stations[0].center[0], stations[0].center[1]]);
-    expect(route[5]).toEqual([stations[5].center[0], stations[5].center[1]]);
+    expect(route[4]).toEqual([stations[4].center[0], stations[4].center[1]]);
+    expect(stations[4].slug).toBe('kawaguchiko');
   });
 
   it('gibt neue Tupel heraus, damit Leaflet stations.json nicht anfasst', () => {

@@ -5,10 +5,10 @@
  * brauchen zwei ganz verschiedene Prüfer:
  *
  * 1. **Der Wächter im CI** (`test/orte-plausibel.test.ts`) prüft die **Dateien** —
- *    `src/data/places.json`, die 164 Orte aus dem Reiseband. Er läuft bei jedem
+ *    `src/data/places.json`, die 181 Orte aus dem Reiseband. Er läuft bei jedem
  *    Push und blockiert den Deploy.
  * 2. **Die Selbstprüfseite `/wache/`** prüft, was auf **diesem Gerät** steht: die
- *    164 plus die eigenen Orte ab Nr. 165, mit allen Korrekturen. Das erreicht der
+ *    181 plus die eigenen Orte ab Nr. 1001, mit allen Korrekturen. Das erreicht der
  *    CI nie, denn das liegt im localStorage und in Supabase, nicht in den Dateien.
  *
  * Bis hierher standen die Regeln nur im Test. Zwei Kopien laufen auseinander,
@@ -107,6 +107,37 @@ export const AUSFLUEGE: Record<number, string> = {
   88: 'Ainokura in Gokayama — Tagesausflug aus Takayama, liegt näher an Kanazawa',
 };
 
+/**
+ * Wie weit ein Ort der Mietwagen-Strecke neben seiner Etappe liegen darf.
+ *
+ * Gemessen wird die Luftlinie zur geraden Verbindung der zwei Stationsmitten —
+ * nicht zur Straße, die kennt diese Datei nicht. Die Straße weicht davon ab,
+ * gemessen am 23.09. an allen 17 Orten: am weitesten die Daiō-Wasabi-Farm
+ * (Nr. 175) mit 46,7 km neben Takayama → Kawaguchiko — „35 Min. nördlich, in der
+ * falschen Richtung" sagt das Band selbst —, dann Matsumoto-jō mit 39,3 km und
+ * Kappa-bashi mit 36,7 km vom Mittelpunkt Takayamas. 60 km lassen das zu und
+ * fangen trotzdem, worum es geht: eine Koordinate aus der falschen Gegend. Ein
+ * vertauschter oder aus Tokio kopierter Pin liegt Hunderte Kilometer daneben.
+ */
+export const KORRIDOR_KM = 60;
+
+/** Abstand eines Punktes zur Strecke a–b in km (flach gerechnet, reicht für < 300 km). */
+export function kmZurStrecke(
+  p: { lat: number; lng: number },
+  a: [number, number],
+  b: [number, number],
+): number {
+  const breite = (((a[0] + b[0]) / 2) * Math.PI) / 180;
+  const x = (lng: number) => lng * 111.32 * Math.cos(breite);
+  const y = (lat: number) => lat * 110.57;
+  const [ax, ay, bx, by, px, py] = [x(a[1]), y(a[0]), x(b[1]), y(b[0]), x(p.lng), y(p.lat)];
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
 // =================================================================== Befunde ===
 
 /**
@@ -129,7 +160,7 @@ const ZAHL = (x: unknown) => typeof x === 'number' && Number.isFinite(x);
 /**
  * Prüft die übergebenen Orte und gibt die Befunde zurück — schwerste zuerst.
  *
- * **Jeder** übergebene Ort wird geprüft, also auch eigene ab Nr. 165 und
+ * **Jeder** übergebene Ort wird geprüft, also auch eigene ab Nr. 1001 und
  * korrigierte. Das ist der Unterschied zum CI-Wächter, der nur die Dateien sieht.
  *
  * Ein sauberer Bestand gibt eine **leere** Liste. Das ist ausdrücklich geprüft:
@@ -180,7 +211,32 @@ export function pruefeOrte(orte: Place[], stationen: Station[]): Befund[] {
     // trotzdem den teuersten Fehler trifft: eine echte Koordinate aus der falschen
     // Gegend. Ein Osaka-Ort mit einer Tokio-Koordinate schlägt hier an, obwohl
     // beide Zahlen stimmen und beide in Japan liegen.
-    if (!(o.nr in AUSFLUEGE) && stationen.some((s) => s.slug === o.station)) {
+    //
+    // Die Orte der Straße (Nr. 165–181) liegen per Definition **zwischen** zwei
+    // Stationen — Hikone-jō ist näher an Kyoto, gehört aber zum Kanazawa-Tag.
+    // Für sie gilt statt „nächste Station" der Korridor ihrer Etappe.
+    if (o.etappe) {
+      const von = stationen.find((s) => s.slug === o.etappe!.von);
+      const nach = stationen.find((s) => s.slug === o.etappe!.nach);
+      if (!von || !nach) {
+        melde({
+          schwere: 'warnung',
+          nr: o.nr,
+          titel: `${wer}: Etappe ${o.etappe.von} → ${o.etappe.nach} kennt die App nicht`,
+          was: 'Die Station fehlt in stations.json — dann steht der Ort an keinem Reisetag. Bitte melden.',
+        });
+      } else {
+        const abseits = kmZurStrecke(o, von.center, nach.center);
+        if (abseits > KORRIDOR_KM) {
+          melde({
+            schwere: 'warnung',
+            nr: o.nr,
+            titel: `${wer}: liegt ${abseits.toFixed(0)} km neben der Etappe ${o.etappe.von} → ${o.etappe.nach}`,
+            was: 'Ein Ort der Straße liegt auf oder nahe der Fahrtstrecke. So weit daneben ist die Koordinate vermutlich aus der falschen Gegend.',
+          });
+        }
+      }
+    } else if (!(o.nr in AUSFLUEGE) && stationen.some((s) => s.slug === o.station)) {
       const nah = naechsteStation(o, stationen);
       if (nah.slug !== o.station) {
         const eigene = stationen.find((s) => s.slug === o.station)!;

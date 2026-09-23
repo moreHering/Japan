@@ -34,10 +34,21 @@ describe('Übernachtungen', () => {
   });
 
   it('lässt keinen einzigen Ryokan-Vorschlag übrig', () => {
+    // Übrig bleiben dürfen nur die zwei Tages-Onsen (164, 172 — kein Bett) und
+    // die Empfehlung für die noch ungebuchte Nacht am Kawaguchi-See (177).
     const uebrig = places.filter(
-      (p) => p.category === 'hotel' && p.uebernachtung !== 'gebucht' && p.nr !== 164,
+      (p) =>
+        p.category === 'hotel' && p.uebernachtung !== 'gebucht' && ![164, 172, 177].includes(p.nr),
     );
     expect(uebrig.map((p) => `${p.nr} ${p.name}`)).toEqual([]);
+  });
+
+  it('zeigt die Empfehlung für Kawaguchiko, ohne sie als gebucht auszugeben', () => {
+    // Ausgeblendet stünde für die Nacht 07./08.10. gar keine Unterkunft in der
+    // App; als „gebucht" behauptete die App etwas, das nicht stimmt.
+    const ooike = places.find((p) => p.nr === 177);
+    expect(ooike?.name).toContain('Ooike');
+    expect(ooike?.uebernachtung).toBeUndefined();
   });
 
   it('findet ausgeblendete Orte weiterhin über ihre Nummer', () => {
@@ -52,7 +63,9 @@ describe('Übernachtungen', () => {
     const zaehlung = Object.fromEntries(
       CATEGORIES.map((c) => [c.key, places.filter((p) => p.category === c.key).length]),
     );
-    expect(zaehlung).toEqual({ kultur: 54, essen: 35, natur: 26, shop: 24, hotel: 2 });
+    // Seit dem Mietwagen-Plan +5 Kultur, +1 Essen, +9 Natur und die zwei
+    // sichtbaren Übernachten-Orte der Straße (172 Tages-Onsen, 177 Empfehlung).
+    expect(zaehlung).toEqual({ kultur: 59, essen: 36, natur: 35, shop: 24, hotel: 4 });
   });
 
   it('hat für jede Station eine gebuchte Unterkunft — sonst wäre das Ausblenden falsch', () => {

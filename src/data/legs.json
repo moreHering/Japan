@@ -10,32 +10,41 @@
     "date": "2026-10-03",
     "from": "Kyoto",
     "to": "Kanazawa",
-    "connection": "Thunderbird bis Tsuruga + Hokuriku-Shinkansen",
-    "duration": "~2 Std. 15",
-    "booking": "thunderbird"
+    "connection": "Mietwagen, Etappe 1 · Übernahme am Bahnhof Kyoto · über Hikone und Eihei-ji",
+    "duration": "~230 km · ~3 Std. Fahrt",
+    "booking": "mietwagen",
+    "etappe": 1
   },
   {
     "date": "2026-10-05",
     "from": "Kanazawa",
     "to": "Takayama",
-    "connection": "Nōhi-Bus über Shirakawa-gō (reservieren) — oder direkt",
-    "duration": "1 Std. 15 + 50 Min. / ~2 Std. 15",
-    "booking": "nohi-bus"
+    "connection": "Mietwagen, Etappe 2 · White Road oder Autobahn + Gokayama · Shirakawa-gō",
+    "duration": "Ankunft ~16 Uhr",
+    "etappe": 2
   },
   {
     "date": "2026-10-07",
     "from": "Takayama",
+    "to": "Kawaguchiko",
+    "connection": "Mietwagen, Etappe 3 · Abo-Tunnel · Matsumoto · Chūō-Autobahn",
+    "duration": "Ankunft ~16 Uhr",
+    "etappe": 3
+  },
+  {
+    "date": "2026-10-08",
+    "from": "Kawaguchiko",
     "to": "Hakone",
-    "connection": "Hida-Express → Nagoya · Shinkansen → Odawara · Hakone Tozan → Hakone-Yumoto",
-    "duration": "~4 Std.",
-    "booking": "hida-express"
+    "connection": "Mietwagen, Etappe 4 · Fuji am Morgen · Ashinoko Skyline (nur Bargeld)",
+    "duration": "~70 km · Ankunft ~13 Uhr",
+    "etappe": 4
   },
   {
     "date": "2026-10-10",
     "from": "Hakone",
     "to": "Tokio",
-    "connection": "Odakyū Romancecar → Shinjuku",
-    "duration": "~1 Std. 30",
-    "booking": "romancecar"
+    "connection": "Mietwagen, Etappe 5 · vor 9 Uhr los · Rückgabe in Shinjuku, vollgetankt",
+    "duration": "~90 km · 2–3 Std.",
+    "etappe": 5
   }
 ]

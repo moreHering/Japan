@@ -47,7 +47,16 @@
 import { describe, expect, it } from 'vitest';
 import { alleOrte, CATEGORIES, type Place } from '../src/lib/places';
 import { inJapan } from '../src/lib/koordinaten';
-import { AUSFLUEGE, km, naechsteStation, REISERAHMEN, type Station } from '../src/lib/wache';
+import {
+  AUSFLUEGE,
+  km,
+  KORRIDOR_KM,
+  kmZurStrecke,
+  naechsteStation,
+  pruefeOrte,
+  REISERAHMEN,
+  type Station,
+} from '../src/lib/wache';
 import stationenRoh from '../src/data/stations.json';
 
 /*
@@ -74,7 +83,7 @@ const stationVon = (slug: string) => stationen.find((s) => s.slug === slug);
 // ================================================================ Prüfungen ===
 
 describe('Die Orte aus dem Reiseband', () => {
-  it('sind einhundertvierundsechzig, lückenlos von 1 bis 164', () => {
+  it('sind einhunderteinundachtzig, lückenlos von 1 bis 181', () => {
     /*
      * Die Nummern stehen im gedruckten Band. Eine Lücke heißt, dass ein Ort beim
      * Umbau verloren gegangen ist; eine Doppelung heißt, dass zwei Orte dieselbe
@@ -84,8 +93,9 @@ describe('Die Orte aus dem Reiseband', () => {
     const nummern = alleOrte.map((o) => o.nr).sort((a, b) => a - b);
     expect(new Set(nummern).size, 'doppelte Nummern').toBe(nummern.length);
     expect(nummern[0]).toBe(1);
-    expect(nummern.at(-1)).toBe(164);
-    const luecken = Array.from({ length: 164 }, (_, i) => i + 1).filter(
+    // 1–164 die Stationen, 165–181 die Mietwagen-Strecke (Plan vom 23.09.).
+    expect(nummern.at(-1)).toBe(181);
+    const luecken = Array.from({ length: 181 }, (_, i) => i + 1).filter(
       (n) => !nummern.includes(n),
     );
     expect(luecken, `fehlende Nummern: ${luecken.join(', ')}`).toEqual([]);
@@ -187,7 +197,9 @@ describe('Ort und Station passen zusammen', () => {
      * Koordinaten echt sind und beide in Japan liegen.
      */
     const verstoesse = alleOrte
-      .filter((o) => !(o.nr in AUSFLUEGE))
+      // Die Straße liegt per Definition zwischen zwei Stationen — für sie gilt
+      // der Korridor darunter, nicht die nächste Station.
+      .filter((o) => !(o.nr in AUSFLUEGE) && !o.etappe)
       .map((o) => ({ o, naechste: naechsteStation(o, stationen) }))
       .filter(({ o, naechste }) => naechste.slug !== o.station);
 
@@ -199,6 +211,36 @@ describe('Ort und Station passen zusammen', () => {
           `Sonst stimmt die Koordinate nicht.`,
       ),
     ).toEqual([]);
+  });
+
+  it('die Orte der Straße liegen im Korridor ihrer Etappe', () => {
+    /*
+     * Für Hikone-jō ist Kyoto die nächste Station, und trotzdem gehört es zum
+     * Kanazawa-Tag: Man hält auf dem Weg dorthin. Die Regel „nächste Station"
+     * taugt hier nicht, der Korridor schon — eine Koordinate aus der falschen
+     * Gegend liegt Hunderte Kilometer neben der Strecke, nicht 20.
+     */
+    const strasse = alleOrte.filter((o) => o.etappe);
+    expect(strasse.map((o) => o.nr)).toEqual(Array.from({ length: 17 }, (_, i) => 165 + i));
+    const daneben = strasse
+      .map((o) => {
+        const von = stationVon(o.etappe!.von)!;
+        const nach = stationVon(o.etappe!.nach)!;
+        return { o, km: kmZurStrecke(o, von.center, nach.center) };
+      })
+      .filter(({ km }) => km > KORRIDOR_KM)
+      .map(({ o, km }) => `${o.nr} ${o.name}: ${km.toFixed(0)} km neben ${o.etappe!.von} → ${o.etappe!.nach}`);
+    expect(daneben).toEqual([]);
+  });
+
+  it('Gegenprobe: ein verschobener Straßen-Ort fällt dem Korridor auf', () => {
+    // Hikone-jō um ein Grad nach Osten, also mitten nach Gifu — echt, in Japan,
+    // im Reiserahmen und trotzdem falsch. Genau diesen Fehler soll die Regel sehen.
+    const hikone = alleOrte.find((o) => o.nr === 165)!;
+    const befunde = pruefeOrte([{ ...hikone, lng: hikone.lng + 1 }], stationen);
+    expect(befunde.map((b) => b.titel).join(' | ')).toMatch(/neben der Etappe kyoto → kanazawa/);
+    // Und am richtigen Ort meldet sie nichts.
+    expect(pruefeOrte([hikone], stationen)).toEqual([]);
   });
 
   it('jeder Eintrag in AUSFLUEGE verletzt die Regel wirklich', () => {

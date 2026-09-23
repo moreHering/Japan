@@ -408,7 +408,7 @@
     >
       <option value="alle">Alle Stationen</option>
       {#each stations as s (s.slug)}
-        <option value={s.slug}>{s.no} · {s.name}</option>
+        <option value={s.slug}>{s.no ? `${s.no} · ${s.name}` : s.name}</option>
       {/each}
       {#if abseitsAnzahl}
         <option value={ABSEITS}>{ABSEITS_LABEL} ({abseitsAnzahl})</option>

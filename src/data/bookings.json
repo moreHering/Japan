@@ -42,9 +42,16 @@
     "group": "Unterkunft"
   },
   {
+    "id": "unterkunft-kawaguchiko",
+    "label": "Kawaguchiko — Ooike Hotel",
+    "detail": "1 Nacht, 07.10.–08.10. · Empfehlung des Reisebands, noch zu buchen · Alternativen laut Reiseband: Hotel Koryu, Mizno",
+    "due": "2026-10-07",
+    "group": "Unterkunft"
+  },
+  {
     "id": "unterkunft-hakone",
     "label": "Hakone — Onsen-Ryokan",
-    "detail": "3 Nächte, 07.10.–10.10.",
+    "detail": "2 Nächte, 08.10.–10.10.",
     "due": null,
     "group": "Unterkunft"
   },
@@ -56,31 +63,10 @@
     "group": "Unterkunft"
   },
   {
-    "id": "nohi-bus",
-    "label": "Nōhi-Bus Kanazawa → Takayama",
-    "detail": "Über Shirakawa-gō. Reservierungspflichtig — die Direktverbindung ist die Alternative.",
-    "due": "2026-10-05",
-    "group": "Transport"
-  },
-  {
-    "id": "romancecar",
-    "label": "Odakyū Romancecar Hakone → Shinjuku",
-    "detail": "Sitzplatzreservierung, 10.10.",
-    "due": "2026-10-10",
-    "group": "Transport"
-  },
-  {
-    "id": "thunderbird",
-    "label": "Thunderbird + Hokuriku-Shinkansen Kyoto → Kanazawa",
-    "detail": "Umstieg in Tsuruga, 03.10.",
+    "id": "mietwagen",
+    "label": "Mietwagen Kyoto → Tokio",
+    "detail": "Übernahme 03.10. am Bahnhof Kyoto, Rückgabe 10.10. in Shinjuku · vollgetankt zurückgeben",
     "due": "2026-10-03",
-    "group": "Transport"
-  },
-  {
-    "id": "hida-express",
-    "label": "Hida-Express Takayama → Nagoya",
-    "detail": "Erste Etappe des Umzugs nach Hakone, 07.10.",
-    "due": "2026-10-07",
     "group": "Transport"
   },
   {
@@ -96,6 +82,13 @@
     "detail": "Sports Day am Montag, 12.10. — voller Nahverkehr, voll gebuchte Sehenswürdigkeiten. Hanazono-Trödelmarkt in Shinjuku am Sonntag, 11.10.",
     "due": "2026-10-10",
     "group": "Hinweis"
+  },
+  {
+    "id": "jaf-uebersetzung",
+    "label": "JAF-Übersetzung des Führerscheins ausdrucken",
+    "detail": "Ohne sie gibt es den Mietwagen nicht (laut Reiseband: am Konbini-Drucker)",
+    "due": "2026-10-03",
+    "group": "Vorbereitung"
   },
   {
     "id": "esim",

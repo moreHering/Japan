@@ -51,9 +51,10 @@ await seite.waitForTimeout(500);
 
 console.log('Umzugstage im Tagesstreifen:');
 const umzugTabs = seite.locator('.daytab.leg');
-pruefe((await umzugTabs.count()) === 5, 'fünf Tage sind als Umzug markiert', `${await umzugTabs.count()}`);
+// Osaka → Kyoto mit der Bahn, dann fünf Mietwagen-Etappen (Plan vom 23.09.).
+pruefe((await umzugTabs.count()) === 6, 'sechs Tage sind als Umzug markiert', `${await umzugTabs.count()}`);
 // Der goldene Balken allein ist nicht zu deuten — der `title` sagt, was er
-// bedeutet. Geprüft an allen fünf, nicht an einem.
+// bedeutet. Geprüft an allen sechs, nicht an einem.
 const titel = await umzugTabs.evaluateAll((ns) => ns.map((n) => n.getAttribute('title') ?? ''));
 pruefe(
   titel.every((t) => /Umzug .+ → .+ · /.test(t)),
@@ -96,23 +97,23 @@ pruefe(
   'kein Buchungshaken, wo es nichts zu buchen gibt',
 );
 
-// ------------------------------------------ 05.10.: der reservierungspflichtige ---
+// ----------------------------------- 03.10.: der Mietwagen wird übernommen ---
 
-console.log('\n05.10. — Kanazawa → Takayama (Nōhi-Bus, reservierungspflichtig):');
-await tagOeffnen(tagIndex('2026-10-05'));
+console.log('\n03.10. — Kyoto → Kanazawa (Mietwagen, Etappe 1):');
+await tagOeffnen(tagIndex('2026-10-03'));
 const leg2 = seite.locator('.note.leg');
 const t2 = (await leg2.innerText()).replace(/\s+/g, ' ');
-pruefe(/Kanazawa/.test(t2) && /Takayama/.test(t2), 'nennt beide Stationen');
-pruefe(/Shirakawa-gō/.test(t2), 'nennt die Verbindung über Shirakawa-gō');
+pruefe(/Kyoto/.test(t2) && /Kanazawa/.test(t2), 'nennt beide Stationen');
+pruefe(/Mietwagen, Etappe 1/.test(t2), 'nennt die Verbindung: Mietwagen, Etappe 1');
 
 const haken = leg2.locator('.legbuchung input[type=checkbox]');
 pruefe((await haken.count()) === 1, 'es gibt genau einen Buchungshaken');
 pruefe(!(await haken.isChecked()), 'noch nicht gebucht');
 pruefe(/noch nicht gebucht/.test(t2), 'und sagt das auch');
 pruefe(
-  /[Rr]eservierungspflichtig/.test(t2),
-  'der Grund steht dabei, solange nicht gebucht ist',
-  t2.slice(-70),
+  /Bahnhof Kyoto/.test(t2) && /Shinjuku/.test(t2),
+  'Übernahme und Rückgabe stehen dabei, solange nicht gebucht ist',
+  t2.slice(-90),
 );
 
 // Tippfläche: derselbe Anspruch wie überall sonst.
@@ -140,10 +141,10 @@ const orga = await ctx.newPage();
 await orga.goto(`${BASIS}/organisation/`, { waitUntil: 'load' });
 await orga.waitForTimeout(900);
 const orgaHaken = orga.locator('input[type=checkbox]').nth(0);
-const busZeile = orga.locator('label, li, tr', { hasText: 'Nōhi-Bus' }).first();
+const busZeile = orga.locator('label, li, tr', { hasText: 'Mietwagen Kyoto' }).first();
 if ((await busZeile.count()) === 0) {
   fehler += 1;
-  console.log('  FEHL  die Nōhi-Bus-Zeile ist auf /organisation/ nicht zu finden');
+  console.log('  FEHL  die Mietwagen-Zeile ist auf /organisation/ nicht zu finden');
 } else {
   pruefe(
     await busZeile.locator('input[type=checkbox]').isChecked(),

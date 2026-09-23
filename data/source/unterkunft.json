@@ -1,6 +1,6 @@
 {
   "_erklaerung": [
-    "Welche der 25 Orte in der Kategorie Übernachten noch Vorschläge sind.",
+    "Welche der 27 Orte in der Kategorie Übernachten noch Vorschläge sind.",
     "",
     "Für jede der sechs Stationen ist eine Unterkunft gebucht (siehe stay in",
     "stations.json). Die Vorschläge des Reisebands sind damit erledigt und",
@@ -19,7 +19,13 @@
     "keineUebernachtung: Orte, die das Reiseband unter Übernachten führt, die",
     "aber gar keine sind. Nr. 164 ist ein Tages-Onsen an der Talstation nach",
     "der Wanderung. Die Kategorie bleibt wie im gedruckten Band, der Ort bleibt",
-    "aber sichtbar — er ist kein Bett, sondern etwas zu tun."
+    "aber sichtbar — er ist kein Bett, sondern etwas zu tun.",
+    "",
+    "Nr. 172 Hirayu no Mori ist ebenfalls ein Tages-Onsen (Kamikōchi-Tag).",
+    "",
+    "empfohlen: Die Unterkunft, die das Reiseband für eine Nacht vorschlägt, die",
+    "noch nicht gebucht ist — Nr. 177 Ooike Hotel für Kawaguchiko (07./08.10.).",
+    "Sie bleibt sichtbar, gilt aber nicht als gebucht."
   ],
   "gebucht": {
     "osaka": null,
@@ -29,5 +35,11 @@
     "hakone": null,
     "tokio": 147
   },
-  "keineUebernachtung": [164]
+  "keineUebernachtung": [
+    164,
+    172
+  ],
+  "empfohlen": [
+    177
+  ]
 }

@@ -29,7 +29,7 @@ import type { Beitrag, Person } from './freundebuch.svelte';
  */
 import { HOECHSTE_FESTE_NR, placeByNr } from './places';
 import type { TripDay } from './trip';
-import { buildDays, daysBetween, formatDay, formatFull, legs, stations, trip } from './trip';
+import { buildDays, daysBetween, formatDay, formatFull, hauptstationen, legs, stations, trip } from './trip';
 
 export type Ort = { name: string; lat: number; lng: number };
 
@@ -316,7 +316,8 @@ export function kennzahlen(
   return {
     tageGesamt: tageNachDatum.size,
     naechte: trip.nights,
-    stationen: stations.length,
+    // Die sechs des Bandes — die Zwischennacht in Kawaguchiko zählt nicht mit.
+    stationen: hauptstationen.length,
     etappen: legs.length,
     reisetagJetzt: reisetag(tag),
     // „Abreise" ist hier der Reisebeginn, wie in TripStatus: die Seite zählt
@@ -343,7 +344,8 @@ export function kennzahlen(
 }
 
 /**
- * Die geplante Route als Linie: die sechs Stationsmitten in Reihenfolge.
+ * Die geplante Route als Linie: die Schlaforte in Reihenfolge — die sechs
+ * Stationen und seit dem Mietwagen-Plan die Nacht am Kawaguchi-See.
  *
  * Ausdrücklich die **geplante** Route. Die tatsächlich gelaufene ließe sich nur
  * aus Plan und Orten rekonstruieren, und beides ist für Gäste nicht lesbar. Was

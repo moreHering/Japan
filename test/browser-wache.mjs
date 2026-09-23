@@ -95,7 +95,8 @@ pruefe(
  * angesehen hat, ist schlimmer als keine: Man hält 23 Orte für kontrolliert.
  */
 const zahl = await seite.locator('.zahlen dd').first().innerText();
-pruefe(Number(zahl) === 141, 'sie nennt die Zahl der wirklich geprüften Orte', zahl);
+// 141 bis zum 23.09., seitdem +17 Orte der Mietwagen-Strecke: 158.
+pruefe(Number(zahl) === 158, 'sie nennt die Zahl der wirklich geprüften Orte', zahl);
 pruefe(
   /23 erledigten Unterkunftsvorschläge/.test(await seite.locator('.grenzen').innerText()),
   'und sagt, welche sie nicht ansieht',

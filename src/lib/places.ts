@@ -1,4 +1,4 @@
-/** Typen und Beschriftungen rund um die 164 Orte des Reisebands. */
+/** Typen und Beschriftungen rund um die 181 Orte des Reisebands. */
 
 import placesData from '../data/places.json';
 import stationsData from '../data/stations.json';
@@ -25,6 +25,13 @@ export type Place = {
   cashOnly: boolean;
   /** Nummern weiterer Orte an genau derselben Koordinate. */
   sameSpotAs?: number[];
+  /**
+   * Nur bei den Orten der Mietwagen-Strecke (Nr. 165–181): der Tag, an dem sie
+   * angefahren werden, und die Strecke dazu. `station` ist dann die Station, in
+   * der man an diesem Tag schläft — so schlägt der Tagesplan sie am richtigen Tag
+   * vor. `nr` ist die Etappe, `null` beim Kamikōchi-Tag (kein Umzug).
+   */
+  etappe?: { nr: number | null; datum: string; von: string; nach: string };
   /**
    * Nur bei der Kategorie Übernachten gesetzt.
    *
@@ -80,7 +87,8 @@ export function stationLabelOf(slug: string): string {
 
 /** Die sechs Stationen der Route plus die Ablage für alles daneben. */
 export const STATIONSWAHL: { slug: string; label: string; planbar: boolean }[] = [
-  ...stationsData.map((s) => ({ slug: s.slug, label: `${s.no} · ${s.name}`, planbar: true })),
+  // Die Zwischennacht (Kawaguchiko) hat keine Kapitelnummer — dann nur der Name.
+  ...stationsData.map((s) => ({ slug: s.slug, label: s.no ? `${s.no} · ${s.name}` : s.name, planbar: true })),
   { slug: ABSEITS, label: ABSEITS_LABEL, planbar: false },
 ];
 

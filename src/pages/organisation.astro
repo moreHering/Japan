@@ -1,11 +1,10 @@
 ---
 import Base from '../layouts/Base.astro';
 import Organisation from '../components/Organisation.svelte';
-import { places } from '../lib/places';
 ---
 
 <Base
   title="Organisation"
 >
-  <Organisation client:only="svelte" places={places} />
+  <Organisation client:only="svelte" />
 </Base>

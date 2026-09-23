@@ -122,6 +122,13 @@ jobs:
         # nicht — was nur beim Bauen auffällt, fällt hier auf.
         run: npm run build
 
+      - name: Ausgelieferten Stand prüfen
+        # `test/dist.test.ts` prüft `dist/` — und überspringt sich, wenn es fehlt.
+        # Im Schritt „Vitest" oben gibt es `dist/` noch nicht, dort lief die Datei
+        # also nie wirklich: grün, ohne etwas angesehen zu haben. Deshalb hier,
+        # nach dem Bauen, noch einmal gezielt.
+        run: npx vitest run test/dist.test.ts
+
       # ------------------------------------------------------------------------
       # Ab hier der Browser.
       # ------------------------------------------------------------------------

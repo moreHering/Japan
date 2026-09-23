@@ -18,7 +18,9 @@
 
   let { place, compact = false, active = false, onselect, children }: Props = $props();
 
-  const cat = categoryOf(place.category);
+  // Abgeleitet, nicht einmal berechnet: Eine Kategoriekorrektur in der Orte-Ansicht
+  // änderte bis zum 23.09. den Ort, aber nicht Farbe und Beschriftung seiner Karte.
+  let cat = $derived(categoryOf(place.category));
   // Ein Ort ohne endgültige Nummer zeigt "neu" — eine negative Zahl wäre falsch.
   let eigen = $derived(istEigen(place) ? place : null);
   let nummer = $derived(eigen?.vorlaeufig ? 'neu' : String(place.nr));

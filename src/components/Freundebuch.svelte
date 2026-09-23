@@ -48,7 +48,7 @@
   } from '../lib/vorlagen';
   import { places, plainText } from '../lib/places';
   import { plan } from '../lib/store.svelte';
-  import { formatFull, trip } from '../lib/trip';
+  import { formatFull, heuteInJapan, trip } from '../lib/trip';
   import { groesse } from '../lib/bild';
 
   const KAOMOJI = ['(≧▽≦)', '(・ω・)ﾉ', '＼(^o^)／', '(๑>◡<๑)', '(￣ー￣)b', 'ヾ(⌐■_■)ノ♪'];
@@ -57,7 +57,9 @@
   let besuche = $state(0);
 
   let neuText = $state('');
-  let neuDatum = $state(new Date().toISOString().slice(0, 10));
+  // Heute in Japan: Ein Beitrag beim Frühstück gehört zum heutigen Tag, nicht zum
+  // gestrigen, den UTC bis 9 Uhr morgens noch meint.
+  let neuDatum = $state(heuteInJapan());
   let neuOrt = $state<string>('');
   let neuSticker = $state<StickerName>('sushi');
   /**
@@ -507,9 +509,12 @@
               class="knopf schlicht"
               onclick={() => {
                 formOffen = false;
-                neuDatei = null;
-                if (vorschau) URL.revokeObjectURL(vorschau);
-                vorschau = null;
+                // Bis zum 23.09. standen hier noch `neuDatei` und `vorschau` aus der
+                // Zeit mit einem Bild je Beitrag. Die gibt es nicht mehr — der Knopf
+                // warf beim Tippen einen ReferenceError, das Formular klappte zwar
+                // zu, aber die gewählten Bilder blieben liegen und tauchten beim
+                // nächsten Öffnen wieder auf. Gefunden von svelte-check.
+                bildVerwerfen();
               }}>abbrechen</button
             >
             <button class="knopf" type="submit" disabled={buch.upload !== null}>eintragen</button>

@@ -42,6 +42,7 @@ export function letzterName(): KontoName {
 }
 
 export { bleibtAngemeldet, setBleibtAngemeldet, KONTEN };
+export type { KontoName };
 
 function nameAusSession(user: { email?: string | null; user_metadata?: Record<string, unknown> }) {
   const ausMetadaten = user.user_metadata?.name;

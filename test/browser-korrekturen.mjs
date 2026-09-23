@@ -13,7 +13,7 @@
 
 import { chromium, devices } from 'playwright';
 
-import { BASIS, START } from './browserlauf.mjs';
+import { BASIS, PLAN_KEY, planSchreiben, START } from './browserlauf.mjs';
 const iPhone = devices['iPhone 13'];
 
 let fehler = 0;
@@ -264,6 +264,79 @@ const zuKlein = await seite.evaluate(() =>
     .filter((x) => x.h > 0 && x.h < 40),
 );
 pruefe(zuKlein.length === 0, 'alle Tippziele im Formular sind mindestens 40 px hoch', JSON.stringify(zuKlein));
+
+// ====================== 6) Tagesplan und Orga sehen die Korrekturen ===
+/*
+ * Der Fehler, den diese Prüfung bewacht, ist der teuerste der ganzen App: Bis zum
+ * 23.09. baute der Tagesplan aus den **rohen** Buchdaten. Ein in Orte
+ * verschobener Punkt stand auf der Tageskarte und im Maps-Routenlink weiter an
+ * der alten Stelle, ein ausgeblendeter Ort wurde weiter gezeigt, ein
+ * umbenannter trug seinen alten Namen.
+ *
+ * Gegenprobe: In `DayPlanner.svelte` `alle` wieder aus der Build-Liste bauen →
+ * die drei Prüfungen unten fallen.
+ */
+console.log('\nTagesplan mit Korrekturen:');
+await seite.goto(`${BASIS}/plan/`, { waitUntil: 'load' });
+await seite.waitForSelector('.daybar .daytab', { timeout: 15000 });
+await planSchreiben(
+  seite,
+  {
+    days: { '2026-09-28': { placeNrs: [1, 3, 8], note: '' } },
+    korrekturen: {
+      3: { nr: 3, versteckt: true, schlagworte: [] },
+      8: { nr: 8, versteckt: false, schlagworte: [], name: 'Umbenannt Test', lat: 34.6655, lng: 135.5011 },
+    },
+  },
+  '.daybar .daytab',
+);
+await seite.locator('.daybar .daytab', { hasText: '28.09' }).first().click();
+await seite.waitForTimeout(500);
+const stopps = (await seite.locator('.stops').innerText()).replace(/\s+/g, ' ');
+pruefe(/Umbenannt Test/.test(stopps), 'der umbenannte Ort trägt im Tagesplan den neuen Namen', stopps.slice(0, 120));
+pruefe(!/Cascade/.test(stopps), 'der ausgeblendete Ort steht nicht mehr im Tag');
+const routen = await seite.locator('.mapsroute a').evaluateAll((as) => as.map((a) => decodeURIComponent(a.href)));
+pruefe(
+  routen.length > 0 && routen.every((h) => h.includes('34.6655,135.5011') && !h.includes('34.7028289')),
+  'der Maps-Routenlink führt zur korrigierten Koordinate, nicht zur alten',
+  routen[0]?.slice(0, 160),
+);
+
+/*
+ * Speichern beim Seitenwechsel. Bis zum 23.09. schrieb der Plan erst nach 300 ms
+ * — wer in der Zeit die Seite wechselte, verlor die Änderung, während die
+ * Warteschlange des Abgleichs sie schon vermerkt hatte.
+ *
+ * Gegenprobe: den `pagehide`-Hörer in `store.svelte.ts` entfernen → fällt.
+ */
+console.log('\nSpeichern beim Seitenwechsel:');
+await seite.goto(`${BASIS}/orte/`, { waitUntil: 'load' });
+// Leer anfangen: Der Plan aus dem Block davor läge sonst noch im Speicher, und
+// die Zählung unten bestünde auch dann, wenn das „+" verloren ginge.
+await planSchreiben(seite, { days: {}, korrekturen: {} }, '.list article.place');
+const plusKnopf = seite.locator('.list article.place .btn.primary').first();
+const plusText = await plusKnopf.innerText();
+await plusKnopf.click();
+// Sofort weg — keine Wartezeit.
+await seite.goto(`${BASIS}/plan/`, { waitUntil: 'load' });
+const gespeichert = await seite.evaluate((k) => {
+  const p = JSON.parse(localStorage.getItem(k) ?? '{}');
+  return Object.values(p.days ?? {}).reduce((n, d) => n + (d.placeNrs?.length ?? 0), 0);
+}, PLAN_KEY);
+pruefe(gespeichert >= 1, 'ein „+" direkt vor dem Seitenwechsel ist gespeichert', `${plusText} → ${gespeichert} Orte`);
+
+/*
+ * `?nr=` — der Weg aus der Selbstprüfung und aus der Stoppliste der Straße. Bis
+ * zum 23.09. las den Parameter niemand.
+ */
+console.log('\nEin einzelner Ort über ?nr=:');
+await seite.goto(`${BASIS}/orte/?nr=171`, { waitUntil: 'load' });
+await seite.waitForSelector('.list article.place', { timeout: 15000 });
+await seite.waitForTimeout(300);
+const suchfeld = await seite.locator('input[type="search"]').first().inputValue();
+pruefe(suchfeld === '171', 'die Nummer steht im Suchfeld', suchfeld);
+const erste = (await seite.locator('.list article.place').first().innerText()).replace(/\s+/g, ' ');
+pruefe(/Kappa-bashi/.test(erste), 'der erste Treffer ist Nr. 171 Kappa-bashi', erste.slice(0, 60));
 
 // -------------------------------------------------------- Aufräumen ---
 

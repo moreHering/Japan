@@ -1,11 +1,10 @@
 ---
 import Base from '../layouts/Base.astro';
 import DayPlanner from '../components/DayPlanner.svelte';
-import { places } from '../lib/places';
 ---
 
 <Base
   title="Tagesplan"
 >
-  <DayPlanner client:only="svelte" places={places} />
+  <DayPlanner client:only="svelte" />
 </Base>

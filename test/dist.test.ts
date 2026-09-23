@@ -46,6 +46,21 @@ describe('Der ausgelieferte Stand', () => {
     expect(treffer, `__buch steht im ausgelieferten Stand:\n${treffer.join('\n')}`).toEqual([]);
   });
 
+  it.skipIf(!existsSync(DIST))('liefert die Plan-Seiten ohne die Ortsdaten im HTML aus', () => {
+    /*
+     * Bis zum 23.09. bekamen `/plan/`, `/orte/` und `/organisation/` die ganze
+     * Ortsliste als Astro-Prop mit — rund 115 kB je Seite, die keine Komponente
+     * mehr las (alle nehmen `sichtbareOrte()` aus dem Store). Auf einer
+     * Roaming-Verbindung ist das bei jedem Öffnen bezahlt. Gemessen danach:
+     * ~12 kB. Die Grenze liegt mit Luft darüber und fällt, sobald die Liste
+     * wieder hineinrutscht.
+     */
+    for (const seite of ['plan', 'orte', 'organisation']) {
+      const groesse = statSync(join(DIST, seite, 'index.html')).size;
+      expect(groesse, `${seite}/index.html ist ${groesse} Byte`).toBeLessThan(40_000);
+    }
+  });
+
   /*
    * **Hier stand eine Prüfung „das Anmeldepasswort kommt im Bündel nicht vor" —
    * sie ist wieder raus, und der Grund ist ein Befund.**

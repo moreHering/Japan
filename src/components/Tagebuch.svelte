@@ -43,7 +43,7 @@
     ortVon,
     stationsRoute,
   } from '../lib/tagebuch.ts';
-  import { formatFull, trip } from '../lib/trip';
+  import { formatFull, heuteInJapan, trip } from '../lib/trip';
 
   /**
    * Der Stichtag kommt einmal beim Mounten, nicht bei jedem Lesen.
@@ -53,7 +53,7 @@
    * um einen Tag verschoben, und die Zeile „Tag 7 von 20" stimmte für die
    * Reisenden nicht.
    */
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = heuteInJapan();
 
   let kaputt = $state<Set<string>>(new Set());
 

@@ -7,7 +7,6 @@
    * Reiseband eine Reservierung erwähnt — letztere werden aus places.json
    * abgeleitet, damit sie nicht doppelt gepflegt werden müssen.
    */
-  import type { Place } from '../lib/places';
   import LoginPanel from './LoginPanel.svelte';
   import SyncPanel from './SyncPanel.svelte';
   import { sync } from '../lib/sync.svelte';
@@ -22,16 +21,17 @@
     removeExpense,
     removePackingItem,
     resetAll,
+    sichtbareOrte,
     toggleBooking,
     togglePacking,
   } from '../lib/store.svelte';
-  import { formatEuro, formatFull, formatYen, stations, trip, yenToEuro } from '../lib/trip';
+  import { formatEuro, formatFull, formatYen, heuteInJapan, stations, trip, yenToEuro } from '../lib/trip';
   import { url } from '../lib/paths';
+  import { dateiAnbieten } from '../lib/download';
 
-  type Props = { places: Place[] };
-  let { places }: Props = $props();
-
-  const today = new Date().toISOString().slice(0, 10);
+  // In Japan-Zeit: Eine Ausgabe beim Frühstück gehört zum heutigen Tag, nicht
+  // zum gestrigen, den UTC bis 9 Uhr noch meint.
+  const today = heuteInJapan();
 
   /**
    * Vorbelegung des Ausgabendatums. Vor der Reise liegt "heute" außerhalb von
@@ -48,11 +48,18 @@
     group: string;
   };
 
-  /** Feste Einträge plus die im Reiseband erwähnten Reservierungen. */
-  const bookings: Booking[] = [
+  /**
+   * Feste Einträge plus die Orte, die eine Reservierung brauchen — aus der
+   * **korrigierten** Liste und reaktiv. Bis zum 23.09. kam sie einmalig aus dem
+   * Build: Ein eigener Ort mit „Reservierung nötig" tauchte nie auf, ein auf
+   * „keine Reservierung" korrigierter blieb für immer stehen. Nur endgültig
+   * nummerierte Orte: Der Haken wird unter `place:<nr>` gespeichert, und eine
+   * vorläufige (negative) Nummer wechselt beim nächsten Abgleich.
+   */
+  let bookings: Booking[] = $derived([
     ...(bookingsData as Booking[]),
-    ...places
-      .filter((p) => p.needsBooking)
+    ...sichtbareOrte()
+      .filter((p) => p.needsBooking && p.nr > 0)
       .map((p) => ({
         id: `place:${p.nr}`,
         label: `${p.nr} · ${p.name}`,
@@ -60,9 +67,9 @@
         due: null,
         group: 'Vor Ort reservieren',
       })),
-  ];
+  ]);
 
-  const groups = [...new Set(bookings.map((b) => b.group))];
+  let groups = $derived([...new Set(bookings.map((b) => b.group))]);
 
   let openBookings = $derived(bookings.filter((b) => !plan.bookings[b.id]).length);
 
@@ -143,11 +150,7 @@
 
   function download() {
     const blob = new Blob([exportJson()], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `japan-2026-plan-${today}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    dateiAnbieten(blob, `japan-2026-plan-${today}.json`);
   }
 
   /** Angemeldet schreibt jede Übernahme auch die gemeinsame Ablage um. */

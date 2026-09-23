@@ -16,9 +16,8 @@
  */
 import Base from '../layouts/Base.astro';
 import PlaceExplorer from '../components/PlaceExplorer.svelte';
-import { places } from '../lib/places';
 ---
 
 <Base title="Orte & Karte">
-  <PlaceExplorer client:only="svelte" places={places} />
+  <PlaceExplorer client:only="svelte" />
 </Base>

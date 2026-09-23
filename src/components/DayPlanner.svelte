@@ -28,6 +28,7 @@
     placesOfDay,
     removeFromDay,
     setNote,
+    sichtbareOrte,
     toggleBooking,
   } from '../lib/store.svelte';
   import bookingsData from '../data/bookings.json';
@@ -39,20 +40,23 @@
    */
   import { HALTE_JE_LINK, routenLinks } from '../lib/mapsexport';
 
-  type Props = { places: Place[] };
-  let { places }: Props = $props();
-
   const days: TripDay[] = buildDays();
 
   /**
-   * Feste und eigene Orte zusammen. Orte abseits der Route fallen hier heraus:
-   * Sie sind nicht auf einen Reisetag legbar, also haben sie im Planer nichts
-   * zu suchen — auch nicht als Vorschlag, der sich dann nicht anklicken lässt.
+   * Feste und eigene Orte zusammen, **mit angewandten Korrekturen** und ohne die
+   * ausgeblendeten — dieselbe Liste wie in der Orte-Ansicht.
+   *
+   * Bis zum 23.09. stand hier die Build-Liste `places` aus dem Astro-Prop. Die
+   * kennt keine Korrekturen: Ein in Orte verschobener Punkt stand im Tagesplan,
+   * auf der Tageskarte und im Maps-Routenlink weiter an der **alten** Stelle, ein
+   * ausgeblendeter Ort wurde weiter vorgeschlagen, ein umbenannter trug seinen
+   * alten Namen. Ein Routenlink zu einem Punkt, den man gerade korrigiert hat,
+   * ist auf der Reise der teuerste Fehler, den die App machen kann.
+   *
+   * Orte abseits der Route fallen heraus: Sie sind nicht auf einen Reisetag
+   * legbar, also haben sie im Planer nichts zu suchen.
    */
-  let alle = $derived<Place[]>([
-    ...places,
-    ...plan.customPlaces.filter((p) => !istAbseits(p)),
-  ]);
+  let alle = $derived<Place[]>(sichtbareOrte().filter((p) => !istAbseits(p)));
 
   /** Nachschlagewerk für die Orte eines Tages. Wächst mit den eigenen Orten. */
   let byNr = $derived(new Map(alle.map((p) => [p.nr, p])));
@@ -266,15 +270,27 @@
     }
   }
 
+  /*
+   * Hoch und runter gehen zum **sichtbaren** Nachbarn, nicht zur nächsten
+   * Position der gespeicherten Liste. Dort kann ein ausgeblendeter Ort
+   * dazwischenstehen — dann tauschte ein Tipp den Halt mit etwas Unsichtbarem,
+   * und auf dem Schirm geschah nichts.
+   */
+  function nachbar(date: string, nr: number, richtung: -1 | 1) {
+    const liste = placesOfDay(date);
+    const sichtbar = liste.filter((n) => byNr.has(n));
+    const k = sichtbar.indexOf(nr);
+    const ziel = sichtbar[k + richtung];
+    if (k < 0 || ziel === undefined) return;
+    moveWithinDay(date, liste.indexOf(nr), liste.indexOf(ziel));
+  }
+
   function moveUp(date: string, nr: number) {
-    const i = placesOfDay(date).indexOf(nr);
-    if (i > 0) moveWithinDay(date, i, i - 1);
+    nachbar(date, nr, -1);
   }
 
   function moveDown(date: string, nr: number) {
-    const list = placesOfDay(date);
-    const i = list.indexOf(nr);
-    if (i > -1 && i < list.length - 1) moveWithinDay(date, i, i + 1);
+    nachbar(date, nr, 1);
   }
 
   let totalPlanned = $derived(

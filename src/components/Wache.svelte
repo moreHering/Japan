@@ -28,7 +28,13 @@
 
   import MapView from './MapView.svelte';
   import { alleOrte } from '../lib/places';
-  import { alleOrteMitKorrekturen, plan, vorlaeufigeOrte } from '../lib/store.svelte';
+  import {
+    alleOrteMitKorrekturen,
+    plan,
+    verworfeneOrte,
+    verworfeneVergessen,
+    vorlaeufigeOrte,
+  } from '../lib/store.svelte';
   import { abgleichen, ERSTABGLEICH, kennzahlen, sync } from '../lib/sync.svelte';
   import { auth } from '../lib/auth.svelte';
   import { supabaseConfigured } from '../lib/supabase';
@@ -51,6 +57,15 @@
    * ist der Fehler da. Lieber jetzt gemeldet als unterwegs.
    */
   let geprueft = $derived(alleOrteMitKorrekturen());
+
+  /**
+   * Eigene Orte, die beim Laden unbrauchbar waren (unmögliche Koordinate, kein
+   * Name). Sie stehen nicht im Plan und auf keiner Karte, sind aber **nicht
+   * gelöscht** — hier stehen Name und Zahlen, damit man sie richtig neu anlegt.
+   */
+  let verworfen = $state(verworfeneOrte());
+  const feld = (o: Record<string, unknown>, k: string) =>
+    o[k] === undefined || o[k] === null || o[k] === '' ? '—' : String(o[k]);
   let befunde = $derived<Befund[]>(pruefeOrte(geprueft, stationen));
 
   /*
@@ -206,6 +221,33 @@
         Dubletten. Geprüft sind <b>{zahlen.geprueft}</b> Orte — die aus dem Reiseband
         <b>mit</b> euren Korrekturen und die {zahlen.eigen} selbst angelegten.
       </p>
+    {/if}
+
+    {#if verworfen.length}
+      <div class="verworfen">
+        <p>
+          <b>{verworfen.length === 1 ? 'Ein eigener Ort war' : `${verworfen.length} eigene Orte waren`}
+            beim Laden nicht zu gebrauchen</b> — meist Breite und Länge vertauscht. Sie stehen
+          auf keiner Karte, sind aber aufgehoben. In Orte mit den richtigen Zahlen neu anlegen,
+          dann hier vergessen.
+        </p>
+        <ul>
+          {#each verworfen as o, i (i)}
+            <li>
+              <b>{feld(o, 'name')}</b> · Breite {feld(o, 'lat')} · Länge {feld(o, 'lng')}
+              {#if o.descriptionHtml}<br /><span class="klein">{String(o.descriptionHtml).replace(/<[^>]+>/g, '')}</span>{/if}
+            </li>
+          {/each}
+        </ul>
+        <button
+          class="btn small ghost"
+          type="button"
+          onclick={() => {
+            verworfeneVergessen();
+            verworfen = [];
+          }}>neu angelegt — vergessen</button
+        >
+      </div>
     {/if}
 
     <dl class="zahlen">
@@ -447,6 +489,18 @@
   }
 
   /* ------------------------------------------------------------- Befunde */
+
+  .verworfen {
+    margin: 12px 0;
+    padding: 12px 14px;
+    border: 1px solid var(--shu);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--shu) 6%, transparent);
+  }
+  .verworfen ul {
+    margin: 8px 0 10px;
+    padding-left: 18px;
+  }
 
   .befunde {
     list-style: none;

@@ -298,6 +298,7 @@ function normalize(raw: unknown): PlanState {
       const ort = normalisiereOrt(roh);
       // Zwei Orte mit derselben Nummer wären in der Karte nicht auflösbar.
       if (ort && !base.customPlaces.some((x) => x.nr === ort.nr)) base.customPlaces.push(ort);
+      else if (!ort) verwerfen(roh);
     }
   }
   if (o.korrekturen && typeof o.korrekturen === 'object') {
@@ -308,6 +309,56 @@ function normalize(raw: unknown): PlanState {
   }
   if (typeof o.updatedAt === 'string') base.updatedAt = o.updatedAt;
   return base;
+}
+
+// ------------------------------------------------------ Verworfene Orte ---
+
+const VERWORFEN_KEY = `${KEY}:verworfen`;
+
+/**
+ * Ein eigener Ort, der beim Laden nicht zu gebrauchen war — aufbewahrt statt
+ * gelöscht.
+ *
+ * `normalisiereOrt()` lässt einen Ort mit unmöglicher Koordinate (Breite 135 —
+ * genau der vertauschte Fall, vor dem `/wache/` warnt) oder ohne Namen nicht in
+ * den Plan: Auf der Karte wäre er ein Marker im Nirgendwo, und die Datenbank
+ * nähme ihn ohnehin nicht an. Bis zum 23.09. war er damit aber auch **weg**,
+ * samt Notiz, ohne ein Wort. Jetzt liegt er hier, und die Selbstprüfung nennt
+ * ihn mit Namen und Zahlen, damit man ihn richtig neu anlegen kann.
+ *
+ * Eine eigene Ablage statt eines Feldes im Plan: Der Plan wird abgeglichen, und
+ * ein kaputter Ort darf gerade nicht zu den anderen Telefonen wandern.
+ */
+function verwerfen(roh: unknown) {
+  if (typeof localStorage === 'undefined' || !roh || typeof roh !== 'object') return;
+  try {
+    const liste = verworfeneOrte();
+    const text = JSON.stringify(roh);
+    if (liste.some((x) => JSON.stringify(x) === text)) return;
+    localStorage.setItem(VERWORFEN_KEY, JSON.stringify([...liste, roh]));
+  } catch {
+    // Kein Speicher — dann bleibt es beim Verwerfen wie früher.
+  }
+}
+
+/** Die beim Laden verworfenen eigenen Orte, roh wie gespeichert. */
+export function verworfeneOrte(): Record<string, unknown>[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const roh = JSON.parse(localStorage.getItem(VERWORFEN_KEY) ?? '[]');
+    return Array.isArray(roh) ? roh.filter((x) => x && typeof x === 'object') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Nach dem Neu-Anlegen: die Ablage leeren. */
+export function verworfeneVergessen() {
+  try {
+    localStorage.removeItem(VERWORFEN_KEY);
+  } catch {
+    // nichts zu tun
+  }
 }
 
 function load(): PlanState {
@@ -329,14 +380,41 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 function persist() {
   if (typeof localStorage === 'undefined') return;
   clearTimeout(timer);
-  timer = setTimeout(() => {
-    try {
-      plan.updatedAt = new Date().toISOString();
-      localStorage.setItem(KEY, JSON.stringify(plan));
-    } catch {
-      // Kein Speicher verfügbar — die Sitzung läuft ohne Persistenz weiter.
-    }
-  }, 300);
+  timer = setTimeout(sofortSpeichern, 300);
+}
+
+/**
+ * Schreibt **jetzt**, wenn noch etwas aussteht.
+ *
+ * Die 300 ms Sammelzeit oben haben eine Lücke, und sie ist teurer als sie
+ * aussieht: Die Warteschlange des Abgleichs schreibt ihre Einträge **sofort**
+ * („Tag 28.09. geändert"). Wer innerhalb der 300 ms die Seite wechselt — „+"
+ * antippen und gleich auf „Plan" —, verliert die Änderung im Plan, behält aber
+ * den Eintrag in der Warteschlange. Beim nächsten Laden lädt der Abgleich dann
+ * den **alten** Stand dieses Tages hoch und überschreibt ihn auf den anderen
+ * Telefonen. Deshalb wird beim Verlassen und beim Wegschalten der Seite sofort
+ * geschrieben.
+ */
+export function sofortSpeichern() {
+  if (timer === undefined || typeof localStorage === 'undefined') return;
+  clearTimeout(timer);
+  timer = undefined;
+  try {
+    plan.updatedAt = new Date().toISOString();
+    localStorage.setItem(KEY, JSON.stringify(plan));
+  } catch {
+    // Kein Speicher verfügbar — die Sitzung läuft ohne Persistenz weiter.
+  }
+}
+
+if (typeof window !== 'undefined') {
+  // `pagehide` statt `unload`: feuert auch auf iOS beim Wegwischen der App und
+  // beim Seitenwechsel aus dem bfcache heraus. `visibilitychange` fängt den Fall,
+  // dass die App in den Hintergrund geht und dort beendet wird.
+  window.addEventListener('pagehide', sofortSpeichern);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') sofortSpeichern();
+  });
 }
 
 /** Alle Mutationen laufen hierüber, damit kein Schreibvorgang vergessen wird. */
@@ -407,9 +485,15 @@ export function dayOfPlace(nr: number): string | null {
  * Plan bringt womöglich eine mit.
  */
 export function istPlanbar(nr: number): boolean {
+  // Mit Korrekturen: Ein ausgeblendeter oder nach „Nicht auf der Route"
+  // verschobener Buchort ist nicht mehr planbar — bis zum 23.09. galt hier
+  // der Buchwert, und die Orte-Ansicht bot für solche Orte weiter „+ Tag" an.
+  const k = plan.korrekturen[String(nr)];
+  if (k?.versteckt) return false;
   const eigen = plan.customPlaces.find((p) => p.nr === nr);
-  if (eigen) return !istAbseits(eigen);
-  return placeByNr(nr) !== undefined;
+  const ort = eigen ?? placeByNr(nr);
+  if (!ort) return false;
+  return !istAbseits(korrekturAnwenden(ort));
 }
 
 export function addToDay(date: string, nr: number, index?: number) {
@@ -775,14 +859,21 @@ function korrekturSchreiben(k: Korrektur) {
     );
     return;
   }
+  // Ein Ort, der abseits der Route landet oder verschwindet, darf auf keinem
+  // Reisetag stehenbleiben — und die anderen Telefone müssen das erfahren.
+  // Bis zum 23.09. ging nur die Korrektur in den Abgleich, nicht der Tag: Dort
+  // stand der ausgeblendete Ort weiter im Plan, und beim nächsten Holen kam er
+  // auch hier zurück.
+  const raus = k.versteckt || k.station === ABSEITS;
+  const tag = raus ? dayOfPlace(k.nr) : null;
+  const aenderungen: Aenderung[] = [{ art: 'korrektur', nr: k.nr }];
+  if (tag) aenderungen.push({ art: 'tag', datum: tag });
   mutate(
     () => {
       plan.korrekturen[schluessel] = k;
-      // Ein Ort, der abseits der Route landet oder verschwindet, darf auf
-      // keinem Reisetag stehenbleiben.
-      if (k.versteckt || k.station === ABSEITS) removeFromAnyDay(k.nr, false);
+      if (raus) removeFromAnyDay(k.nr, false);
     },
-    { art: 'korrektur', nr: k.nr },
+    ...aenderungen,
   );
 }
 

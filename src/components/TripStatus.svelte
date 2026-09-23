@@ -7,18 +7,17 @@
    * Reise eine Liste zum Abarbeiten. Was hier zählt, ist der Tag — vorher das
    * Warten, unterwegs der Platz in der Reise, danach nichts mehr.
    */
-  import { buildDays, formatFull, stations, trip } from '../lib/trip';
+  import { buildDays, daysBetween, formatFull, heuteInJapan, stations, trip } from '../lib/trip';
   import { url } from '../lib/paths';
 
   const days = buildDays();
 
-  /** Tage bis zur Abreise, über UTC gerechnet — sonst verschiebt Japan den Tag. */
+  /**
+   * Tage bis zur Abreise, gezählt ab **heute in Japan**. Bis zum 23.09. stand
+   * hier das UTC-Datum — in Japan vor 9 Uhr morgens also noch gestern.
+   */
   function tageBis(iso: string): number {
-    const [y, m, d] = iso.split('-').map(Number);
-    const ziel = Date.UTC(y, m - 1, d);
-    const jetzt = new Date();
-    const heute = Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth(), jetzt.getUTCDate());
-    return Math.round((ziel - heute) / 86_400_000);
+    return daysBetween(heuteInJapan(), iso);
   }
 
   const bisAbreise = tageBis(trip.start);

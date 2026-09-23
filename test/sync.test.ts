@@ -749,6 +749,43 @@ describe('Ausblenden statt löschen', () => {
     expect(plan.days['2026-09-28']?.placeNrs ?? []).not.toContain(47);
   });
 
+  it('bringt das Ausblenden als Tagesänderung auch zu den anderen Telefonen', async () => {
+    /*
+     * Bis zum 23.09. ging beim Ausblenden nur die Korrektur in den Abgleich, der
+     * Tag nicht. In der Ablage stand Nr. 47 danach weiter am 28.09. — auf den
+     * anderen Telefonen also auch, und beim nächsten Holen kam er hier zurück.
+     *
+     * Gegenprobe: in `korrekturSchreiben()` die Tagesänderung weglassen → die
+     * Zeile bleibt in `plan_days`, diese Prüfung fällt.
+     */
+    addToDay('2026-09-28', 47);
+    await abgleichen();
+    expect(ablage.tabellen.plan_days.some((z) => z.place_nr === 47)).toBe(true);
+
+    ortEntfernen(47);
+    await abgleichen();
+    expect(ablage.tabellen.plan_days.some((z) => z.place_nr === 47)).toBe(false);
+
+    // Und nach dem Holen bleibt er weg.
+    uebernehmeFremdstand({});
+    await abgleichen();
+    expect(plan.days['2026-09-28']?.placeNrs ?? []).not.toContain(47);
+  });
+
+  it('lässt einen ausgeblendeten Buchort nicht wieder auf einen Tag legen', () => {
+    // `istPlanbar()` sah bis zum 23.09. nur den Buchwert — die Orte-Ansicht bot
+    // für ausgeblendete oder abseits verschobene Orte weiter „+ Tag" an.
+    ortEntfernen(47);
+    addToDay('2026-09-28', 47);
+    expect(plan.days['2026-09-28']?.placeNrs ?? []).not.toContain(47);
+  });
+
+  it('lässt einen nach „Nicht auf der Route" korrigierten Buchort nicht auf einen Tag', () => {
+    ortAendern(48, { station: ABSEITS });
+    addToDay('2026-09-28', 48);
+    expect(plan.days['2026-09-28']?.placeNrs ?? []).not.toContain(48);
+  });
+
   it('löscht einen eigenen Ort wirklich, statt ihn nur auszublenden', async () => {
     const nr = ortAnlegen({
       name: 'Airbnb Kanazawa',

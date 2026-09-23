@@ -30,7 +30,7 @@
     type EigenerOrt,
     type Place,
   } from '../lib/places';
-  import { buildDays, formatDay, stations, type TripDay } from '../lib/trip';
+  import { buildDays, formatDay, heuteInJapan, stations, type TripDay } from '../lib/trip';
   import {
     addToDay,
     dayOfPlace,
@@ -52,18 +52,13 @@
    * erreichbar, ich kann über den Import dort nichts prüfen.
    */
   import { kartenLink, kml, kmlDateiname } from '../lib/mapsexport';
-
-  type Props = { places: Place[] };
-  let { places }: Props = $props();
+  import { dateiAnbieten } from '../lib/download';
 
   /**
    * Alle Orte, wie sie die App zeigen soll: feste und eigene, mit angewandten
    * Korrekturen, ausgeblendete heraus. Die Filter arbeiten danach auf einer
    * Liste und müssen nicht wissen, woher ein Ort kommt oder ob er korrigiert
    * wurde.
-   *
-   * Die Prop `places` bleibt für den Astro-Build erhalten, wird hier aber nicht
-   * mehr gelesen — Korrekturen stecken im Plan, nicht im Build.
    */
   let alle = $derived<Place[]>(sichtbareOrte());
 
@@ -136,15 +131,7 @@
      *    Griff hat den gerade gestarteten Download abgebrochen. Deshalb steht
      *    My Maps jetzt als eigener Knopf daneben.
      */
-    const a = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    a.href = url;
-    a.download = kmlDateiname(new Date().toISOString());
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    dateiAnbieten(blob, kmlDateiname(new Date().toISOString()));
   }
   let versteckt = $derived<Place[]>(versteckteOrte());
 
@@ -159,7 +146,19 @@
     return bekannt ? wanted : 'alle';
   })();
 
-  let query = $state('');
+  /**
+   * `?nr=167` — ein einzelner Ort, verlinkt aus der Selbstprüfung („Ort öffnen")
+   * und aus der Stoppliste des Kapitels „Die Straße". Bis zum 23.09. las den
+   * Parameter niemand: Der Link öffnete die ungefilterte Liste mit 141 Karten.
+   * Jetzt steht die Nummer in der Suche, und der Ort ist ausgewählt.
+   */
+  const initialNr = (() => {
+    if (typeof location === 'undefined') return null;
+    const n = Number(new URLSearchParams(location.search).get('nr'));
+    return Number.isInteger(n) && n !== 0 ? n : null;
+  })();
+
+  let query = $state(initialNr === null ? '' : String(initialNr));
   let station = $state<string>(initialStation);
   let cats = $state<Set<Category>>(new Set(CATEGORIES.map((c) => c.key)));
   let onlyTips = $state(false);
@@ -170,8 +169,16 @@
   /** Gesetzt: nur die Orte dieses Reisetags, mit Linie in der Reihenfolge. */
   let tagFilter = $state<string | null>(null);
 
-  let selected = $state<number | null>(null);
-  let targetDay = $state<string>(days[0].date);
+  let selected = $state<number | null>(initialNr);
+  /*
+   * Unterwegs zielt „+" auf **heute** (in Japan), vorher auf den ersten Reisetag.
+   * Die Auswahl dazu liegt auf dem Handy im zugeklappten Filter; bis zum 23.09.
+   * landete ein „+" dort deshalb stumm am 26.09., auch mitten in der Reise.
+   */
+  const heute = heuteInJapan();
+  let targetDay = $state<string>(
+    days.some((d) => d.date === heute) ? heute : days[0].date,
+  );
   let mobileView = $state<'liste' | 'karte'>('liste');
   /**
    * Auf dem Handy liegen die Filter zusammengeklappt.

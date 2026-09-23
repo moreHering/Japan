@@ -69,6 +69,26 @@ export const stations: Station[] = stationsData;
  */
 export const hauptstationen: Station[] = stations.filter((s) => !s.zwischennacht);
 
+/**
+ * Das heutige Datum **in Japan**, als ISO-Datum.
+ *
+ * `new Date().toISOString()` liefert das Datum in UTC. Japan ist UTC+9: Bis 9 Uhr
+ * morgens japanischer Zeit ist es in UTC noch gestern. Die Reise findet in
+ * Japan statt, also gilt dort der Tag — sonst zeigte die App jeden Morgen beim
+ * Frühstück noch den Vortag.
+ *
+ * `en-CA` formatiert als `JJJJ-MM-TT`; das ist die einzige Gebietsangabe, die das
+ * zuverlässig ohne Nachbearbeitung tut.
+ */
+export function heuteInJapan(jetzt: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(jetzt);
+}
+
 /** Tage zwischen zwei ISO-Daten, zeitzonenfrei über UTC gerechnet. */
 function toUtc(iso: string): number {
   const [y, m, d] = iso.split('-').map(Number);

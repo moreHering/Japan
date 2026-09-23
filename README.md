@@ -1,20 +1,26 @@
 # Japan 2026 — Reiseplaner
 
 Website zum Verwalten des Reiseplans für die Japanreise vom 26.09. bis 15.10.2026:
-sechs Stationen, 19 Nächte, 164 Orte.
+sechs Stationen, eine Nacht am Kawaguchi-See dazwischen, 19 Nächte, 181 Orte —
+seit dem 23.09. mit Mietwagen von Kyoto bis Tokio (fünf Etappen, Orte 165–181).
 
 **Live:** https://morehering.github.io/Japan/
 
-| Seite | Adresse | Zweck |
-|---|---|---|
-| Startseite | `/` | Tageszählung, **der Reiseband als Akkordeon** — elf aufklappbare Kapitel — und die sechs Stationen |
-| Tagesplan | `/plan/` | 20 Reisetage — Orte zuordnen, sortieren, Notizen; warnt bei Schließtagen; am Umzugstag Etappe und Buchungsstand der Fahrt |
-| Orte | `/orte/` | Alle Orte, filterbar, mit Karte im selben Bild; anlegen, bearbeiten, ausblenden; KML-Download |
-| Organisation | `/organisation/` | Buchungen und Fristen, Budget in ¥/€, Packliste, Abgleich, Export/Import |
-| Freundebuch | `/freundebuch/` | Steckbriefe und Fotostream der drei — **nur angemeldet** |
-| Reisetagebuch | `/tagebuch/` | Dieselben Beiträge für Gäste, ohne Anmeldung — **nicht verlinkt**, siehe unten |
-| Selbstprüfung | `/wache/` | Was **dieses Gerät** über sich sagen kann — **nicht verlinkt**, erreichbar über Organisation |
-| Reiseband | `/reiseband.html` | Derselbe Text als geschlossenes Dokument zum Ausdrucken |
+Drei Bereiche in der Tab-Leiste: **Reiseband · Plan · Freunde.** Der Plan hat drei
+Ansichten, zwischen denen oben in der Kopfleiste „Tage · Orte · Orga" schaltet.
+Die Adressen sind dieselben geblieben — die Druckfassung verlinkt `/orte/?station=`,
+und eine Weiterleitung auf GitHub Pages verlöre die Abfrage.
+
+| Bereich | Seite | Adresse | Zweck |
+|---|---|---|---|
+| Reiseband | Startseite | `/` | Tageszählung, **der Reiseband als Akkordeon** — zwölf Kapitel, immer eines offen, auf dem Telefon randlos lesbar — und die sechs Stationen |
+| Plan | Tage | `/plan/` | 20 Reisetage — Orte zuordnen, sortieren, Notizen; warnt bei Schließtagen; am Umzugstag die Etappe (Bahn oder Mietwagen) |
+| Plan | Orte | `/orte/` | Alle Orte, filterbar, mit Karte im selben Bild; anlegen, bearbeiten, ausblenden; KML-Download. `?station=` und `?nr=` |
+| Plan | Orga | `/organisation/` | Buchungen und Fristen, Packliste, Abgleich, Export/Import. Das Budget ist seit dem 23.09. aus der Seite (Daten bleiben erhalten) |
+| Plan | Selbstprüfung | `/wache/` | Was **dieses Gerät** über sich sagen kann — erreichbar über die Orga |
+| Freunde | Freundebuch | `/freundebuch/` | Steckbriefe und Fotostream der drei — **nur angemeldet** |
+| — | Reisetagebuch | `/tagebuch/` | Dieselben Beiträge für Gäste, ohne Anmeldung — **nicht verlinkt**, siehe unten |
+| — | Reiseband | `/reiseband.html` | Derselbe Text als geschlossenes Dokument zum Ausdrucken |
 
 `/karte` leitet auf `/orte/` um — beides war früher getrennt und zeigte dieselben
 Orte mit fast denselben Filtern, jeweils halb.

@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Buchungen, Budget, Packliste und der Datenabgleich.
+   * Buchungen, Packliste und der Datenabgleich.
    *
    * Die Buchungsliste besteht aus zwei Quellen: den festen Einträgen aus
    * bookings.json (Unterkünfte, Transport, Fristen) und den Orten, bei denen das
@@ -13,32 +13,22 @@
   import bookingsData from '../data/bookings.json';
   import packingData from '../data/packing.json';
   import {
-    addExpense,
     addPackingItem,
     exportJson,
     importJson,
     plan,
-    removeExpense,
     removePackingItem,
     resetAll,
     sichtbareOrte,
     toggleBooking,
     togglePacking,
   } from '../lib/store.svelte';
-  import { formatEuro, formatFull, formatYen, heuteInJapan, stations, trip, yenToEuro } from '../lib/trip';
+  import { formatFull, heuteInJapan } from '../lib/trip';
   import { url } from '../lib/paths';
   import { dateiAnbieten } from '../lib/download';
 
-  // In Japan-Zeit: Eine Ausgabe beim Frühstück gehört zum heutigen Tag, nicht
-  // zum gestrigen, den UTC bis 9 Uhr noch meint.
+  // In Japan-Zeit — für den Dateinamen des Exports und die Fristen.
   const today = heuteInJapan();
-
-  /**
-   * Vorbelegung des Ausgabendatums. Vor der Reise liegt "heute" außerhalb von
-   * min/max des Feldes — das Formular wäre dann dauerhaft ungültig und ließe
-   * sich nicht absenden. Deshalb auf den Reisezeitraum begrenzen.
-   */
-  const defaultExpenseDate = today < trip.start ? trip.start : today > trip.end ? trip.end : today;
 
   type Booking = {
     id: string;
@@ -81,49 +71,13 @@
       .slice(0, 3),
   );
 
-  // ------------------------------------------------------------------ Budget
-
-  let expLabel = $state('');
-  let expYen = $state<number | null>(null);
-  let expDate = $state(defaultExpenseDate);
-  let expPayer = $state(trip.travellers[0]);
-  let expStation = $state(stations[0].slug);
-
-  function submitExpense(e: Event) {
-    e.preventDefault();
-    if (!expLabel.trim() || !expYen) return;
-    addExpense({
-      label: expLabel.trim(),
-      yen: expYen,
-      date: expDate,
-      payer: expPayer,
-      station: expStation,
-    });
-    expLabel = '';
-    expYen = null;
-  }
-
-  let totalYen = $derived(plan.expenses.reduce((s, e) => s + e.yen, 0));
-
-  let perPayer = $derived.by(() => {
-    const map = new Map<string, number>(trip.travellers.map((t) => [t, 0]));
-    for (const e of plan.expenses) map.set(e.payer, (map.get(e.payer) ?? 0) + e.yen);
-    return [...map];
-  });
-
-  let perStation = $derived.by(() => {
-    const map = new Map<string, number>();
-    for (const e of plan.expenses) map.set(e.station, (map.get(e.station) ?? 0) + e.yen);
-    return stations
-      .map((s) => [s.name, map.get(s.slug) ?? 0] as [string, number])
-      .filter(([, v]) => v > 0);
-  });
-
-  /** Fairer Ausgleich: wer liegt über oder unter dem Durchschnitt? */
-  let settlement = $derived.by(() => {
-    const share = totalYen / trip.travellers.length;
-    return perPayer.map(([name, paid]) => ({ name, paid, diff: paid - share }));
-  });
+  /*
+   * Hier stand das Budget: Ausgaben erfassen, je Person und Station summieren,
+   * Ausgleich zwischen den dreien. Es ist seit dem 23.09. auf Wunsch raus aus der
+   * Seite. Die Daten bleiben unangetastet — `plan.expenses` und die Tabelle
+   * `expenses` in der Datenbank —, der Abgleich überträgt sie weiter. Wer es
+   * zurückwill, holt diesen Abschnitt aus der Versionsgeschichte.
+   */
 
   // -------------------------------------------------------------- Packliste
 
@@ -230,77 +184,6 @@
   </section>
 
   <div class="side">
-  <!-- ------------------------------------------------------------ Budget -->
-  <section class="block">
-    <div class="eyebrow">Budget</div>
-    <h2>{formatYen(totalYen)}</h2>
-    <p class="sub">
-      {formatEuro(yenToEuro(totalYen))} bei Kurs {trip.yenPerEuro} ¥/€ ·
-      {formatEuro(yenToEuro(totalYen) / trip.travellers.length)} pro Person
-    </p>
-
-    <form class="expform" onsubmit={submitExpense}>
-      <input type="text" bind:value={expLabel} placeholder="Wofür?" required />
-      <input type="number" bind:value={expYen} placeholder="¥" min="1" step="1" required />
-      <input type="date" bind:value={expDate} min={trip.start} max={trip.end} />
-      <select bind:value={expPayer} aria-label="Wer hat bezahlt">
-        {#each trip.travellers as t (t)}
-          <option value={t}>{t}</option>
-        {/each}
-      </select>
-      <select bind:value={expStation} aria-label="Station">
-        {#each stations as s (s.slug)}
-          <option value={s.slug}>{s.name}</option>
-        {/each}
-      </select>
-      <button class="btn small primary" type="submit">Eintragen</button>
-    </form>
-
-    {#if plan.expenses.length}
-      <div class="sums">
-        <div>
-          <h4>Pro Person</h4>
-          {#each settlement as s (s.name)}
-            <div class="sumrow">
-              <span>{s.name}</span>
-              <b>{formatYen(s.paid)}</b>
-              <em class:plus={s.diff > 0} class:minus={s.diff < 0}>
-                {s.diff > 0 ? '+' : ''}{formatYen(s.diff)}
-              </em>
-            </div>
-          {/each}
-          <p class="hint">Plus heißt: hat mehr gezahlt und bekommt zurück.</p>
-        </div>
-
-        {#if perStation.length}
-          <div>
-            <h4>Pro Station</h4>
-            {#each perStation as [name, yen] (name)}
-              <div class="sumrow">
-                <span>{name}</span>
-                <b>{formatYen(yen)}</b>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </div>
-
-      <ul class="expenses">
-        {#each plan.expenses as e (e.id)}
-          <li>
-            <span class="edate">{e.date.slice(8)}.{e.date.slice(5, 7)}.</span>
-            <span class="elabel">{e.label}</span>
-            <span class="epayer">{e.payer}</span>
-            <b>{formatYen(e.yen)}</b>
-            <button class="ctl" title="löschen" onclick={() => removeExpense(e.id)}>×</button>
-          </li>
-        {/each}
-      </ul>
-    {:else}
-      <p class="empty">Noch keine Ausgaben erfasst.</p>
-    {/if}
-  </section>
-
   <!-- --------------------------------------------------------- Packliste -->
   <section class="block">
     <div class="eyebrow">Packliste</div>
@@ -378,7 +261,6 @@
     <div class="stats">
       <div><b>{plannedTotal}</b><small>Orte eingeplant</small></div>
       <div><b>{plan.done.length}</b><small>besucht</small></div>
-      <div><b>{plan.expenses.length}</b><small>Ausgaben</small></div>
       <div>
         <b>{Object.values(plan.bookings).filter(Boolean).length}</b><small>Buchungen erledigt</small>
       </div>
@@ -575,127 +457,6 @@
     min-width: 76px;
   }
 
-  /* ----------------------------------------------------------------- Budget */
-
-  .expform {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) 92px minmax(0, 1.2fr);
-    gap: 6px;
-    margin-bottom: 12px;
-  }
-
-  @media (max-width: 560px) {
-    .expform {
-      grid-template-columns: minmax(0, 1fr) 84px;
-    }
-  }
-
-  .expform input,
-  .expform select {
-    background: var(--washi);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-sm);
-    padding: 7px 9px;
-    font-family: var(--util);
-    font-size: 0.8rem;
-    min-width: 0;
-  }
-
-  .expform button {
-    grid-column: 1 / -1;
-  }
-
-  .sums {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 14px;
-    padding: 11px 0;
-    border-top: 1px solid var(--line-soft);
-    border-bottom: 1px solid var(--line-soft);
-    margin-bottom: 10px;
-  }
-
-  .sumrow {
-    display: flex;
-    align-items: baseline;
-    gap: 7px;
-    font-size: 0.82rem;
-    padding: 1px 0;
-  }
-
-  .sumrow span {
-    flex: 1;
-    min-width: 0;
-    overflow-wrap: break-word;
-  }
-
-  .sumrow b {
-    font-family: var(--util);
-    font-size: 0.8rem;
-  }
-
-  .sumrow em {
-    font-family: var(--util);
-    font-size: 0.7rem;
-    font-style: normal;
-    min-width: 62px;
-    text-align: right;
-  }
-
-  .sumrow em.plus {
-    color: var(--matcha);
-  }
-
-  .sumrow em.minus {
-    color: var(--shu-deep);
-  }
-
-  .expenses {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    max-height: 260px;
-    overflow-y: auto;
-  }
-
-  .expenses li {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px 0;
-    border-bottom: 1px solid var(--line-soft);
-    font-size: 0.82rem;
-  }
-
-  .edate {
-    font-family: var(--util);
-    font-size: 0.7rem;
-    color: var(--ai-40);
-    flex: none;
-    min-width: 44px;
-  }
-
-  .elabel {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .epayer {
-    font-family: var(--util);
-    font-size: 0.68rem;
-    color: var(--ai-40);
-    flex: none;
-  }
-
-  .expenses b {
-    font-family: var(--util);
-    font-size: 0.8rem;
-    flex: none;
-  }
-
   /* ------------------------------------------------------------------ Diverses */
 
   .additem {
@@ -798,8 +559,7 @@
     color: var(--shu-deep);
   }
 
-  .hint,
-  .empty {
+  .hint {
     font-family: var(--util);
     font-size: 0.72rem;
     color: var(--ai-40);

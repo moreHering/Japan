@@ -208,17 +208,38 @@ async function querscroll() {
 // ------------------------------------------------------- Seiten überhaupt ---
 
 console.log('Seiten bei 390 px:');
-for (const [pfad, name] of [
-  ['/', 'Übersicht'],
-  ['/plan/', 'Tagesplan'],
-  ['/orte/', 'Orte & Karte'],
-  ['/organisation/', 'Organisation'],
-  ['/freundebuch/', 'Freundebuch'],
+/*
+ * Seit dem 23.09. drei Bereiche statt fünf Tabs. Je Seite: welcher Tab aktiv ist
+ * und — im Plan-Bereich — welche der drei Ansichten oben markiert ist. Aktiv
+ * wird über das erste Pfadsegment entschieden; mit dem alten exakten Vergleich
+ * stünde auf /orte/ kein Tab aktiv.
+ */
+for (const [pfad, name, tab, unter] of [
+  ['/', 'Reiseband', 'Reiseband', null],
+  ['/plan/', 'Tagesplan', 'Plan', 'Tage'],
+  ['/orte/', 'Orte & Karte', 'Plan', 'Orte'],
+  ['/organisation/', 'Organisation', 'Plan', 'Orga'],
+  ['/freundebuch/', 'Freundebuch', 'Freunde', null],
 ]) {
   await seite.goto(`${BASIS}${pfad}`, { waitUntil: 'load' });
   await seite.waitForTimeout(700); // Islands hydrieren
   const { doc, fenster } = await querscroll();
   pruefe(doc <= fenster + 1, `${name}: kein Querscrollen`, `${doc} px Inhalt bei ${fenster} px`);
+  const aktiv = await seite.locator('.tabbar a[aria-current="page"]').allInnerTexts();
+  pruefe(aktiv.length === 1 && aktiv[0].includes(tab), `${name}: der Tab „${tab}" ist aktiv`, aktiv.join(','));
+  const unterNav = seite.locator('.bereichsnav a');
+  if (unter) {
+    const markiert = await seite.locator('.bereichsnav a[aria-current="page"]').allInnerTexts();
+    pruefe(
+      (await unterNav.count()) === 3 && markiert.join() === unter,
+      `${name}: oben „Tage · Orte · Orga", markiert ist „${unter}"`,
+      markiert.join(','),
+    );
+    const leiste = await seite.locator('.topbar').evaluate((t) => t.scrollWidth <= t.clientWidth + 1);
+    pruefe(leiste, `${name}: die Kopfleiste passt in 390 px`);
+  } else {
+    pruefe((await unterNav.count()) === 0, `${name}: keine Plan-Unternavigation`);
+  }
 }
 
 // ------------------------------------------------------------ Alte Adresse ---

@@ -274,8 +274,12 @@ pruefe(abgleich.length > 20, 'der Abgleichabschnitt sagt etwas', abgleich.split(
 
 console.log('\nErreichbarkeit:');
 pruefe(
-  (await seite.locator('.tabbar a').count()) === 5,
-  'die Tab-Leiste trägt weiter fünf Einträge — /wache/ drängt sich nicht hinein',
+  (await seite.locator('.tabbar a').count()) === 3,
+  'die Tab-Leiste trägt drei Einträge — /wache/ drängt sich nicht hinein',
+);
+pruefe(
+  (await seite.locator('.tabbar a[aria-current="page"]').innerText()).includes('Plan'),
+  'auf /wache/ ist „Plan" aktiv — man erreicht sie aus der Orga',
 );
 await seite.goto(`${BASIS}/organisation/`, { waitUntil: 'load' });
 // Kein `waitForSelector`: Fehlt der Verweis, wäre das ein Timeout und damit ein

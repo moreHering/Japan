@@ -757,13 +757,9 @@ pruefe(
   String(druck),
 );
 
-// Das Lesezeichen oben führt jetzt zum Text, nicht in die zweite Kopie.
-const lesezeichen = await seite.locator('.bookmark').getAttribute('href');
-pruefe(
-  !lesezeichen?.includes('reiseband.html'),
-  'das 📖 oben führt zur Startseite, nicht in die Datei',
-  String(lesezeichen),
-);
+// Das 📖-Lesezeichen oben ist seit dem 23.09. weg: Es war der dritte Weg zur
+// Startseite (neben Marke und Tab), und 📖 hieß in den Orten „aus dem Buch".
+pruefe((await seite.locator('.bookmark').count()) === 0, 'kein 📖-Lesezeichen mehr in der Kopfleiste');
 
 // ======================= 4) Was von der Startseite weggezogen ist ============
 

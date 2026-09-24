@@ -182,6 +182,16 @@ pruefe(popupText.length > 0, 'ein Marker öffnet sein Popup, auch ohne Kartenbil
   popupText.split('\n')[0]?.slice(0, 34));
 
 console.log('\nWas die Seite überhaupt angefragt hat:');
+/*
+ * OpenFreeMap kommt erst dran, wenn VersaTiles gescheitert ist. Der Kachelhinweis
+ * oben erscheint schon beim ersten gescheiterten Rasterabruf — auf dem langsameren
+ * CI-Rechner stand die zweite Vektoranfrage da noch aus (Lauf zu 9f07266). Also auf
+ * die Anfrage warten, statt einen Zeitpunkt zu erhoffen; fehlt sie nach 15 s, ist
+ * der Weg wirklich kaputt.
+ */
+for (let i = 0; i < 60 && !angefragt.some((u) => /openfreemap/.test(u)); i++) {
+  await seite.waitForTimeout(250);
+}
 const hosts = [...new Set(angefragt.map((u) => new URL(u).host))];
 pruefe(hosts.length > 0, 'sie hat einen Kartendienst angesprochen', hosts.join(' · '));
 pruefe(

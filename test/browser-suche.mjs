@@ -157,10 +157,8 @@ await buchSchreiben(seite, {
 });
 await seite.waitForTimeout(500);
 
-const aufmachen = seite.locator('.knopf.gross', { hasText: 'hinzufügen' });
-pruefe(await aufmachen.isVisible(), 'das Formular lässt sich öffnen');
-await aufmachen.tap();
-await seite.waitForTimeout(400);
+// Seit dem 24.09. steht die Maske offen da, ohne Knopf davor.
+pruefe(await seite.locator('form.neu').isVisible(), 'die Maske steht offen da');
 
 const felder = seite.locator('.bildwahl input[type=file]');
 pruefe((await felder.count()) === 2, 'zwei Wege zum Bild', `${await felder.count()} Felder`);

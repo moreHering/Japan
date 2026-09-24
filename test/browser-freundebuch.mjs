@@ -212,12 +212,48 @@ await seite.waitForTimeout(600);
 
 
 pruefe((await seite.locator('.brief').count()) === 3, 'Drei Steckbriefe');
+
+/*
+ * Reihenfolge der Seite (Wunsch vom 24.09.): Willkommen → Maske → Bilderstrom
+ * → Steckbriefe. Geprüft über die Lage im Dokument, nicht über Pixel.
+ *
+ * Gegenprobe: die Steckbrief-Sektion in `Freundebuch.svelte` wieder vor die
+ * Maske setzen → diese Prüfung fällt.
+ */
+const reihenfolge = await seite.evaluate(() => {
+  const lage = (sel) => {
+    const el = document.querySelector(sel);
+    return el ? el.getBoundingClientRect().top + window.scrollY : -1;
+  };
+  return { kopf: lage('.kopf'), maske: lage('form.neu'), strom: lage('.strom'), briefe: lage('.briefe') };
+});
+pruefe(
+  reihenfolge.kopf >= 0 &&
+    reihenfolge.kopf < reihenfolge.maske &&
+    reihenfolge.maske < reihenfolge.strom &&
+    reihenfolge.strom < reihenfolge.briefe,
+  'Reihenfolge: Willkommen, Maske, Bilderstrom, Steckbriefe',
+  JSON.stringify(reihenfolge),
+);
+
+// Profilbild: der Knopf nur auf dem eigenen Steckbrief, ohne `capture`.
+pruefe((await seite.locator('.brief .profilwahl').count()) === 1, 'Nur der eigene Steckbrief hat „Profilbild wählen"');
+pruefe(
+  (await seite.locator('.brief.meiner .profilwahl input[type=file]').getAttribute('capture')) === null,
+  'Die Profilbild-Wahl lässt die Galerie zu (kein capture)',
+);
+const wahlHoehe = await seite.locator('.brief.meiner .profilwahl').evaluate((e) => e.getBoundingClientRect().height);
+pruefe(wahlHoehe >= 44, 'Der Knopf ist mindestens 44 px hoch', `${Math.round(wahlHoehe)} px`);
+pruefe((await seite.locator('.brief .profilbild').count()) === 0, 'Ohne Profilbild steht das Kaomoji');
+await buchSchreiben(seite, { profilbilder: { [PERSONEN[1].id]: PIXEL } }, 7);
+await seite.waitForTimeout(300);
+pruefe((await seite.locator('.brief .profilbild').count()) === 1, 'Mit Profilbild steht ein Bild statt des Kaomoji');
 pruefe(
   (await seite.locator('.brief.meiner').count()) === 1,
   'Genau einer ist der eigene und damit beschreibbar',
 );
 pruefe(
-  (await seite.locator('.brief.meiner input').count()) === 5,
+  (await seite.locator('.brief.meiner input[type="text"]').count()) === 5,
   'Der eigene hat fünf Felder zum Ausfüllen',
 );
 pruefe(
@@ -374,9 +410,9 @@ pruefe(
 // ------------------------------------------------------- Formular öffnen ---
 
 console.log('\nNeuer Beitrag:');
-await seite.locator('.knopf.gross').tap();
-await seite.waitForTimeout(300);
-pruefe(await seite.locator('form.neu').isVisible(), 'Das Formular öffnet sich');
+// Seit dem 24.09. ohne Knopf davor: Die Maske steht offen da.
+pruefe(await seite.locator('form.neu').isVisible(), 'Die Maske steht ohne Tipp offen da');
+pruefe((await seite.locator('.knopf.gross').count()) === 0, 'Kein „✚ hinzufügen"-Knopf mehr davor');
 
 const stickerKnoepfe = await seite.locator('.stickerknopf').count();
 pruefe(stickerKnoepfe === 10, 'Zehn Aufkleber zur Auswahl', String(stickerKnoepfe));

@@ -104,6 +104,11 @@ export const buch = $state({
   fehler: null as string | null,
   personen: [] as Person[],
   steckbriefe: {} as Record<string, Steckbrief>,
+  /**
+   * Link zum Profilbild je Person. Der Pfad steht im Steckbrief unter `bild`
+   * (`PROFILBILD_FELD`), der Link kommt beim Laden dazu wie bei den Beiträgen.
+   */
+  profilbilder: {} as Record<string, string>,
   beitraege: [] as Beitrag[],
   /** Fortschritt eines laufenden Uploads, 0–100, oder null. */
   upload: null as number | null,
@@ -136,6 +141,20 @@ if (import.meta.env.DEV) {
 }
 
 const BUCKET = 'freundebuch';
+
+/**
+ * Das Profilbild ist eine weitere Zeile im Steckbrief: `feld = 'bild'`, `wert` =
+ * Pfad in der Ablage.
+ *
+ * Ohne Migration, und das ist der Grund für diese Form: `guestbook_profile` nimmt
+ * freie Feldnamen, jeder schreibt nur seine eigenen Zeilen (0003), Gäste dürfen
+ * lesen (0008), die Ablage ist öffentlich lesbar. Eine eigene Spalte hätte eine
+ * Migration gekostet und nichts gekonnt, was diese Zeile nicht kann.
+ *
+ * Das Feld steht **nicht** in `FRAGEN` — sonst tauchte der Pfad als Textfeld
+ * „bild" im Steckbrief auf.
+ */
+export const PROFILBILD_FELD = 'bild';
 
 /** Die Spalten, die `guestbook_post` seit 0001 hat — ohne die von 0009. */
 const SPALTEN_ALT =
@@ -302,7 +321,10 @@ export async function ladeFreundebuch(opt: { oeffentlich?: boolean } = {}) {
      * heute eine Liste, die Map bleibt wie sie war — an dieser Stelle ändert die
      * Mehrbildfähigkeit also nichts außer der Länge der Liste.
      */
-    const pfade = roh.flatMap((z) => pfadeVon(z));
+    const profilPfade = Object.entries(briefeMap)
+      .map(([id, brief]) => [id, brief[PROFILBILD_FELD]] as const)
+      .filter((e): e is readonly [string, string] => Boolean(e[1]));
+    const pfade = [...roh.flatMap((z) => pfadeVon(z)), ...profilPfade.map(([, p]) => p)];
     const links = new Map<string, string>();
 
     /*
@@ -332,6 +354,10 @@ export async function ladeFreundebuch(opt: { oeffentlich?: boolean } = {}) {
         if (eintrag.signedUrl && eintrag.path) links.set(eintrag.path, eintrag.signedUrl);
       }
     }
+
+    buch.profilbilder = Object.fromEntries(
+      profilPfade.flatMap(([id, pfad]) => (links.has(pfad) ? [[id, links.get(pfad)!]] : [])),
+    );
 
     buch.beitraege = roh.map((z) => {
       const eigenePfade = pfadeVon(z);
@@ -384,6 +410,61 @@ export async function steckbriefSetzen(feld: string, wert: string) {
     return false;
   }
   buch.fehler = null;
+  return true;
+}
+
+/**
+ * Das eigene Profilbild setzen oder ersetzen.
+ *
+ * Reihenfolge mit Absicht: erst hochladen, dann den Steckbrief umschreiben, erst
+ * danach das alte Bild löschen. Scheitert der Steckbrief, wird das **neue** Bild
+ * wieder entfernt — sonst läge es für immer in der Ablage, ohne dass eine Zeile
+ * darauf zeigt. Scheitert das Löschen des alten, bleibt eine Waise; das ist
+ * billiger als ein Steckbrief ohne Bild.
+ */
+export async function profilbildSetzen(datei: File): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !auth.userId) return false;
+  const id = auth.userId;
+  const alt = buch.steckbriefe[id]?.[PROFILBILD_FELD] || null;
+  buch.fehler = null;
+
+  let neu: string | null = null;
+  try {
+    const klein = await verkleinern(datei);
+    neu = `${id}/profil-${crypto.randomUUID()}.jpg`;
+    const hoch = await sb.storage.from(BUCKET).upload(neu, klein.blob, {
+      contentType: 'image/jpeg',
+      upsert: false,
+    });
+    if (hoch.error) throw hoch.error;
+
+    const { error } = await sb
+      .from('guestbook_profile')
+      .upsert({ user_id: id, feld: PROFILBILD_FELD, wert: neu }, { onConflict: 'user_id,feld' });
+    if (error) throw error;
+  } catch (e) {
+    if (neu) {
+      try {
+        await sb.storage.from(BUCKET).remove([neu]);
+      } catch {
+        /* Der Fehler unten ist der wichtigere. */
+      }
+    }
+    buch.fehler = deute(e);
+    return false;
+  }
+
+  (buch.steckbriefe[id] ??= {})[PROFILBILD_FELD] = neu;
+  const { data } = await sb.storage.from(BUCKET).createSignedUrl(neu, 3600);
+  if (data?.signedUrl) buch.profilbilder = { ...buch.profilbilder, [id]: data.signedUrl };
+  if (alt && alt !== neu) {
+    try {
+      await sb.storage.from(BUCKET).remove([alt]);
+    } catch {
+      /* Waise — siehe oben. */
+    }
+  }
   return true;
 }
 

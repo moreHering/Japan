@@ -30,6 +30,7 @@
     buch,
     FRAGEN,
     ladeFreundebuch,
+    profilbildSetzen,
     steckbriefSetzen,
     beitragAnlegen,
     beitragLoeschen,
@@ -73,7 +74,6 @@
   let neuDateien = $state<File[]>([]);
   let vorschauen = $state<string[]>([]);
   let neuVorlage = $state<VorlageName>(VORGABE);
-  let formOffen = $state(false);
 
   /*
    * Ohne Migration 0009 nimmt die Tabelle nur ein Bild. Dann stehen nur die drei
@@ -213,7 +213,18 @@
     neuDateien = [];
     vorschauen = [];
     neuVorlage = VORGABE;
-    formOffen = false;
+  }
+
+  let profilLaedt = $state(false);
+
+  async function profilGewaehlt(e: Event) {
+    const feld = e.currentTarget as HTMLInputElement;
+    const datei = feld.files?.[0];
+    if (!datei) return;
+    profilLaedt = true;
+    await profilbildSetzen(datei);
+    profilLaedt = false;
+    feld.value = '';
   }
 
   function loeschen(id: string) {
@@ -283,61 +294,16 @@
   {/if}
 
   {#if buch.status === 'bereit' || buch.status === 'lädt'}
-    <!-- ---------------------------------------------------- Steckbriefe -->
-    <section class="teil">
-      <h2><Sticker name="katze" size={26} />Steckbriefe</h2>
-
-      <div class="briefe">
-        {#each buch.personen as p (p.id)}
-          {@const meiner = p.id === auth.userId}
-          {@const brief = buch.steckbriefe[p.id] ?? {}}
-          <article class="brief" style={`--k:${p.farbe}`} class:meiner>
-            <div class="briefkopf">
-              <span class="avatar">{kaomojiVon(p.id)}</span>
-              <h3>{p.name}</h3>
-              {#if meiner}<span class="du">du</span>{/if}
-            </div>
-
-            <dl>
-              {#each FRAGEN as f (f.feld)}
-                <dt>{f.frage}</dt>
-                <dd>
-                  {#if meiner}
-                    <input
-                      type="text"
-                      value={meinBrief[f.feld] ?? ''}
-                      placeholder={f.platzhalter}
-                      maxlength="140"
-                      onchange={(e) =>
-                        void steckbriefSetzen(f.feld, (e.currentTarget as HTMLInputElement).value)}
-                    />
-                  {:else if brief[f.feld]}
-                    <span>{brief[f.feld]}</span>
-                  {:else}
-                    <span class="leer">— noch nichts —</span>
-                  {/if}
-                </dd>
-              {/each}
-            </dl>
-          </article>
-        {/each}
-      </div>
-
-      {#if buch.personen.length === 0 && buch.status === 'bereit'}
-        <p class="hinweis">Noch keine Konten angelegt — die Migration fehlt.</p>
-      {/if}
-    </section>
-
-    <!-- ----------------------------------------------------- Bilderstrom -->
     <section class="teil">
       <h2><Sticker name="ramen" size={26} />Bilderstrom</h2>
 
-      {#if !formOffen}
-        <button class="knopf gross" onclick={() => (formOffen = true)}>
-          ✚ Bild oder Zettel hinzufügen
-        </button>
-      {:else}
-        <form class="neu" onsubmit={absenden}>
+      <!--
+        Die Maske steht **offen** da, direkt unter dem Willkommen — auf Wunsch
+        (24.09.). Bis dahin lag sie hinter dem Knopf „✚ Bild oder Zettel
+        hinzufügen" unter den Steckbriefen: zwei Bildschirme scrollen und ein
+        Tipp, bevor man ein Foto wählen konnte.
+      -->
+      <form class="neu" onsubmit={absenden}>
           <!--
             Zwei getrennte Felder, und das ist kein Schmuck: `capture` zwingt
             das Handy in die Kamera und sperrt die Aufnahmen aus. Genau das war
@@ -508,19 +474,16 @@
               type="button"
               class="knopf schlicht"
               onclick={() => {
-                formOffen = false;
-                // Bis zum 23.09. standen hier noch `neuDatei` und `vorschau` aus der
-                // Zeit mit einem Bild je Beitrag. Die gibt es nicht mehr — der Knopf
-                // warf beim Tippen einen ReferenceError, das Formular klappte zwar
-                // zu, aber die gewählten Bilder blieben liegen und tauchten beim
-                // nächsten Öffnen wieder auf. Gefunden von svelte-check.
+                // Die Maske bleibt offen; „leeren" setzt sie zurück.
                 bildVerwerfen();
-              }}>abbrechen</button
+                neuText = '';
+                neuOrt = '';
+                ortSuche = '';
+              }}>leeren</button
             >
             <button class="knopf" type="submit" disabled={buch.upload !== null}>eintragen</button>
           </div>
         </form>
-      {/if}
 
       <div class="strom">
         {#each buch.beitraege as b (b.id)}
@@ -568,6 +531,65 @@
         {/if}
       </div>
     </section>
+
+    <!-- ---------------------------------------------------- Steckbriefe -->
+    <section class="teil">
+      <h2><Sticker name="katze" size={26} />Steckbriefe</h2>
+
+      <div class="briefe">
+        {#each buch.personen as p (p.id)}
+          {@const meiner = p.id === auth.userId}
+          {@const brief = buch.steckbriefe[p.id] ?? {}}
+          <article class="brief" style={`--k:${p.farbe}`} class:meiner>
+            <div class="briefkopf">
+              {#if buch.profilbilder[p.id]}
+                <img class="profilbild" src={buch.profilbilder[p.id]} alt={`Profilbild von ${p.name}`} />
+              {:else}
+                <span class="avatar">{kaomojiVon(p.id)}</span>
+              {/if}
+              <h3>{p.name}</h3>
+              {#if meiner}<span class="du">du</span>{/if}
+            </div>
+
+            {#if meiner}
+              <!-- Ohne `capture`: sonst sperrt das Telefon die Galerie aus. -->
+              <label class="knopf schlicht profilwahl">
+                {profilLaedt ? 'lädt …' : buch.profilbilder[p.id] ? 'Profilbild ändern' : 'Profilbild wählen'}
+                <input type="file" accept="image/*" onchange={profilGewaehlt} disabled={profilLaedt} />
+              </label>
+            {/if}
+
+            <dl>
+              {#each FRAGEN as f (f.feld)}
+                <dt>{f.frage}</dt>
+                <dd>
+                  {#if meiner}
+                    <input
+                      type="text"
+                      value={meinBrief[f.feld] ?? ''}
+                      placeholder={f.platzhalter}
+                      maxlength="140"
+                      onchange={(e) =>
+                        void steckbriefSetzen(f.feld, (e.currentTarget as HTMLInputElement).value)}
+                    />
+                  {:else if brief[f.feld]}
+                    <span>{brief[f.feld]}</span>
+                  {:else}
+                    <span class="leer">— noch nichts —</span>
+                  {/if}
+                </dd>
+              {/each}
+            </dl>
+          </article>
+        {/each}
+      </div>
+
+      {#if buch.personen.length === 0 && buch.status === 'bereit'}
+        <p class="hinweis">Noch keine Konten angelegt — die Migration fehlt.</p>
+      {/if}
+    </section>
+
+    <!-- ----------------------------------------------------- Bilderstrom -->
   {/if}
 
   <footer class="fuss">
@@ -634,6 +656,32 @@
     border-radius: 999px;
     padding: 4px 7px;
     white-space: nowrap;
+  }
+
+  .profilbild {
+    width: 56px;
+    height: 56px;
+    flex: none;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--k);
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.15);
+  }
+
+  /* Das Dateifeld liegt unsichtbar im Knopf — getippt wird der ganze Knopf. */
+  .profilwahl {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin: 4px 0 10px;
+    cursor: pointer;
+  }
+  .profilwahl input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
   }
 
   .briefkopf h3 {

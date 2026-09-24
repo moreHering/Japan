@@ -136,6 +136,16 @@ export class Ablage {
   /** So viele der nächsten Anfragen scheitern lassen (Netzausfall nachstellen). */
   faelltAus = 0;
 
+  /** Die Dateien in der Bilderablage, als Pfade. */
+  dateien = new Set<string>();
+
+  /**
+   * Tabellen, in die geschrieben wird, als lehnte die Datenbank ab (403, wie eine
+   * verletzte Policy). Für die Rücknahme-Prüfungen: Upload gelingt, die Zeile
+   * nicht — dann darf keine Datei übrig bleiben.
+   */
+  schreibsperre = new Set<string>();
+
   /**
    * Ob `guestbook_post` die Spalten aus Migration 0009 hat.
    *
@@ -170,6 +180,8 @@ export class Ablage {
   leeren() {
     for (const t of Object.keys(this.tabellen)) this.tabellen[t] = [];
     this.verlauf = [];
+    this.dateien.clear();
+    this.schreibsperre.clear();
     this.naechsteNr = SEQUENZ_START;
   }
 
@@ -200,6 +212,28 @@ export class Ablage {
      * Der Link ist erfunden und das ist in Ordnung: Geprüft wird, dass je Pfad
      * **einer** herauskommt, nicht wie er aussieht.
      */
+    // Ein einzelner signierter Link: `createSignedUrl(pfad)`.
+    const einzeln = url.pathname.match(/^\/storage\/v1\/object\/sign\/freundebuch\/(.+)$/);
+    if (einzeln) {
+      this.verlauf.push(`${methode} storage:sign1`);
+      return antwort(200, { signedURL: `/object/sign/freundebuch/${decodeURIComponent(einzeln[1])}?token=x` });
+    }
+    // Hochladen: `upload(pfad, blob)`.
+    const hoch = url.pathname.match(/^\/storage\/v1\/object\/freundebuch\/(.+)$/);
+    if (hoch && methode === 'POST') {
+      const pfad = decodeURIComponent(hoch[1]);
+      this.verlauf.push(`POST storage:upload`);
+      this.dateien.add(pfad);
+      return antwort(200, { Key: `freundebuch/${pfad}` });
+    }
+    // Löschen: `remove([pfade])`.
+    if (url.pathname === '/storage/v1/object/freundebuch' && methode === 'DELETE') {
+      const pfade: string[] = JSON.parse(String(init?.body ?? '{}')).prefixes ?? [];
+      this.verlauf.push(`DELETE storage:remove`);
+      for (const pf of pfade) this.dateien.delete(pf);
+      return antwort(200, pfade.map((name) => ({ name })));
+    }
+
     if (url.pathname.startsWith('/storage/v1/object/sign/')) {
       this.verlauf.push(`${methode} storage:sign`);
       const pfade: string[] = JSON.parse(String(init?.body ?? '{}')).paths ?? [];
@@ -240,6 +274,10 @@ export class Ablage {
 
     const koerper = init?.body ? JSON.parse(String(init.body)) : null;
 
+    if (methode !== 'GET' && this.schreibsperre.has(tabelle)) {
+      return antwort(403, { code: '42501', message: `new row violates row-level security policy for table "${tabelle}"` });
+    }
+
     switch (methode) {
       case 'GET':
         return this.lesen(tabelle, url);
@@ -263,15 +301,30 @@ export class Ablage {
   private lesen(tabelle: string, url: URL) {
     let zeilen = this.tabellen[tabelle].filter((z) => this.passt(tabelle, z, url));
 
-    for (const [name, wert] of url.searchParams) {
-      if (name !== 'order') continue;
-      const [spalte, richtung] = wert.split('.');
-      this.pruefeSpalte(tabelle, spalte);
-      const aufsteigend = richtung !== 'desc';
+    /*
+     * Mehrere Sortierschlüssel kommen als **ein** Parameter:
+     * `order=datum.desc,created_at.desc`. Bis zum 24.09. las diese Attrappe das
+     * als eine Spalte mit der Richtung „desc,created_at" — also aufsteigend — und
+     * jede Prüfung auf die Reihenfolge des Bilderstroms prüfte eine Welt, die es
+     * nicht gibt.
+     */
+    const schluessel = url.searchParams
+      .getAll('order')
+      .flatMap((w) => w.split(','))
+      .map((teil) => {
+        const [spalte, richtung] = teil.split('.');
+        this.pruefeSpalte(tabelle, spalte);
+        return { spalte, faktor: richtung === 'desc' ? -1 : 1 };
+      });
+    if (schluessel.length) {
       zeilen = [...zeilen].sort((a, b) => {
-        const x = a[spalte] as never;
-        const y = b[spalte] as never;
-        return (x < y ? -1 : x > y ? 1 : 0) * (aufsteigend ? 1 : -1);
+        for (const { spalte, faktor } of schluessel) {
+          const x = a[spalte] as never;
+          const y = b[spalte] as never;
+          if (x < y) return -1 * faktor;
+          if (x > y) return 1 * faktor;
+        }
+        return 0;
       });
     }
 

@@ -228,6 +228,8 @@ pruefe((await seite.locator('.polaroid').count()) === 6, 'ein Polaroid je Beitra
       klassen: art.className,
       bilder: art.querySelectorAll('.bilder img').length,
       verhaeltnis: bild ? getComputedStyle(bild).aspectRatio : null,
+      raster: art.querySelector('.bilder')?.className ?? '',
+      hoehen: [...art.querySelectorAll('.bilder img')].map((n) => n.getBoundingClientRect().height),
       // Nichts Bedienbares in der gemeinsamen Komponente — sonst bricht das
       // Versprechen dieser Seite an einer Stelle, an der niemand danach sucht.
       bedienbar: art.querySelectorAll('input, button, form, select, textarea').length,
@@ -237,10 +239,13 @@ pruefe((await seite.locator('.polaroid').count()) === 6, 'ein Polaroid je Beitra
   if (c) {
     pruefe(c.klassen.includes('collage'), 'er trägt die Vorlagenklasse', c.klassen);
     pruefe(c.bilder === 3, 'und zeigt seine drei Bilder', `${c.bilder}`);
+    // Drei Hochbilder (die 1×1-Pixel gelten als hoch): eins groß links, zwei
+    // klein rechts — und das große ist so hoch wie die zwei zusammen.
+    pruefe(c.raster.includes('drei-hoch'), 'drei Hochbilder legen sich groß + zwei klein', c.raster);
     pruefe(
-      c.verhaeltnis === '1 / 1',
-      'im Quadrat der Collage, nicht im 4:3 des Polaroids',
-      String(c.verhaeltnis),
+      c.hoehen.length === 3 && Math.abs(c.hoehen[0] - c.hoehen[1] - c.hoehen[2]) < 5,
+      'das große Bild ist so hoch wie die zwei kleinen zusammen',
+      c.hoehen.map((h) => h.toFixed(1)).join(' / '),
     );
     pruefe(c.bedienbar === 0, 'und bringt nichts Bedienbares mit', `${c.bedienbar} Knoten`);
   }

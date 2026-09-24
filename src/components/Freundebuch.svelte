@@ -50,7 +50,7 @@
   import { places, plainText } from '../lib/places';
   import { plan } from '../lib/store.svelte';
   import { formatFull, heuteInJapan, trip } from '../lib/trip';
-  import { groesse } from '../lib/bild';
+  import { groesse, zuschnitt } from '../lib/bild';
 
   const KAOMOJI = ['(≧▽≦)', '(・ω・)ﾉ', '＼(^o^)／', '(๑>◡<๑)', '(￣ー￣)b', 'ヾ(⌐■_■)ノ♪'];
 
@@ -73,6 +73,7 @@
    */
   let neuDateien = $state<File[]>([]);
   let vorschauen = $state<string[]>([]);
+  let vorschauFormat = $state<Record<string, 'hoch' | 'quer'>>({});
   let neuVorlage = $state<VorlageName>(VORGABE);
 
   /*
@@ -335,7 +336,16 @@
             <div class="vorschaureihe">
               {#each vorschauen as u, i (u)}
                 <div class="vorschaurahmen">
-                  <img class="vorschau" src={u} alt={`Vorschau ${i + 1}`} />
+                  <!-- Die Vorschau zeigt schon den Zuschnitt, den der Upload macht. -->
+                  <img
+                    class="vorschau {vorschauFormat[u] ?? ''}"
+                    src={u}
+                    alt={`Vorschau ${i + 1}`}
+                    onload={(e) => {
+                      const img = e.currentTarget as HTMLImageElement;
+                      vorschauFormat[u] = zuschnitt(img.naturalWidth, img.naturalHeight).format;
+                    }}
+                  />
                   <button
                     type="button"
                     class="bildweg"
@@ -851,11 +861,14 @@
   }
   .vorschau {
     width: 100%;
-    max-height: 260px;
+    aspect-ratio: 4 / 5;
     object-fit: cover;
     border: 3px solid var(--tinte);
     border-radius: 6px;
     display: block;
+  }
+  .vorschau.quer {
+    aspect-ratio: 8 / 5;
   }
   /* Über dem Bild, aber mit 44 px Höhe — darunter trifft kein Finger. */
   .bildweg {
@@ -918,13 +931,10 @@
    */
   .vorschaureihe {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    /* Feste Höchstbreite statt `1fr`: Ein einzelnes Hochbild in voller Breite
+       füllte den ganzen Schirm, bevor man etwas geschrieben hat. */
+    grid-template-columns: repeat(auto-fill, minmax(110px, 160px));
     gap: 6px;
-  }
-  /* In der Reihe sind die Vorschauen kleiner als eine einzelne war (260 px) —
-     sonst füllt die Auswahl den halben Schirm, bevor man etwas geschrieben hat. */
-  .vorschaureihe .vorschau {
-    max-height: 150px;
   }
   /* Ein ✕ je Bild, und trotzdem 44 px: In der Reihe ist der Knopf nur so groß
      wie das Zeichen, deshalb hier eine feste Fläche statt Innenabstand. */

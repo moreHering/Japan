@@ -9,11 +9,49 @@
 
 export type Verkleinert = {
   blob: Blob;
+  /** Nur mit Zuschnitt gesetzt: in welches der zwei Formate das Bild kam. */
+  format?: Format;
   breite: number;
   hoehe: number;
   /** Ursprungsgröße in Bytes — für die Anzeige „aus 6,2 MB wurden 280 kB". */
   vorher: number;
 };
+
+/**
+ * Die zwei Formate des Freundebuchs.
+ *
+ * **Hochformat 4:5** — das Hochformat von Instagram, das am meisten Fläche auf
+ * dem Handybildschirm bekommt.
+ *
+ * **Querformat 8:5 (16:10)** — und bewusst nicht Instagrams 1,91:1. Der Grund ist
+ * die Collage: Ein Querbild ist genau so breit und hoch wie **zwei Hochbilder
+ * nebeneinander** (2 × 4:5 = 8:5). Damit ist jede Zeile einer Collage gleich
+ * hoch, egal ob sie ein Querbild oder zwei Hochbilder trägt, und zwei Zeilen
+ * ergeben wieder genau 4:5. Mit 1,91:1 passt nichts ohne weiteren Anschnitt
+ * zusammen.
+ */
+export type Format = 'hoch' | 'quer';
+export const VERHAELTNIS: Record<Format, number> = { hoch: 4 / 5, quer: 8 / 5 };
+
+/**
+ * Welcher Ausschnitt eines Bildes der Größe `breite`×`hoehe` stehen bleibt.
+ *
+ * Breiter als hoch → Querformat, sonst (auch quadratisch) → Hochformat.
+ * Beschnitten wird mittig. Rein gerechnet, damit vitest es ohne Leinwand prüft.
+ */
+export function zuschnitt(
+  breite: number,
+  hoehe: number,
+): { format: Format; x: number; y: number; b: number; h: number } {
+  const format: Format = breite > hoehe ? 'quer' : 'hoch';
+  const ziel = VERHAELTNIS[format];
+  if (breite / hoehe > ziel) {
+    const b = Math.round(hoehe * ziel);
+    return { format, x: Math.round((breite - b) / 2), y: 0, b, h: hoehe };
+  }
+  const h = Math.round(breite / ziel);
+  return { format, x: 0, y: Math.round((hoehe - h) / 2), b: breite, h };
+}
 
 /**
  * Längste Kante auf `maxKante`, als JPEG mit `guete`.
@@ -31,14 +69,18 @@ export async function verkleinern(
   datei: Blob,
   maxKante = 1600,
   guete = 0.82,
+  zuschneiden = false,
 ): Promise<Verkleinert> {
   const vorher = datei.size;
   const bild = await createImageBitmap(datei, { imageOrientation: 'from-image' });
 
   try {
-    const faktor = Math.min(1, maxKante / Math.max(bild.width, bild.height));
-    const breite = Math.max(1, Math.round(bild.width * faktor));
-    const hoehe = Math.max(1, Math.round(bild.height * faktor));
+    const aus = zuschneiden
+      ? zuschnitt(bild.width, bild.height)
+      : { format: undefined, x: 0, y: 0, b: bild.width, h: bild.height };
+    const faktor = Math.min(1, maxKante / Math.max(aus.b, aus.h));
+    const breite = Math.max(1, Math.round(aus.b * faktor));
+    const hoehe = Math.max(1, Math.round(aus.h * faktor));
 
     const leinwand = document.createElement('canvas');
     leinwand.width = breite;
@@ -50,14 +92,14 @@ export async function verkleinern(
     stift.fillStyle = '#ffffff';
     stift.fillRect(0, 0, breite, hoehe);
     stift.imageSmoothingQuality = 'high';
-    stift.drawImage(bild, 0, 0, breite, hoehe);
+    stift.drawImage(bild, aus.x, aus.y, aus.b, aus.h, 0, 0, breite, hoehe);
 
     const blob = await new Promise<Blob | null>((fertig) =>
       leinwand.toBlob(fertig, 'image/jpeg', guete),
     );
     if (!blob) throw new Error('Das Bild ließ sich nicht umwandeln.');
 
-    return { blob, breite, hoehe, vorher };
+    return { blob, breite, hoehe, vorher, format: aus.format };
   } finally {
     bild.close();
   }

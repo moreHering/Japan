@@ -33,7 +33,8 @@
    * dicht beieinander stehen. Sie hier zu vereinheitlichen hätte geheißen, eine
    * Gestaltungsentscheidung aus Bequemlichkeit zurückzunehmen.
    */
-  import { bilderZeigen, vorlageVon } from '../lib/vorlagen';
+  import { bilderZeigen, collageAnordnung, formatAusPfad, vorlageVon } from '../lib/vorlagen';
+  import type { Format } from '../lib/bild';
 
   type Bild = { url: string; alt: string };
 
@@ -64,6 +65,36 @@
    */
   let sichtbar = $derived(bilderZeigen(v, bilder));
   let fehlend = $derived((erwartet ?? bilder.length) > bilder.length);
+
+  /*
+   * Das Format je Bild: aus dem Dateinamen, sonst nach dem Laden gemessen.
+   * Ältere Bilder (vor dem Zuschnitt) tragen keins im Namen; bis sie geladen sind,
+   * gelten sie als Hochformat. Geschlüsselt nach URL, weil die Liste als Ganzes
+   * ersetzt wird.
+   */
+  let gemessen = $state<Record<string, Format>>({});
+  let formate = $derived(
+    sichtbar.map((b) => gemessen[b.url] ?? formatAusPfad(b.url) ?? 'hoch'),
+  );
+  /*
+   * Klassen gibt es nur, wo das Format das Layout bestimmt: im Polaroid (ein Bild
+   * in seinem Format) und in der Collage. Hochkant, Panorama und Filmstreifen
+   * zwingen ihr eigenes Verhältnis — eine Formatklasse dort würde es überstimmen.
+   */
+  let anordnung = $derived(
+    v.id === 'collage'
+      ? collageAnordnung(formate)
+      : v.id === 'polaroid'
+        ? { raster: '', bilder: formate as string[] }
+        : { raster: '', bilder: formate.map(() => '') },
+  );
+
+  function gemessenBei(url: string, e: Event) {
+    const img = e.currentTarget as HTMLImageElement;
+    if (!img.naturalWidth || formatAusPfad(url)) return;
+    const f: Format = img.naturalWidth > img.naturalHeight ? 'quer' : 'hoch';
+    if (gemessen[url] !== f) gemessen[url] = f;
+  }
 </script>
 
 {#if sichtbar.length}
@@ -74,7 +105,7 @@
     geheißen, dass sie einmal vergessen wird. `data-vorlage` bleibt als Angabe
     für Prüfungen und für den Blick in die Entwicklerwerkzeuge.
   -->
-  <div class="bilder" data-vorlage={v.id}>
+  <div class="bilder {anordnung.raster}" data-vorlage={v.id}>
     <!--
       Geschlüsselt nach **Position**, nicht nach URL: Zwei gleiche Bilder in einer
       Collage sind erlaubt (dasselbe Foto zweimal ausgewählt), und Svelte verlangt
@@ -83,10 +114,12 @@
     -->
     {#each sichtbar as bild, i (i)}
       <img
+        class={anordnung.bilder[i] || undefined}
         src={bild.url}
         alt={bild.alt}
         loading="lazy"
         decoding="async"
+        onload={(e) => gemessenBei(bild.url, e)}
         onerror={() => onFehler?.()}
       />
     {/each}

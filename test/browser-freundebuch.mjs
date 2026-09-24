@@ -69,6 +69,18 @@ await seite.waitForTimeout(400);
 const PIXEL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
+/**
+ * Ein Quer- und ein Hochbild ohne Netz, mit echten Maßen (8×5 und 4×5): Ältere
+ * Bilder tragen ihr Format nicht im Namen, `Bildfeld` misst es nach dem Laden —
+ * und genau diesen Weg geht die Collage hier.
+ */
+const svg = (b, h) =>
+  `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${b}" height="${h}"><rect width="${b}" height="${h}" fill="#c6402b"/></svg>`,
+  )}`;
+const QUER = svg(8, 5);
+const HOCH = svg(4, 5);
+
 const PERSONEN = [
     { id: 'aaaa', name: 'Paule', farbe: '#C6402B' },
     { id: 'bbbb', name: 'Deggel', farbe: '#3E6B5E' },
@@ -124,7 +136,7 @@ const PERSONEN = [
       bildPfad: 'x/1.png',
       bildUrl: PIXEL,
       bildPfade: ['x/1.png', 'x/2.png', 'x/3.png'],
-      bildUrls: [PIXEL, PIXEL, PIXEL],
+      bildUrls: [HOCH, QUER, HOCH],
       vorlage: 'collage',
       autorId: 'aaaa',
       erstellt: '2026-09-27T20:00:00Z',
@@ -315,25 +327,50 @@ console.log('\nDie Layout-Vorlagen:');
   if (collage) {
     pruefe(collage.anzahl === 3, 'er zeigt seine drei Bilder', `${collage.anzahl}`);
     pruefe(
-      collage.verhaeltnis === '1 / 1',
-      'im Quadrat, nicht im 4:3 des Polaroids',
-      String(collage.verhaeltnis),
-    );
-    // Zwei Spalten — das ist das 2×2-Raster. Eine einzige hieße, die Regel
-    // greift nicht und die Bilder stünden untereinander.
-    pruefe(
       collage.spalten !== null && collage.spalten.split(' ').length === 2,
       'in zwei Spalten',
       String(collage.spalten),
     );
+  }
+  /*
+   * Die Rechnung hinter 4:5 und 8:5, am Bildschirm nachgemessen: Hochgeladen
+   * wurde hoch, quer, hoch. Die zwei Hochbilder teilen sich die erste Zeile (das
+   * Querbild dazwischen darf sie nicht trennen), das Querbild nimmt die zweite
+   * ganz — und beide Zeilen sind gleich hoch.
+   */
+  await seite.waitForTimeout(300);
+  const lage = await seite.evaluate(() => {
+    const art = [...document.querySelectorAll('.strom .polaroid')].find((n) =>
+      (n.textContent ?? '').includes('Vier Ecken'),
+    );
+    const feld = art?.querySelector('.bilder')?.getBoundingClientRect();
+    return {
+      breite: feld?.width ?? 0,
+      bilder: [...(art?.querySelectorAll('.bilder img') ?? [])].map((n) => {
+        const r = n.getBoundingClientRect();
+        return { k: n.className, top: r.top, b: r.width, h: r.height, v: getComputedStyle(n).aspectRatio };
+      }),
+    };
+  });
+  const [h1, q, h2] = lage.bilder;
+  if (h1 && q && h2) {
+    pruefe(/\bquer\b/.test(q.k), 'das Querbild ist nach dem Laden als quer erkannt', q.k);
+    pruefe(h1.v === '4 / 5' && h2.v === '4 / 5', 'Hochbilder in 4:5', `${h1.v} · ${h2.v}`);
+    pruefe(q.v === '8 / 5', 'das Querbild in 8:5', q.v);
+    pruefe(Math.abs(h1.top - h2.top) < 1, 'die zwei Hochbilder stehen in einer Zeile', `${h1.top} / ${h2.top}`);
+    pruefe(q.top > h1.top, 'das Querbild darunter, obwohl es dazwischen hochgeladen wurde');
+    pruefe(Math.abs(q.b - lage.breite) < 2, 'es nimmt die ganze Breite', `${q.b} von ${lage.breite}`);
+    pruefe(Math.abs(q.h - h1.h) < 2, 'und beide Zeilen sind gleich hoch', `${q.h.toFixed(1)} / ${h1.h.toFixed(1)}`);
+  } else {
+    pruefe(false, 'drei Bilder in der Collage gemessen', JSON.stringify(lage));
   }
 
   const panorama = await form('Bucht von Hakone');
   pruefe(panorama !== null, 'der Panorama-Beitrag steht auf der Seite');
   if (panorama) {
     pruefe(
-      panorama.verhaeltnis === '16 / 9',
-      'das Panorama ist 16:9 breit',
+      panorama.verhaeltnis === '8 / 5',
+      'das Panorama ist 8:5 breit',
       String(panorama.verhaeltnis),
     );
     // `1 / -1` liest der Browser als „von der ersten bis zur letzten Linie" und
@@ -363,8 +400,8 @@ console.log('\nDie Layout-Vorlagen:');
   pruefe(hochkant !== null, 'das Hochformat steht auf der Seite');
   if (hochkant) {
     pruefe(
-      hochkant.verhaeltnis === '3 / 4',
-      'es ist 3:4 hoch — genau das, was im Polaroid beschnitten würde',
+      hochkant.verhaeltnis === '4 / 5',
+      'es ist 4:5 hoch',
       String(hochkant.verhaeltnis),
     );
   }
@@ -372,14 +409,14 @@ console.log('\nDie Layout-Vorlagen:');
   /*
    * **Der wichtigste Fall dieses Blocks.** `vorlage: null` ist der Zustand jedes
    * Beitrags, der vor Migration 0009 entstanden ist — und das sind alle
-   * vorhandenen. Sie müssen aussehen wie vorher: 4:3, eine Spalte.
+   * vorhandenen. Sie bleiben Polaroids in einer Spalte, im Format ihres Bildes.
    */
   const alt = await form('Torii, hochkant');
   pruefe(alt !== null, 'der Beitrag ohne Vorlage steht auf der Seite');
   if (alt) {
     pruefe(
-      alt.verhaeltnis === '4 / 3',
-      'ohne Vorlage bleibt es das Polaroid — 4:3 wie vor der Migration',
+      alt.verhaeltnis === '4 / 5',
+      'ohne Vorlage bleibt es das Polaroid — ein Hochbild in 4:5',
       String(alt.verhaeltnis),
     );
     pruefe(

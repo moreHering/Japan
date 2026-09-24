@@ -289,15 +289,20 @@
 .y2k .polaroid img {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 4 / 5;
   object-fit: cover;
   background: #eee;
+}
+/* Die zwei Formate des Freundebuchs: 4:5 hoch wie bei Instagram, 8:5 quer — so
+   breit wie zwei Hochbilder nebeneinander (siehe `Format` in src/lib/bild.ts). */
+.y2k .polaroid img.quer {
+  aspect-ratio: 8 / 5;
 }
 
 .y2k .kein {
   display: grid;
   place-items: center;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 4 / 5;
   background: #f3eef6;
   font-size: 0.78rem;
   color: #8a7f96;
@@ -328,17 +333,17 @@
 /* --- Ein Bild: nur das Verhältnis ändert sich --------------------------- */
 
 .y2k .hochkant img {
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 4 / 5;
 }
 .y2k .hochkant .kein {
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 4 / 5;
 }
 
 .y2k .panorama img {
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 8 / 5;
 }
 .y2k .panorama .kein {
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 8 / 5;
 }
 /* Über die ganze Breite des Stroms — auf breiten Schirmen eine Zugabe, auf 390 px
    ist der Strom einspaltig und die Regel wirkungslos. Sie steht am Kind des
@@ -361,7 +366,7 @@
   grid-auto-columns: 1fr;
 }
 .y2k .streifen img {
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 4 / 5;
   height: 100%;
 }
 .y2k .streifen .kein {
@@ -372,22 +377,38 @@
 
 .y2k .collage .bilder {
   grid-template-columns: 1fr 1fr;
-}
-.y2k .collage img {
-  aspect-ratio: 1 / 1;
+  grid-auto-flow: dense;
 }
 /*
-   Zwei Bilder füllen die erste Zeile, drei lassen das vierte Feld leer, vier
-   ergeben das Raster. Ein einzelnes Bild in einer Collage nimmt beide Spalten —
-   sonst stünde es als Quadrat neben einer leeren Hälfte, und das sieht nach einem
-   Fehler aus statt nach einer Entscheidung.
+   Die Zeilen gehen auf, weil ein Querbild (8:5) genau zwei Hochbilder (4:5) breit
+   ist: Jede Zeile trägt ein Querbild oder zwei Hochbilder und ist gleich hoch.
+   `dense` holt ein Hochbild in die Lücke neben einem anderen, auch wenn ein
+   Querbild dazwischen hochgeladen wurde. Die Klassen setzt `collageAnordnung()`.
 */
+.y2k .collage img {
+  aspect-ratio: 4 / 5;
+}
+.y2k .collage img.quer,
+.y2k .collage img.allein {
+  grid-column: span 2;
+  aspect-ratio: 8 / 5;
+}
+/* Drei Hochbilder: eins groß links, zwei rechts übereinander. */
+.y2k .collage .bilder.drei-hoch {
+  grid-template-columns: 2fr 1fr;
+}
+.y2k .collage .bilder.drei-hoch > img.gross {
+  grid-row: span 2;
+  height: 100%;
+  aspect-ratio: auto;
+}
+/* Ein einzelnes Bild in einer Collage nimmt beide Spalten in seinem Format —
+   sonst stünde es neben einer leeren Hälfte. */
 .y2k .collage .bilder > img:only-child {
   grid-column: span 2;
-  aspect-ratio: 4 / 3;
 }
 .y2k .collage .kein {
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 5;
 }
 /* Auf breiten Schirmen darf die Collage zwei Spalten des Stroms nehmen — vier
    Bilder in 230 px sind Briefmarken. */

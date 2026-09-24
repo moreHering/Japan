@@ -21,6 +21,8 @@
  * `vorlageVon()` fängt das ab.
  */
 
+import type { Format } from './bild';
+
 /** Die Kennungen, wie sie in `guestbook_post.vorlage` stehen. */
 export type VorlageName = 'polaroid' | 'hochkant' | 'panorama' | 'streifen' | 'collage';
 
@@ -63,7 +65,7 @@ export const VORLAGEN: Vorlage[] = [
     zeichen: '▭',
     min: 1,
     max: 1,
-    was: 'Ein Bild, 4:3, Text darunter',
+    was: 'Ein Bild in seinem Format, Text darunter',
   },
   {
     id: 'hochkant',
@@ -71,7 +73,7 @@ export const VORLAGEN: Vorlage[] = [
     zeichen: '▯',
     min: 1,
     max: 1,
-    was: 'Ein Bild im Hochformat, 3:4',
+    was: 'Ein Bild im Hochformat, 4:5',
   },
   {
     id: 'panorama',
@@ -79,7 +81,7 @@ export const VORLAGEN: Vorlage[] = [
     zeichen: '▬',
     min: 1,
     max: 1,
-    was: 'Ein breites Bild, 16:9, über die ganze Breite',
+    was: 'Ein breites Bild, 8:5, über die ganze Breite',
   },
   {
     id: 'streifen',
@@ -95,7 +97,7 @@ export const VORLAGEN: Vorlage[] = [
     zeichen: '⊞',
     min: 2,
     max: BILDER_MAX,
-    was: 'Bis zu vier Bilder im Raster',
+    was: 'Bis zu vier Bilder, hoch und quer gemischt',
   },
 ];
 
@@ -185,4 +187,43 @@ export function pfadeVon(zeile: {
 export function vorlagenklasse(wert: string | null | undefined): string {
   const v = vorlageVon(wert);
   return v.id === VORGABE ? 'polaroid' : `polaroid ${v.id}`;
+}
+
+/**
+ * Das Format eines Bildes aus seinem Dateinamen (`…-hoch.jpg`, `…-quer.jpg`).
+ *
+ * Seit dem 24.09.2026 schneidet `verkleinern()` jedes Beitragsbild auf 4:5 oder
+ * 8:5 zu und schreibt das Format in den Namen. Ältere Bilder tragen keins —
+ * dann `null`, und `Bildfeld` misst nach dem Laden nach.
+ */
+export function formatAusPfad(pfad: string): Format | null {
+  const m = /-(hoch|quer)\.jpg(?:[?#]|$)/.exec(pfad);
+  return m ? (m[1] as Format) : null;
+}
+
+/**
+ * Wie eine Collage ihre Bilder legt — die Klassen je Bild und für das Raster.
+ *
+ * Die Rechnung dahinter: Ein Querbild (8:5) ist so breit und hoch wie zwei
+ * Hochbilder (4:5) nebeneinander. Das Raster hat zwei Spalten, ein Querbild nimmt
+ * beide, zwei Hochbilder teilen sich eine Zeile — jede Zeile ist gleich hoch, und
+ * mit `grid-auto-flow: dense` finden Hochbilder ihren Partner auch dann, wenn ein
+ * Querbild zwischen ihnen steht.
+ *
+ * Zwei Sonderfälle:
+ * - **Drei Hochbilder**: eins groß links, zwei klein rechts übereinander. Die
+ *   Maße gehen auf (2 Teile breit × 2,5 hoch links = zwei 1 × 1,25 rechts).
+ * - **Ein übriges Hochbild** bei ungerader Zahl: Es nimmt die ganze Zeile und
+ *   wird dort im Querformat gezeigt — sonst stünde neben ihm ein Loch.
+ */
+export function collageAnordnung(formate: Format[]): { raster: string; bilder: string[] } {
+  const hoch = formate.map((f, i) => (f === 'hoch' ? i : -1)).filter((i) => i >= 0);
+  if (formate.length === 3 && hoch.length === 3) {
+    return { raster: 'drei-hoch', bilder: ['hoch gross', 'hoch', 'hoch'] };
+  }
+  const allein = formate.length > 1 && hoch.length % 2 === 1 ? hoch[hoch.length - 1] : -1;
+  return {
+    raster: '',
+    bilder: formate.map((f, i) => (i === allein ? 'hoch allein' : f)),
+  };
 }

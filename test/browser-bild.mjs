@@ -82,7 +82,45 @@ const ergebnis = await seite.evaluate(async () => {
     return [...c.getContext('2d').getImageData(0, 0, 1, 1).data];
   })();
 
+  // Zuschnitt fürs Freundebuch: quer auf 8:5, hoch auf 4:5.
+  const querZu = await verkleinern(gross, 1600, 0.82, true);
+  const hochZu = await verkleinern(hoch, 1600, 0.82, true);
+  const kleinZu = await verkleinern(klein, 1600, 0.82, true);
+  // Mittig oder nicht: 400×300 mit einem roten Rand von 25 px oben und unten.
+  // 8:5 lässt genau 250 px Höhe stehen — mittig geschnitten ist der Rand weg.
+  const rand = await (async () => {
+    const c = document.createElement('canvas');
+    c.width = 400;
+    c.height = 300;
+    const g = c.getContext('2d');
+    g.fillStyle = '#ff0000';
+    g.fillRect(0, 0, 400, 300);
+    g.fillStyle = '#0000ff';
+    g.fillRect(0, 25, 400, 250);
+    return new Promise((f) => c.toBlob(f, 'image/png'));
+  })();
+  const randZu = await verkleinern(rand, 1600, 0.82, true);
+  const kanten = await (async () => {
+    const bmp = await createImageBitmap(randZu.blob);
+    const c = document.createElement('canvas');
+    c.width = bmp.width;
+    c.height = bmp.height;
+    const g = c.getContext('2d');
+    g.drawImage(bmp, 0, 0);
+    return [
+      [...g.getImageData(200, 1, 1, 1).data],
+      [...g.getImageData(200, bmp.height - 2, 1, 1).data],
+    ];
+  })();
+
   return {
+    zu: {
+      quer: [querZu.breite, querZu.hoehe, querZu.format],
+      hoch: [hochZu.breite, hochZu.hoehe, hochZu.format],
+      klein: [kleinZu.breite, kleinZu.hoehe, kleinZu.format],
+      ohne: quer.format ?? null,
+    },
+    kanten,
     quer: { b: quer.breite, h: quer.hoehe, vorher: quer.vorher, nachher: quer.blob.size },
     hoch: { b: hochKlein.breite, h: hochKlein.hoehe },
     klein: { b: bleibt.breite, h: bleibt.hoehe },
@@ -123,6 +161,18 @@ pruefe(
   r > 240 && g > 240 && bl > 240,
   'Durchsichtige Stellen werden weiß, nicht schwarz',
   `rgb(${r}, ${g}, ${bl})`,
+);
+
+console.log('\nZuschnitt fürs Freundebuch:');
+pruefe(ergebnis.zu.quer.join() === '1600,1000,quer', 'Querfoto 4:3 wird 8:5 — 1600×1000', ergebnis.zu.quer.join(' '));
+pruefe(ergebnis.zu.hoch.join() === '1280,1600,hoch', 'Hochfoto 3:4 wird 4:5 — 1280×1600', ergebnis.zu.hoch.join(' '));
+pruefe(ergebnis.zu.klein.join() === '800,500,quer', 'ein kleines Foto wird beschnitten, nicht hochgerechnet', ergebnis.zu.klein.join(' '));
+pruefe(ergebnis.zu.ohne === null, 'ohne Zuschnitt bleibt alles wie vorher (Profilbild)', String(ergebnis.zu.ohne));
+const [oben, unten] = ergebnis.kanten;
+pruefe(
+  oben[0] < 60 && oben[2] > 200 && unten[0] < 60 && unten[2] > 200,
+  'beschnitten wird mittig — der rote Rand oben und unten ist weg',
+  `oben rgb(${oben.slice(0, 3)}) · unten rgb(${unten.slice(0, 3)})`,
 );
 
 pruefe(ergebnis.beispiel === '6,2 MB', 'Größenangabe deutsch formatiert', ergebnis.beispiel);

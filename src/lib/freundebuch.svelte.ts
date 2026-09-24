@@ -526,13 +526,16 @@ export async function beitragAnlegen(neu: NeuerBeitrag) {
       // — gemessen wird der Upload von Supabase aus nicht —, aber er behauptet
       // etwas, das bei vier Bildern nicht bei 35 % stehen bleibt.
       buch.upload = Math.round((i / dateien.length) * 90);
-      const klein = await verkleinern(datei);
+      // Zugeschnitten auf 4:5 oder 8:5 — siehe `Format` in bild.ts.
+      const klein = await verkleinern(datei, 1600, 0.82, true);
       // Die Ersparnis des **letzten** Bildes, wie bisher die des einzigen.
       buch.letzteGroesse = { vorher: klein.vorher, nachher: klein.blob.size };
 
       // Pfad mit Benutzerkennung voran: So bleibt nachvollziehbar, wem die
       // Datei gehört, auch wenn die Zeile dazu einmal fehlen sollte.
-      const pfad = `${auth.userId}/${crypto.randomUUID()}.jpg`;
+      // Das Format steht im Dateinamen: So kennt die Collage die Form eines
+      // Bildes, bevor es geladen ist, und nichts springt beim Laden.
+      const pfad = `${auth.userId}/${crypto.randomUUID()}-${klein.format}.jpg`;
       const { error } = await sb.storage.from(BUCKET).upload(pfad, klein.blob, {
         contentType: 'image/jpeg',
         upsert: false,

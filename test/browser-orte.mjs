@@ -586,7 +586,7 @@ pruefe(
 
 await maske.locator('input[type="text"]').first().fill('Hoshino Coffee');
 await maske.locator('select').first().selectOption('essen');
-await maske.locator('textarea').fill('Pancakes, die eine halbe Stunde brauchen.');
+await maske.locator('textarea[placeholder^="Was hier"]').fill('Pancakes, die eine halbe Stunde brauchen.');
 await maske.getByRole('button', { name: 'anlegen' }).tap();
 await seite.waitForTimeout(500);
 

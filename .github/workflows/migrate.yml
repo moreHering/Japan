@@ -281,7 +281,7 @@ jobs:
           echo "Erweiterung http: $(psql "$ZIEL" -tAc "select coalesce((select extversion from pg_extension where extname='http'), 'FEHLT')")"
           {
             echo "https://maps.app.goo.gl/zzzzNichtDa0000"
-            [ -f supabase/test/kurzlink-probe.txt ] && grep -E '^https://' supabase/test/kurzlink-probe.txt
+            [ -f supabase/test/kurzlink-probe.txt ] && grep -E '^https://' supabase/test/kurzlink-probe.txt || true
           } | while read -r link; do
             echo ""
             echo "── $link"
@@ -293,6 +293,7 @@ jobs:
           rollback;
           SQL
           done
+          exit 0
 
       # Die Gästesicht ist die einzige Stelle, an der ein Fehler heißt: Fremde
       # lesen den Plan oder schreiben ins Tagebuch. Lokal ist das geprüft — aber

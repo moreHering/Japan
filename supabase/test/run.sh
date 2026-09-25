@@ -133,5 +133,15 @@ loch "die Bilderablage ist wieder privat" \
   "update storage.buckets set public = false where id = 'freundebuch';" \
   "update storage.buckets set public = true where id = 'freundebuch';"
 
+loch "Gäste dürfen den Kurzlink-Auflöser aufrufen" \
+  "anon darf kurzlink_aufloesen aufrufen" \
+  "grant execute on function public.kurzlink_aufloesen(text) to anon;" \
+  "revoke execute on function public.kurzlink_aufloesen(text) from anon;"
+
+loch "der Auflöser nimmt jede Adresse an" \
+  "fremde Adresse nicht abgewiesen" \
+  "create or replace function public.kurzlink_aufloesen(link text) returns jsonb language sql as \$\$ select jsonb_build_object('fehler', null) \$\$;" \
+  "select 1;"
+
 echo ""
 echo "Fertig."

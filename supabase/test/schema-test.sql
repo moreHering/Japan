@@ -621,5 +621,36 @@ begin
   raise notice 'Anmeldung: keine NULL in den Tokenspalten — bestanden';
 end $$;
 
+-- 0011: Der Kurzlink-Auflöser ruft fremde Adressen ab. Gäste dürfen ihn nicht
+-- aufrufen, und auch angemeldet nimmt er nur Maps-Kurzlinks an — sonst wäre die
+-- Datenbank ein offener Proxy.
+do $$
+declare
+  fehler  text[] := '{}';
+  antwort jsonb;
+begin
+  if has_function_privilege('anon', 'public.kurzlink_aufloesen(text)', 'execute') then
+    fehler := fehler || 'anon darf kurzlink_aufloesen aufrufen'::text;
+  end if;
+  if not has_function_privilege('authenticated', 'public.kurzlink_aufloesen(text)', 'execute') then
+    fehler := fehler || 'authenticated darf kurzlink_aufloesen nicht aufrufen'::text;
+  end if;
+  perform set_config('request.jwt.claim.sub', (select id::text from auth.users limit 1), true);
+  perform set_config('request.jwt.claims', json_build_object('sub', (select id::text from auth.users limit 1))::text, true);
+  antwort := public.kurzlink_aufloesen('http://169.254.169.254/latest/meta-data');
+  if antwort->>'fehler' is distinct from 'kein Maps-Kurzlink' then
+    fehler := fehler || format('fremde Adresse nicht abgewiesen: %s', antwort)::text;
+  end if;
+  antwort := public.kurzlink_aufloesen('https://maps.app.goo.gl/abc@evil.example');
+  if antwort->>'fehler' is distinct from 'kein Maps-Kurzlink' then
+    fehler := fehler || format('Kurzlink mit Fremdhost nicht abgewiesen: %s', antwort)::text;
+  end if;
+
+  if array_length(fehler, 1) > 0 then
+    raise exception E'\n  FEHLGESCHLAGEN:\n    - %', array_to_string(fehler, E'\n    - ');
+  end if;
+  raise notice 'Kurzlink-Auflöser: nur angemeldet, nur Maps-Kurzlinks — bestanden';
+end $$;
+
 \echo ''
 \echo '  Alle Prüfungen bestanden.'

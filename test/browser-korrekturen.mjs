@@ -210,7 +210,7 @@ pruefe(hakenAn, 'der Haken „hier schlafen wir" ist gesetzt');
 // Der eigentliche Punkt: Link einfügen statt Koordinaten abtippen.
 await seite.locator('form.maske input[type=text]').first().fill('Airbnb Kanazawa');
 await seite
-  .locator('.einfuegefeld input')
+  .locator('.einfuegefeld textarea')
   .fill(
     'https://www.google.com/maps/place/Kanazawa/@36.5600,136.6500,15z/data=!4m2!3m1!1s0x0:0x0!8m2!3d36.5613!4d136.6562',
   );
@@ -236,7 +236,7 @@ pruefe(
 console.log('\nKurzlink:');
 await seite.locator('.btn', { hasText: 'Unterkunft' }).first().tap();
 await seite.waitForTimeout(400);
-await seite.locator('.einfuegefeld input').fill('https://maps.app.goo.gl/abc123');
+await seite.locator('.einfuegefeld textarea').fill('https://maps.app.goo.gl/abc123');
 await seite.locator('.einfuegefeld .btn', { hasText: 'lesen' }).tap();
 await seite.waitForTimeout(300);
 const kurz = await seite.locator('.einfuegemeldung').innerText();
@@ -247,6 +247,54 @@ pruefe(
 );
 await seite.locator('form.maske .btn', { hasText: 'abbrechen' }).tap();
 await seite.waitForTimeout(300);
+
+/*
+ * Geteilter Text aus Google Maps: Name, Adresse, Kurzlink. Ohne Datenbank (wie
+ * hier) bleibt die Namenssuche. Nominatim wird nachgebildet — und die Treffer
+ * dürfen erst nach einem Tipp in den Feldern stehen.
+ */
+console.log('\nGeteilter Text mit Namen:');
+let gesucht = '';
+await seite.route('https://nominatim.openstreetmap.org/**', (r) => {
+  gesucht = r.request().url();
+  return r.fulfill({
+    contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify([
+      { lat: '36.5621', lon: '136.6627', name: 'Kenroku-en', display_name: 'Kenroku-en, 1 Kenrokumachi, Kanazawa, Ishikawa, Japan' },
+      { lat: '35.0', lon: '135.0', name: 'Kenroku Falsch', display_name: 'Kenroku Falsch, Irgendwo, Japan' },
+    ]),
+  });
+});
+await seite.locator('.btn', { hasText: 'Unterkunft' }).first().tap();
+await seite.waitForTimeout(400);
+const breiteVorher = await seite.locator('.koordinaten input').first().inputValue();
+await seite
+  .locator('.einfuegefeld textarea')
+  .fill('Kenroku-en\n1 Kenrokumachi, Kanazawa\nhttps://maps.app.goo.gl/abc123?g_st=ic');
+await seite.locator('.einfuegefeld .btn', { hasText: 'lesen' }).tap();
+await seite.waitForSelector('.kandidat', { timeout: 5000 }).catch(() => {});
+const suchQ = gesucht ? new URL(gesucht).searchParams.get('q') ?? '' : '';
+pruefe(suchQ.startsWith('Kenroku-en, 1 Kenrokumachi'), 'gesucht wird nach dem Namen aus dem geteilten Text', suchQ);
+pruefe(gesucht.includes('countrycodes=jp'), 'und nur in Japan');
+const treffer = seite.locator('.kandidat');
+pruefe((await treffer.count()) === 2, 'die Treffer stehen zur Auswahl', `${await treffer.count()}`);
+pruefe(
+  (await seite.locator('.koordinaten input').first().inputValue()) === breiteVorher,
+  'übernommen ist noch nichts — ein Treffer der Namenssuche braucht einen Tipp',
+);
+const trefferHoehe = await treffer.first().evaluate((n) => Math.round(n.getBoundingClientRect().height));
+pruefe(trefferHoehe >= 44, 'die Trefferknöpfe sind mindestens 44 px hoch', `${trefferHoehe} px`);
+await treffer.first().tap();
+await seite.waitForTimeout(200);
+const breiteNach = Number(await seite.locator('.koordinaten input').first().inputValue());
+pruefe(Math.abs(breiteNach - 36.5621) < 0.0001, 'erst der Tipp setzt die Koordinate', String(breiteNach));
+const namenWarnung = await seite.locator('.einfuegemeldung').innerText();
+pruefe(/prüfen/.test(namenWarnung), 'mit dem Hinweis, sie auf der Karte zu prüfen', namenWarnung.slice(0, 80));
+pruefe((await treffer.count()) === 0, 'danach ist die Auswahl weg');
+await seite.locator('form.maske .btn', { hasText: 'abbrechen' }).tap();
+await seite.waitForTimeout(300);
+await seite.unroute('https://nominatim.openstreetmap.org/**');
 
 // ==================================================== 5) Layout ===
 

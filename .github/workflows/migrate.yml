@@ -33,6 +33,7 @@ on:
     paths:
       - 'supabase/migrations/**'
       - '.github/workflows/migrate.yml'
+      - 'supabase/test/kurzlink-probe.txt'
   workflow_dispatch:
     inputs:
       loeschen_pruefen:
@@ -262,6 +263,36 @@ jobs:
 
           echo ""
           echo "Alle Tabellen haben Row Level Security."
+
+      # Der Kurzlink-Auflöser (0011) ruft Google vom Datenbankserver aus. Ob das
+      # dort durchkommt — Netz, Erweiterung, Antwort von Google —, lässt sich nur
+      # hier sehen, nicht lokal und nicht im Browsertest. Der Schritt blockiert
+      # nichts: Scheitert die Auflösung, bleibt in der App die Namenssuche.
+      #
+      # Echte Links zum Nachprüfen stehen zeilenweise in
+      # supabase/test/kurzlink-probe.txt; dazu kommt immer ein erfundener, der
+      # zeigt, ob der Server Google überhaupt erreicht.
+      - name: Kurzlink-Auflöser ausprobieren
+        continue-on-error: true
+        env:
+          ZIEL: ${{ steps.verbindung.outputs.ziel }}
+        run: |
+          set -uo pipefail
+          echo "Erweiterung http: $(psql "$ZIEL" -tAc "select coalesce((select extversion from pg_extension where extname='http'), 'FEHLT')")"
+          {
+            echo "https://maps.app.goo.gl/zzzzNichtDa0000"
+            [ -f supabase/test/kurzlink-probe.txt ] && grep -E '^https://' supabase/test/kurzlink-probe.txt
+          } | while read -r link; do
+            echo ""
+            echo "── $link"
+            psql "$ZIEL" -tA -v link="$link" <<'SQL'
+          begin;
+          select set_config('request.jwt.claim.sub', (select id::text from public.profiles order by name limit 1), true);
+          select set_config('request.jwt.claims', json_build_object('sub', (select id::text from public.profiles order by name limit 1))::text, true);
+          select jsonb_pretty(public.kurzlink_aufloesen(:'link'));
+          rollback;
+          SQL
+          done
 
       # Die Gästesicht ist die einzige Stelle, an der ein Fehler heißt: Fremde
       # lesen den Plan oder schreiben ins Tagebuch. Lokal ist das geprüft — aber

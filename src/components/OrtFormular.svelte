@@ -34,6 +34,8 @@
   import { auth } from '../lib/auth.svelte';
   import { WEEKDAYS } from '../lib/trip';
   import { lese, inJapan } from '../lib/koordinaten';
+  import { aufloesen, type Kandidat } from '../lib/kurzlink';
+  import { getSupabase } from '../lib/supabase';
 
   type Props = {
     /** Koordinate aus der Karte. */
@@ -149,31 +151,72 @@
    * antippen, wenn man nicht weiß, wo sie liegt — aber der Maps-Link steht in
    * der Buchungsbestätigung.
    */
-  function uebernehmen() {
-    const f = lese(einfuegen);
-    if (f.art === 'kurzlink') {
-      einfuegeArt = 'fehler';
-      einfuegeMeldung = f.rat;
-      return;
-    }
-    if (f.art === 'nichts') {
-      einfuegeArt = 'fehler';
-      einfuegeMeldung =
-        'Darin steckt keine Koordinate. Erkannt werden Google-Maps-Links, ein Zahlenpaar wie 35.6895, 139.6917 und Angaben in Grad und Minuten.';
-      return;
-    }
-    breite = f.lat.toFixed(6);
-    laenge = f.lng.toFixed(6);
+  let liest = $state(false);
+  let kandidaten = $state<Kandidat[]>([]);
+
+  /** Breite und Länge setzen und sagen, woher sie kommen. */
+  function setzen(lat: number, lng: number, quelle: string, pruefen = false) {
+    breite = lat.toFixed(6);
+    laenge = lng.toFixed(6);
     einfuegen = '';
+    kandidaten = [];
     // Verdrehte Werte sind der häufigste Tippfehler, und ein Pin im Nichts
     // fällt erst auf, wenn man davorsteht.
-    if (!inJapan(f.lat, f.lng)) {
+    if (!inJapan(lat, lng)) {
       einfuegeArt = 'warn';
-      einfuegeMeldung = `Übernommen (${f.quelle}) — liegt aber nicht in Japan. Breite und Länge vertauscht?`;
+      einfuegeMeldung = `Übernommen (${quelle}) — liegt aber nicht in Japan. Breite und Länge vertauscht?`;
       return;
     }
-    einfuegeArt = f.quelle.includes('prüfen') ? 'warn' : 'ok';
-    einfuegeMeldung = `Übernommen: ${f.quelle}.`;
+    einfuegeArt = pruefen || quelle.includes('prüfen') ? 'warn' : 'ok';
+    einfuegeMeldung = `Übernommen: ${quelle}.`;
+  }
+
+  async function uebernehmen() {
+    kandidaten = [];
+    const f = lese(einfuegen);
+    if (f.art === 'gefunden') {
+      setzen(f.lat, f.lng, f.quelle);
+      return;
+    }
+    /*
+     * Kurzlink oder bloß ein Name: Die Datenbank folgt dem Kurzlink, sonst wird
+     * nach dem Namen gesucht (src/lib/kurzlink.ts). Treffer der Namenssuche
+     * werden nur als Auswahl gezeigt — übernommen wird erst beim Tippen.
+     */
+    liest = true;
+    einfuegeMeldung = null;
+    try {
+      const r = await aufloesen(einfuegen, {
+        aufloesen: async (link) => {
+          const sb = getSupabase();
+          if (!sb) return null;
+          const { data, error } = await sb.rpc('kurzlink_aufloesen', { link });
+          if (error) return { fehler: error.message };
+          return data;
+        },
+        holen: async (url) => {
+          const antwort = await fetch(url, { headers: { Accept: 'application/json' } });
+          if (!antwort.ok) throw new Error(String(antwort.status));
+          return antwort.json();
+        },
+      });
+      if (r.art === 'gefunden') {
+        setzen(r.lat, r.lng, r.quelle);
+      } else if (r.art === 'kandidaten') {
+        kandidaten = r.kandidaten;
+        einfuegeArt = 'warn';
+        einfuegeMeldung = `Keine Koordinate im Link. Treffer für „${r.suchtext}" — tipp den richtigen an und prüf ihn danach auf der Karte:`;
+      } else {
+        einfuegeArt = 'fehler';
+        einfuegeMeldung = r.grund;
+      }
+    } finally {
+      liest = false;
+    }
+  }
+
+  function kandidatWaehlen(k: Kandidat) {
+    setzen(k.lat, k.lng, `„${k.name}" aus der Namenssuche — bitte auf der Karte prüfen`, true);
   }
 
   // Beim Bearbeiten bleibt die gespeicherte Koordinate, solange keine neue
@@ -390,24 +433,40 @@
   <div class="feld einfuegefeld">
     <span>Adresse einfügen</span>
     <div class="zeile">
-      <input
-        type="text"
+      <!-- Mehrzeilig: Das Teilen-Menü schickt Name und Link untereinander. -->
+      <textarea
         bind:value={einfuegen}
-        placeholder="Google-Maps-Link oder 35.6895, 139.6917"
+        rows="2"
+        placeholder="Maps-Link (auch Kurzlink), Name oder 35.6895, 139.6917"
         autocomplete="off"
         onkeydown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             uebernehmen();
           }
         }}
-      />
-      <button type="button" class="btn small" onclick={uebernehmen} disabled={!einfuegen.trim()}>
-        lesen
+      ></textarea>
+      <button
+        type="button"
+        class="btn small"
+        onclick={uebernehmen}
+        disabled={!einfuegen.trim() || liest}
+      >
+        {liest ? 'lese …' : 'lesen'}
       </button>
     </div>
     {#if einfuegeMeldung}
       <p class="einfuegemeldung {einfuegeArt}">{einfuegeMeldung}</p>
+    {/if}
+    {#if kandidaten.length}
+      <div class="kandidaten">
+        {#each kandidaten as k, i (i)}
+          <button type="button" class="kandidat" onclick={() => kandidatWaehlen(k)}>
+            <strong>{k.name}</strong>
+            {#if k.adresse}<span>{k.adresse}</span>{/if}
+          </button>
+        {/each}
+      </div>
     {/if}
   </div>
 
@@ -585,6 +644,34 @@
     min-height: 44px;
   }
 
+  .einfuegefeld textarea {
+    flex: 1 1 0;
+    min-width: 0;
+    resize: vertical;
+    font: inherit;
+  }
+  .kandidaten {
+    display: grid;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .kandidat {
+    display: grid;
+    gap: 2px;
+    min-height: 44px;
+    padding: 8px 10px;
+    text-align: left;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ai);
+    font: inherit;
+    cursor: pointer;
+  }
+  .kandidat span {
+    font-size: 0.8rem;
+    opacity: 0.75;
+  }
   .einfuegemeldung {
     margin: 6px 0 0;
     font-size: 0.74rem;

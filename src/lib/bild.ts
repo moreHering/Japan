@@ -72,12 +72,12 @@ export async function verkleinern(
   zuschneiden = false,
 ): Promise<Verkleinert> {
   const vorher = datei.size;
-  const bild = await createImageBitmap(datei, { imageOrientation: 'from-image' });
+  const { bild, breite: quelleB, hoehe: quelleH, freigeben } = await dekodieren(datei);
 
   try {
     const aus = zuschneiden
-      ? zuschnitt(bild.width, bild.height)
-      : { format: undefined, x: 0, y: 0, b: bild.width, h: bild.height };
+      ? zuschnitt(quelleB, quelleH)
+      : { format: undefined, x: 0, y: 0, b: quelleB, h: quelleH };
     const faktor = Math.min(1, maxKante / Math.max(aus.b, aus.h));
     const breite = Math.max(1, Math.round(aus.b * faktor));
     const hoehe = Math.max(1, Math.round(aus.h * faktor));
@@ -101,7 +101,45 @@ export async function verkleinern(
 
     return { blob, breite, hoehe, vorher, format: aus.format };
   } finally {
-    bild.close();
+    freigeben();
+  }
+}
+
+/**
+ * Ein Bild lesen — erst über `<img>`, dann über `createImageBitmap`.
+ *
+ * **Warum nicht nur `createImageBitmap`:** Auf dem iPhone scheiterte damit jeder
+ * Upload mit „The source image cannot be decoded" (gemeldet am 25.09.2026, aus
+ * Fotos, Kamera und Profilbild). Geprüft war nur Chromium, und dort geht es. Das
+ * `<img>`-Element dagegen liest Safari zuverlässig, HEIC eingeschlossen, und
+ * dreht nach den EXIF-Daten von selbst (Safari ab 13.1, Chrome ab 81) — auch
+ * beim Zeichnen auf die Leinwand.
+ */
+async function dekodieren(
+  datei: Blob,
+): Promise<{ bild: CanvasImageSource; breite: number; hoehe: number; freigeben: () => void }> {
+  const url = URL.createObjectURL(datei);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    if (!img.naturalWidth) throw new Error('leer');
+    return {
+      bild: img,
+      breite: img.naturalWidth,
+      hoehe: img.naturalHeight,
+      freigeben: () => URL.revokeObjectURL(url),
+    };
+  } catch {
+    URL.revokeObjectURL(url);
+  }
+  try {
+    const bmp = await createImageBitmap(datei, { imageOrientation: 'from-image' });
+    return { bild: bmp, breite: bmp.width, hoehe: bmp.height, freigeben: () => bmp.close() };
+  } catch {
+    throw new Error(
+      'Dieses Bild kann der Browser nicht lesen. Versuch ein anderes oder mach einen Screenshot davon.',
+    );
   }
 }
 

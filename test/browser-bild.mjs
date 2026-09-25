@@ -175,6 +175,47 @@ pruefe(
   `oben rgb(${oben.slice(0, 3)}) · unten rgb(${unten.slice(0, 3)})`,
 );
 
+/*
+ * Wie auf dem iPhone: `createImageBitmap` wirft („The source image cannot be
+ * decoded", gemeldet am 25.09.2026). Der Upload muss trotzdem gehen.
+ */
+console.log('\nWenn createImageBitmap scheitert (Safari):');
+const safari = await seite.evaluate(async () => {
+  const { verkleinern } = await import('/src/lib/bild.ts');
+  const echt = window.createImageBitmap;
+  window.createImageBitmap = () =>
+    Promise.reject(new DOMException('The source image cannot be decoded.', 'InvalidStateError'));
+  try {
+    const c = document.createElement('canvas');
+    c.width = 1200;
+    c.height = 900;
+    c.getContext('2d').fillRect(0, 0, 1200, 900);
+    const blob = await new Promise((f) => c.toBlob(f, 'image/jpeg'));
+    const r = await verkleinern(blob, 1600, 0.82, true);
+    let meldung = '';
+    try {
+      await verkleinern(new Blob(['kein Bild'], { type: 'image/jpeg' }));
+    } catch (e) {
+      meldung = String(e.message);
+    }
+    return { b: r.breite, h: r.hoehe, typ: r.blob.type, meldung };
+  } catch (e) {
+    return { fehler: String(e.message) };
+  } finally {
+    window.createImageBitmap = echt;
+  }
+});
+pruefe(
+  safari.b === 1200 && safari.h === 750 && safari.typ === 'image/jpeg',
+  'das Bild wird trotzdem gelesen, beschnitten und als JPEG geliefert',
+  safari.fehler ?? `${safari.b}×${safari.h} ${safari.typ}`,
+);
+pruefe(
+  /kann der Browser nicht lesen/.test(safari.meldung ?? ''),
+  'ein kaputtes Bild meldet sich auf Deutsch, statt mit der englischen Browsermeldung',
+  safari.meldung ?? safari.fehler,
+);
+
 pruefe(ergebnis.beispiel === '6,2 MB', 'Größenangabe deutsch formatiert', ergebnis.beispiel);
 
 await browser.close();

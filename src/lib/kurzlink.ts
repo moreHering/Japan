@@ -37,6 +37,8 @@ export type Netz = {
   aufloesen: (link: string) => Promise<Antwort | null>;
   /** Holt JSON von einer Adresse (Nominatim). */
   holen: (url: string) => Promise<unknown>;
+  /** Pause zwischen zwei Suchanfragen — im Test ohne Wartezeit. */
+  warten?: (ms: number) => Promise<void>;
 };
 
 const URL_MUSTER = /https?:\/\/\S+/gi;
@@ -108,6 +110,45 @@ export function kandidatenAus(json: unknown): Kandidat[] {
   return liste.slice(0, 3);
 }
 
+/**
+ * Suchtexte vom genauesten zum gröbsten — OpenStreetMap findet japanische
+ * Adressen schlecht, wenn Postleitzahl, Gebäude und Stockwerk dabeistehen.
+ *
+ * Beispiel aus dem ersten echten Kurzlink (26.09.2026):
+ *   „Japan, 〒542-0073 Osaka, Chuo Ward, Nipponbashi, 1 Chome−8−16 真幸ビル 地下1 R/H/B"
+ * wird zu
+ *   1. „Osaka, Chuo Ward, Nipponbashi, 1 Chome-8-16 真幸ビル 地下1 R/H/B"
+ *   2. „1-8-16 Nipponbashi, Chuo Ward, Osaka"   (Hausnummer, ohne Gebäude)
+ *   3. „Nipponbashi, Chuo Ward, Osaka"           (nur noch das Viertel)
+ *
+ * Jede gröbere Stufe trifft ungenauer. Deshalb bleibt es bei der Auswahl mit
+ * dem Hinweis, den Ort auf der Karte zu prüfen — übernommen wird nichts still.
+ */
+export function adressVarianten(roh: string): string[] {
+  const text = roh
+    .replace(/[\u2212\u2010-\u2015\uFF0D]/g, '-')
+    .replace(/〒\s*\d{3}-?\d{4}/g, '')
+    .replace(/^\s*(Japan|日本)\s*[,、]\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*,\s*,/g, ',')
+    .trim()
+    .replace(/^,\s*/, '');
+  const varianten = [text];
+
+  // „1 Chome-8-16" → „1-8-16"; alles danach (Gebäude, Stockwerk) fällt weg.
+  const teile = text.split(/\s*,\s*/);
+  const hausIdx = teile.findIndex((t) => /\d+\s*Chome-\d+(-\d+)?/i.test(t));
+  if (hausIdx >= 0) {
+    const nummer = teile[hausIdx].match(/(\d+)\s*Chome-(\d+(?:-\d+)?)/i)!;
+    const orte = teile.slice(0, hausIdx).reverse(); // Viertel, Bezirk, Stadt
+    if (orte.length) {
+      varianten.push(`${nummer[1]}-${nummer[2]} ${orte.join(', ')}`);
+      varianten.push(orte.join(', '));
+    }
+  }
+  return [...new Set(varianten.filter((v) => v.length > 2))];
+}
+
 export function nominatimUrl(suchtext: string): string {
   const p = new URLSearchParams({
     format: 'jsonv2',
@@ -155,10 +196,16 @@ export async function aufloesen(text: string, netz: Netz): Promise<Aufgeloest> {
   }
 
   let kandidaten: Kandidat[] = [];
-  try {
-    kandidaten = kandidatenAus(await netz.holen(nominatimUrl(suchtext)));
-  } catch {
-    kandidaten = [];
+  const varianten = adressVarianten(suchtext);
+  for (const [i, v] of varianten.entries()) {
+    // Nominatim erlaubt eine Anfrage je Sekunde.
+    if (i > 0) await (netz.warten ?? ((ms) => new Promise((f) => setTimeout(f, ms))))(1100);
+    try {
+      kandidaten = kandidatenAus(await netz.holen(nominatimUrl(v)));
+    } catch {
+      kandidaten = [];
+    }
+    if (kandidaten.length) break;
   }
   if (!kandidaten.length) {
     return { art: 'nichts', grund: `Zu „${suchtext}" nichts gefunden. ${RAT}` };

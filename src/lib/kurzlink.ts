@@ -104,7 +104,20 @@ export function kandidatenAus(json: unknown): Kandidat[] {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
     const voll = String(r.display_name ?? '');
     const name = String(r.name || voll.split(',')[0] || 'Treffer').trim();
-    const adresse = voll.split(',').slice(1, 4).map((t) => t.trim()).filter(Boolean).join(', ');
+    const ort = voll.split(',').slice(1, 4).map((t) => t.trim()).filter(Boolean).join(', ');
+    /*
+     * Eine Straße ist kein Haus. Beim ersten echten Kurzlink (Osaka, 26.09.2026)
+     * fand OpenStreetMap statt „1-8-16 Nipponbashi" nur die Sakaisuji im selben
+     * Block — richtig in der Gegend, aber nicht die Tür. Das steht dann dabei.
+     */
+    const art = String(r.addresstype ?? r.type ?? '');
+    const grob =
+      r.category === 'highway' || /^(road|street)$/.test(art)
+        ? 'nur die Straße'
+        : /^(suburb|quarter|neighbourhood|city_district|city|town|village)$/.test(art)
+          ? 'nur das Viertel'
+          : '';
+    const adresse = grob ? `${grob} · ${ort}` : ort;
     liste.push({ name, adresse, lat, lng });
   }
   return liste.slice(0, 3);
@@ -196,6 +209,7 @@ export async function aufloesen(text: string, netz: Netz): Promise<Aufgeloest> {
   }
 
   let kandidaten: Kandidat[] = [];
+  let getroffen = suchtext;
   const varianten = adressVarianten(suchtext);
   for (const [i, v] of varianten.entries()) {
     // Nominatim erlaubt eine Anfrage je Sekunde.
@@ -205,10 +219,13 @@ export async function aufloesen(text: string, netz: Netz): Promise<Aufgeloest> {
     } catch {
       kandidaten = [];
     }
-    if (kandidaten.length) break;
+    if (kandidaten.length) {
+      getroffen = v;
+      break;
+    }
   }
   if (!kandidaten.length) {
     return { art: 'nichts', grund: `Zu „${suchtext}" nichts gefunden. ${RAT}` };
   }
-  return { art: 'kandidaten', kandidaten, suchtext };
+  return { art: 'kandidaten', kandidaten, suchtext: getroffen };
 }

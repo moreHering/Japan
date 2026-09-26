@@ -71,6 +71,17 @@ describe('Bausteine', () => {
     expect(kandidatenAus({ fehler: 1 })).toEqual([]);
   });
 
+  it('sagt dazu, wenn ein Treffer nur eine Straße oder ein Viertel ist', () => {
+    // So kam es beim ersten echten Kurzlink zurück (Nominatim, 26.09.2026).
+    const [strasse, viertel] = kandidatenAus([
+      { lat: '34.6680255', lon: '135.5061363', category: 'highway', type: 'primary', addresstype: 'road',
+        name: '堺筋', display_name: '堺筋, 日本橋一丁目, 中央区, 大阪市, 大阪府, 541-0071, 日本' },
+      { lat: '34.667', lon: '135.506', addresstype: 'quarter', name: '日本橋', display_name: '日本橋, 中央区, 大阪市' },
+    ]);
+    expect(strasse.adresse).toBe('nur die Straße · 日本橋一丁目, 中央区, 大阪市');
+    expect(viertel.adresse).toMatch(/^nur das Viertel · /);
+  });
+
   it('sucht nur in Japan', () => {
     expect(nominatimUrl('Kenroku-en')).toContain('countrycodes=jp');
   });
@@ -134,6 +145,8 @@ describe('aufloesen', () => {
     const r = await aufloesen('https://maps.app.goo.gl/iHpuNHzyxPuNpnfF8', n);
     expect(r.art).toBe('kandidaten');
     expect(n.holen).toHaveBeenCalledTimes(2);
+    // Die Meldung nennt den Suchtext, der getroffen hat — nicht den ersten.
+    expect(r.art === 'kandidaten' && r.suchtext).toBe('1-8-16 Nipponbashi, Chuo Ward, Osaka');
   });
 
   it('nichts zu finden: eine Erklärung mit dem Rat, lange zu tippen', async () => {

@@ -1,0 +1,7 @@
+# Suchtexte, die migrate.yml bei OpenStreetMap ausprobiert.
+# Die drei Stufen von adressVarianten() für den ersten echten Kurzlink (Osaka):
+Osaka, Chuo Ward, Nipponbashi, 1 Chome-8-16 真幸ビル 地下1 R/H/B
+1-8-16 Nipponbashi, Chuo Ward, Osaka
+Nipponbashi, Chuo Ward, Osaka
+# Gegenstück auf Japanisch, zum Vergleich:
+大阪市中央区日本橋1丁目8-16

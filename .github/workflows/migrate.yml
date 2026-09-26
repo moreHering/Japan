@@ -34,6 +34,7 @@ on:
       - 'supabase/migrations/**'
       - '.github/workflows/migrate.yml'
       - 'supabase/test/kurzlink-probe.txt'
+      - 'supabase/test/nominatim-probe.txt'
   workflow_dispatch:
     inputs:
       loeschen_pruefen:
@@ -293,6 +294,22 @@ jobs:
           rollback;
           SQL
           done
+
+          # Suchtexte für die Rückfall-Suche bei OpenStreetMap, zeilenweise —
+          # von hier aus, weil der Rechner, an dem die App gebaut wird, das
+          # Netz nicht erreicht. Eine Anfrage je Sekunde (Nominatim-Regel).
+          if [ -f supabase/test/nominatim-probe.txt ]; then
+            grep -v '^#' supabase/test/nominatim-probe.txt | grep -v '^$' | while read -r q; do
+              echo ""
+              echo "── Nominatim: $q"
+              curl -s -G "https://nominatim.openstreetmap.org/search" \
+                --data-urlencode "q=$q" -d format=jsonv2 -d countrycodes=jp -d limit=3 \
+                -H "User-Agent: japan2026-probe (github.com/moreHering/Japan)" \
+                | python3 -c "import json,sys; [print('  ', x['lat'], x['lon'], x['display_name'][:110]) for x in json.load(sys.stdin)] or print('   (kein Treffer)')" \
+                || echo "   (Abruf gescheitert)"
+              sleep 1.1
+            done
+          fi
           exit 0
 
       # Die Gästesicht ist die einzige Stelle, an der ein Fehler heißt: Fremde

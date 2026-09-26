@@ -1,0 +1,3 @@
+# Echte Kurzlinks, die migrate.yml nach dem Einspielen über kurzlink_aufloesen schickt.
+# Unterkunft, geteilt am 25.09.2026.
+https://maps.app.goo.gl/iHpuNHzyxPuNpnfF8
